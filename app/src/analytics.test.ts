@@ -52,6 +52,9 @@ describe("routePattern", () => {
     expect(routePattern("/")).toBe("/");
     expect(routePattern("/account")).toBe("/account");
     expect(routePattern("/signup")).toBe("/signup");
+    // "/" is Recent; Everything and Shared with me are pages of their own.
+    expect(routePattern("/everything")).toBe("/everything");
+    expect(routePattern("/shared")).toBe("/shared");
   });
 
   it("reduces the consent route to its first segment, whatever follows", () => {

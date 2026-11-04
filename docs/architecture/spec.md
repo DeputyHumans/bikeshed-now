@@ -1693,7 +1693,9 @@ open", never its name.
 
 The workspace shows its folders and documents as cards or as a list, and each
 kind of page remembers which. Cards are the default on Everything and in
-folders, where people browse and a cover is how a deck is recognised. A list row
+folders, where people browse and a cover is how a deck is recognised; rows on
+Recent and Shared with me, which span folders and are about time and people. A
+list row
 carries a small cover, the title and its chips, the owner ("You" for your own),
 the last update, the reads and the menu; a folder row its people, and it takes
 a dropped file as its card does. While a search is on, its results come from
@@ -1707,6 +1709,41 @@ The sort and each kind of page's layout are kept in the browser's own storage
 (`workspace/prefs.ts`) and never sent anywhere; where storage is blocked they
 last as long as the page. "Last read by anyone" sorts by `stats.lastViewedAt`,
 which any reader moves; a person's own reads are listed by Recent.
+
+### Recent
+
+Signed in, `/` is Recent: the documents you read and the documents that got a
+new version, from the last 30 days, in one list ordered by whichever happened
+later, newest first. Your reads are your own `viewers` rows (§5 "Your own
+reading"), at most the 100 newest, fetched on each visit. A new version is the
+current version's publish, the time "Recently updated" sorts by, so a rename,
+a share or a draft save does not count. Only documents the workspace query
+returns appear: a row for a document you can no longer open, or one in the
+Trash, shows nothing (ADR 0027). Each row says why it is there, "You read it
+2h ago" or "New version 2h ago by …", and is marked "New since you read it"
+when its current version came after your last read and was not published by
+you. A version not summarized yet counts as somebody else's.
+
+Three quick filters combine: Opened by me (documents you have a read row for),
+Shared with me (owned by someone else) and New since I read. They are
+remembered with the sort and the layouts. When your reads cannot be fetched
+(the index still building after a deploy, offline, or eight seconds without an
+answer), Recent lists the new versions alone, disables the two filters that
+need reads, and says why. Recent has no sort; a search on it reaches every
+document and is sorted as anywhere else. A document shared with you whose last
+version is older than 30 days enters Recent once you open it or it gets a new
+version; Shared with me always lists it.
+
+Everything, the top of the folder tree, is at `/everything`. Signed out, `/` is
+the landing page, and a document's trail leads there rather than to sign-up.
+
+### Shared with me
+
+`/shared` lists every document somebody else owns that its reader can read,
+from every folder, with the usual sorts. Folders shared with you are already in
+the rail, so it lists none. It is where a document shared with you inside a
+folder you were not given can be found without its link or a search: Everything
+and the folder tree show only folders you can open.
 
 ---
 

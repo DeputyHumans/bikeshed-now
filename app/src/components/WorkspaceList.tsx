@@ -8,12 +8,15 @@ import { Icon } from "./Icon";
 import { Menu, type MenuEntry } from "./Menu";
 import { ExpiryChip } from "./ExpiryChip";
 import { UpdatedLine } from "./UpdatedLine";
+import { ViaBadge } from "./ViaBadge";
+import { formatRelative, formatTimestamp } from "../firestore";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { coverUrl } from "../thumbs";
 import { viaOf } from "../provenance";
 import { liveReach } from "../visibility";
 import { currentSummary, type SortKey } from "../workspace/tree";
 import type { Layout } from "../workspace/prefs";
+import type { RecentRow } from "../workspace/recent";
 import type { DocMeta, FolderMeta } from "../types";
 
 /** What a row says when the folder a document is filed in is not this account's to open. */
@@ -104,24 +107,43 @@ export function DocTable({
   showLocation,
   sort,
   onSort,
+  recent = false,
   children,
 }: {
   /** True when the rows come from more than one folder, as a search's do. */
   showLocation: boolean;
   sort?: SortKey;
   onSort?: (key: SortKey) => void;
+  /** Recent's rows, which say why each is there instead of owner, update and reads. */
+  recent?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="doc-table" role="table" aria-label="Documents" data-location={showLocation || undefined}>
+    <div
+      className="doc-table"
+      role="table"
+      aria-label="Documents"
+      data-location={showLocation || undefined}
+      data-recent={recent || undefined}
+    >
       <div role="rowgroup" className="doc-table-head">
         <div role="row" className="doc-row">
           <span className="doc-row-thumb" aria-hidden="true" />
-          <SortHeader label="Name" sortKey="name" sort={sort} onSort={onSort} col="name" />
+          {recent ? (
+            <span role="columnheader" data-col="name">Name</span>
+          ) : (
+            <SortHeader label="Name" sortKey="name" sort={sort} onSort={onSort} col="name" />
+          )}
           {showLocation ? <span role="columnheader" data-col="location">Folder</span> : null}
-          <span role="columnheader" data-col="owner">Owner</span>
-          <SortHeader label="Updated" sortKey="recent" sort={sort} onSort={onSort} col="updated" />
-          <SortHeader label="Reads" sortKey="views" sort={sort} onSort={onSort} col="reads" />
+          {recent ? (
+            <span role="columnheader" data-col="why">Last activity</span>
+          ) : (
+            <>
+              <span role="columnheader" data-col="owner">Owner</span>
+              <SortHeader label="Updated" sortKey="recent" sort={sort} onSort={onSort} col="updated" />
+              <SortHeader label="Reads" sortKey="views" sort={sort} onSort={onSort} col="reads" />
+            </>
+          )}
           <span role="columnheader" data-col="actions">
             <span className="visually-hidden">Actions</span>
           </span>
@@ -156,6 +178,7 @@ export function DocRow({
   showCover,
   location,
   owner,
+  reason,
 }: {
   doc: DocMeta;
   through: "unlisted" | "public" | null;
@@ -166,6 +189,8 @@ export function DocRow({
   location?: string;
   /** "You", or the owner's address. */
   owner: string;
+  /** On Recent: why it is there, in place of owner, update and reads. */
+  reason?: ReactNode;
 }) {
   const cover = showCover ? coverUrl(doc.docId, doc.thumb) : null;
   const s = currentSummary(doc);
@@ -190,17 +215,23 @@ export function DocRow({
         <ExpiryChip expiresAt={doc.expiresAt} onOpen={onShare} />
       </span>
       {location !== undefined ? <span role="cell" data-col="location">{location}</span> : null}
-      <span role="cell" data-col="owner">{owner}</span>
-      <span role="cell" data-col="updated">{updated}</span>
-      <span role="cell" data-col="reads" className="numeric" title={`Read ${views === 1 ? "once" : `${views} times`} by people`}>
-        {views}
-      </span>
+      {reason !== undefined ? (
+        <span role="cell" data-col="why">{reason}</span>
+      ) : (
+        <>
+          <span role="cell" data-col="owner">{owner}</span>
+          <span role="cell" data-col="updated">{updated}</span>
+          <span role="cell" data-col="reads" className="numeric" title={`Read ${views === 1 ? "once" : `${views} times`} by people`}>
+            {views}
+          </span>
+        </>
+      )}
       {/* A phone has room for one line under the title. It holds what the
           columns hold, so only one of the two is ever displayed, and a
           hidden one is hidden from a screen reader too. */}
       <span role="cell" data-col="summary">
         {location !== undefined ? <span className="doc-card-stat">{location}</span> : null}
-        {updated}
+        {reason ?? updated}
       </span>
       <RowMenu label={doc.title} entries={menu} />
     </div>
@@ -247,5 +278,33 @@ export function FolderRow({
       <span role="cell" data-col="summary">{people}</span>
       <RowMenu label={folder.name} entries={menu} />
     </div>
+  );
+}
+
+/**
+ * Why a document is on Recent: your read, or its new version and who made it,
+ * marked when that version came after your read and was not yours.
+ */
+export function RecentReason({ row, me }: { row: RecentRow; me: string }) {
+  const latest = currentSummary(row.doc).latest;
+  const by = latest?.byEmail ? (latest.byEmail === me ? "you" : latest.byEmail) : null;
+  const via = viaOf(latest);
+  return (
+    <>
+      {row.why === "read" ? (
+        <span className="doc-card-stat" title={formatTimestamp(row.readAt)}>
+          You read it {formatRelative(row.readAt)}
+        </span>
+      ) : (
+        <span className="doc-card-stat" title={formatTimestamp(row.updatedAt)}>
+          New version {formatRelative(row.updatedAt)}
+          {by ? ` by ${by}` : ""}
+        </span>
+      )}
+      {row.why === "updated" ? (
+        <ViaBadge via={via} title={`Published through ${via}, not by a person in the browser`} />
+      ) : null}
+      {row.isNew ? <span className="chip chip-accent recent-new">New since you read it</span> : null}
+    </>
   );
 }

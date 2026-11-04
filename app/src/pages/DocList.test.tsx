@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The workspace never calls itself empty while it is still loading, and says when it is busy (SPEC §5, §13).
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,7 +12,7 @@ import type { DocMeta, FolderMeta } from "../types";
  * snapshot has landed — the order is the whole point, since the two arrive
  * independently and either can be first.
  */
-const { listeners, createFolder, forkDoc, uploadDoc } = vi.hoisted(() => ({
+const { listeners, createFolder, forkDoc, uploadDoc, reading } = vi.hoisted(() => ({
   listeners: {
     docs: null as ((docs: DocMeta[]) => void) | null,
     folders: null as ((folders: FolderMeta[]) => void) | null,
@@ -20,6 +20,8 @@ const { listeners, createFolder, forkDoc, uploadDoc } = vi.hoisted(() => ({
   createFolder: vi.fn(),
   forkDoc: vi.fn(),
   uploadDoc: vi.fn(async () => ({ docId: "new", title: "From the document", format: "html" })),
+  /** Your own reads, as Recent asks for them: docId → last read. */
+  reading: vi.fn(async (_uid: string, _max: number) => new Map<string, number>()),
 }));
 
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
@@ -38,6 +40,7 @@ vi.mock("../firestore", () => ({
     return () => {};
   },
   listMyTeams: () => () => {},
+  listMyReading: (uid: string, max: number) => reading(uid, max),
   watchUser: () => () => {},
 }));
 const { trashItem, restoreItem, inheritedFolderAccess } = vi.hoisted(() => ({
@@ -64,24 +67,25 @@ vi.mock("./SharedFolder", () => ({ SharedFolder: () => <p>SHARED FOLDER</p> }));
 import { DocList } from "./DocList";
 import { ToastProvider } from "../components/Toast";
 
-function mount() {
+function mount(view?: "recent" | "everything" | "shared") {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <DocList />
+        <DocList view={view} />
       </ToastProvider>
     </MemoryRouter>,
   );
 }
 
-/** The workspace opened on a path, with "/" there to be navigated up to. */
+/** The workspace opened on a path, with Everything there to be navigated up to. */
 function mountAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <ToastProvider>
         <Routes>
           <Route path="/folder/:folderId" element={<DocList />} />
-          <Route path="/" element={<p>EVERYTHING</p>} />
+          <Route path="/everything" element={<p>EVERYTHING</p>} />
+          <Route path="/" element={<p>RECENT</p>} />
         </Routes>
       </ToastProvider>
     </MemoryRouter>,
@@ -109,6 +113,8 @@ beforeEach(() => {
   uploadDoc.mockClear();
   trashItem.mockClear();
   restoreItem.mockClear();
+  reading.mockReset();
+  reading.mockImplementation(async () => new Map<string, number>());
 });
 
 afterEach(() => {
@@ -647,5 +653,176 @@ describe("the sort that reads the record's last read", () => {
     mount();
     const labels = Array.from((screen.getByLabelText("Sort") as HTMLSelectElement).options).map((o) => o.textContent);
     expect(labels).toEqual(["Recently updated", "Name", "Most read", "Last read by anyone"]);
+  });
+});
+
+describe("Recent", () => {
+  const HOUR = 3_600_000;
+  const ts = (ms: number) => ({ toMillis: () => ms, toDate: () => new Date(ms) }) as never;
+  /** A document whose current version was published `ago` ms before now, by `by`. */
+  const published = (docId: string, ago: number, by = "ana@example.com", overrides: Partial<DocMeta> = {}) =>
+    docMeta({
+      docId,
+      title: docId,
+      currentVersion: "v2",
+      latest: { version: "v2", at: ts(Date.now() - ago), byEmail: by, channel: "web", origin: "upload" },
+      ...overrides,
+    } as Partial<DocMeta>);
+  const titles = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll(".doc-row-title, .doc-card-title")).map((e) => e.textContent);
+  /** A quick filter, found in its own group: the rail has a Shared with me too. */
+  const filter = (name: string) => within(screen.getByRole("group", { name: "Show only" })).getByRole("button", { name });
+  const land = async (docs: DocMeta[], folders: FolderMeta[] = []) => {
+    act(() => listeners.folders!(folders));
+    act(() => listeners.docs!(docs));
+    await act(async () => {});
+  };
+
+  it("lists what you read and what got a new version, newest first, as rows, each saying why it is there", async () => {
+    reading.mockImplementation(async () => new Map([["read-it", Date.now() - HOUR]]));
+    const { container } = mount("recent");
+    await land([published("read-it", 5 * 24 * HOUR), published("changed", 2 * HOUR), published("quiet", 40 * 24 * HOUR)]);
+    expect(reading).toHaveBeenCalledWith("u1", 100);
+    expect(screen.getByRole("heading", { level: 1, name: "Recent" })).toBeTruthy();
+    expect(screen.getByRole("table", { name: "Documents" })).toBeTruthy();
+    expect(titles(container)).toEqual(["read-it", "changed"]);
+    const why = (title: string) =>
+      (screen.getByText(title).closest('[role="row"]') as HTMLElement).querySelector('[data-col="why"]')?.textContent;
+    expect(why("read-it")).toBe("You read it just now");
+    expect(why("changed")).toBe("New version just now by ana@example.com");
+  });
+
+  it("marks what someone else published after you read it, and not what you published yourself", async () => {
+    reading.mockImplementation(
+      async () =>
+        new Map([
+          ["theirs", Date.now() - 3 * HOUR],
+          ["mine", Date.now() - 3 * HOUR],
+        ]),
+    );
+    mount("recent");
+    await land([published("theirs", HOUR), published("mine", HOUR, "me@example.com")]);
+    const row = (title: string) => screen.getByText(title).closest('[role="row"]') as HTMLElement;
+    expect(row("theirs").textContent).toContain("New since you read it");
+    expect(row("mine").textContent).not.toContain("New since you read it");
+    expect(row("mine").textContent).toContain("by you");
+  });
+
+  it("narrows with filters that combine, and keeps them for the next visit", async () => {
+    reading.mockImplementation(async () => new Map([["read-mine", Date.now() - HOUR], ["read-theirs", Date.now() - 2.5 * HOUR]]));
+    const docs = [
+      published("read-mine", 2 * HOUR, "me@example.com", { ownerEmail: "me@example.com" }),
+      published("read-theirs", 3 * HOUR),
+      published("unread-theirs", 5 * HOUR),
+    ];
+    const first = mount("recent");
+    await land(docs);
+    expect(titles(first.container)).toEqual(["read-mine", "read-theirs", "unread-theirs"]);
+    fireEvent.click(filter("Opened by me"));
+    expect(titles(first.container)).toEqual(["read-mine", "read-theirs"]);
+    fireEvent.click(filter("Shared with me"));
+    expect(titles(first.container)).toEqual(["read-theirs"]);
+    fireEvent.click(filter("New since I read"));
+    expect(titles(first.container)).toEqual([]);
+    expect(screen.getByText("Nothing matches these filters.")).toBeTruthy();
+    fireEvent.click(filter("New since I read"));
+    first.unmount();
+
+    const again = mount("recent");
+    await land(docs);
+    expect(filter("Opened by me").getAttribute("aria-pressed")).toBe("true");
+    expect(filter("Shared with me").getAttribute("aria-pressed")).toBe("true");
+    expect(titles(again.container)).toEqual(["read-theirs"]);
+    fireEvent.click(filter("New since I read"));
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(titles(again.container)).toEqual(["read-mine", "read-theirs", "unread-theirs"]);
+    expect(["Opened by me", "Shared with me", "New since I read"].map((n) => filter(n).getAttribute("aria-pressed"))).toEqual(["false", "false", "false"]);
+  });
+
+  it("lists new versions alone, and says why, when your reads cannot be fetched", async () => {
+    // The index still building after a deploy looks exactly like this.
+    reading.mockImplementation(async () => {
+      throw new Error("FAILED_PRECONDITION: The query requires an index.");
+    });
+    const { container } = mount("recent");
+    await land([published("changed", 2 * HOUR), published("quiet", 40 * 24 * HOUR)]);
+    expect(titles(container)).toEqual(["changed"]);
+    expect(screen.getByText(/reading history isn't available just now, so this shows new versions only/)).toBeTruthy();
+    expect((filter("Opened by me") as HTMLButtonElement).disabled).toBe(true);
+    expect((filter("New since I read") as HTMLButtonElement).disabled).toBe(true);
+    expect((filter("Shared with me") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("never calls itself empty before your reads have answered", async () => {
+    let answer: (reads: Map<string, number>) => void = () => {};
+    reading.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const { container } = mount("recent");
+    await land([]);
+    expect(screen.queryByText("Nothing in the last 30 days")).toBeNull();
+    expect(container.querySelector(".doc-row-skeleton")).not.toBeNull();
+    await act(async () => answer(new Map()));
+    expect(screen.getByText("Nothing in the last 30 days")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Go to Everything" }).getAttribute("href")).toBe("/everything");
+  });
+
+  it("has no sort and no new folder, until a search, which reaches every document and is sorted as anywhere else", async () => {
+    mount("recent");
+    await land([published("a plan", 2 * HOUR), published("an old plan", 60 * 24 * HOUR)]);
+    expect(screen.queryByLabelText("Sort")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Folder$/ })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "plan" } });
+    expect(screen.getByLabelText("Sort")).toBeTruthy();
+    expect(screen.getAllByText(/plan$/).map((e) => e.textContent)).toEqual(["a plan", "an old plan"]);
+  });
+
+  it("marks Recent in the rail, and only Recent", async () => {
+    mount("recent");
+    await land([]);
+    const rail = screen.getByRole("navigation", { name: "Folders" });
+    const current = Array.from(rail.querySelectorAll('[aria-current="page"]')).map((e) => e.textContent);
+    expect(current).toEqual(["Recent"]);
+  });
+});
+
+describe("Shared with me", () => {
+  it("lists every document somebody else owns, from every folder, one whose folder you cannot open included, and no folders", () => {
+    const { container } = mount("shared");
+    act(() => listeners.folders!([folderMeta()]));
+    act(() =>
+      listeners.docs!([
+        docMeta({ docId: "mine", title: "Mine", ownerEmail: "me@example.com" }),
+        docMeta({ docId: "filed", title: "Filed", folderId: "plans" }),
+        docMeta({ docId: "orphan", title: "Orphan", folderId: "not-mine" }),
+      ]),
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Shared with me" })).toBeTruthy();
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('[role="rowgroup"]:not(.doc-table-head) [role="row"]'));
+    expect(rows.map((r) => [r.querySelector(".doc-row-title")?.textContent, r.querySelector('[data-col="location"]')?.textContent])).toEqual([
+      ["Filed", "Plans"],
+      ["Orphan", "A folder you can't open"],
+    ]);
+    expect(container.querySelector('[data-kind="folder"]')).toBeNull();
+    const rail = screen.getByRole("navigation", { name: "Folders" });
+    expect(Array.from(rail.querySelectorAll('[aria-current="page"]')).map((e) => e.textContent)).toEqual(["Shared with me"]);
+  });
+
+  it("says so when nothing is shared yet, rather than offering to upload", () => {
+    mount("shared");
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta({ ownerEmail: "me@example.com" })]));
+    expect(screen.getByText("Nothing shared with you yet")).toBeTruthy();
+  });
+
+  it("keeps its own layout, apart from the folders' grid", () => {
+    const first = mount("shared");
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta()]));
+    expect(screen.getByRole("button", { name: "List" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    first.unmount();
+    mount("everything");
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta()]));
+    expect(screen.getByRole("button", { name: "Grid" }).getAttribute("aria-pressed")).toBe("true");
   });
 });

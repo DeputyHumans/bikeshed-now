@@ -3,10 +3,12 @@
 
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc as fbGetDoc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -336,6 +338,29 @@ export async function listDocViewers(docId: string): Promise<ViewerStat[]> {
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ ...(d.data() as ViewerStat), uid: d.id }));
+}
+
+/**
+ * Your own reads, newest first, as docId → last read (epoch ms): the one
+ * per-person query any reader may make, and only of their own rows (SPEC §5
+ * "Your own reading", ADR 0027). A row can name a document you can no longer
+ * open; the caller shows only what the workspace list also holds.
+ */
+export async function listMyReading(uid: string, max: number): Promise<Map<string, number>> {
+  const q = query(
+    collectionGroup(db, "viewers"),
+    where("uid", "==", uid),
+    orderBy("lastViewedAt", "desc"),
+    limit(max),
+  );
+  const snap = await getDocs(q);
+  const reads = new Map<string, number>();
+  for (const row of snap.docs) {
+    const docId = row.ref.parent.parent?.id;
+    const at = (row.data().lastViewedAt as Timestamp | undefined)?.toMillis?.();
+    if (docId && at) reads.set(docId, at);
+  }
+  return reads;
 }
 
 // --- Account ---------------------------------------------------------------

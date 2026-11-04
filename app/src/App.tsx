@@ -128,11 +128,30 @@ export function App() {
       <main className="main" id="main" tabIndex={-1}>
         <AddressNotice />
         <Routes>
+          {/* Signed in, the front door is Recent: what you read and what
+              changed. Everything, the folder tree's top, has its own address
+              (SPEC §13). */}
           <Route
             path="/"
             element={
               <RequireAccount signedOut={<Landing />}>
-                <DocList />
+                <DocList view="recent" />
+              </RequireAccount>
+            }
+          />
+          <Route
+            path="/everything"
+            element={
+              <RequireAccount>
+                <DocList view="everything" />
+              </RequireAccount>
+            }
+          />
+          <Route
+            path="/shared"
+            element={
+              <RequireAccount>
+                <DocList view="shared" />
               </RequireAccount>
             }
           />

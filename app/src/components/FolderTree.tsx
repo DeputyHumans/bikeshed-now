@@ -7,17 +7,38 @@ import { Icon } from "./Icon";
 import { buildTree, flattenTree, pathToFolder } from "../workspace/tree";
 import type { FolderMeta } from "../types";
 
+/** Which page of the workspace is open, so the rail marks it and nothing else. */
+export type WorkspacePage = "recent" | "everything" | "shared" | "trash" | "folder";
+
+/** A rail entry that is a page rather than a folder. */
+function PageLink({ to, icon, label, current }: { to: string; icon: "clock" | "team" | "doc" | "trash"; label: string; current: boolean }) {
+  const navigate = useNavigate();
+  return (
+    <li className="folder-item">
+      <button
+        type="button"
+        className="folder-link"
+        aria-current={current ? "page" : undefined}
+        onClick={() => navigate(to)}
+      >
+        <span className="folder-twisty" />
+        <Icon name={icon} size={15} />
+        <span className="folder-name">{label}</span>
+      </button>
+    </li>
+  );
+}
+
 export function FolderTree({
   folders,
   currentFolderId,
   drawerOpen,
-  inTrash = false,
+  page,
 }: {
   folders: FolderMeta[];
   currentFolderId: string | null;
   drawerOpen?: boolean;
-  /** The Trash page is open, so neither Everything nor a folder is the current one. */
-  inTrash?: boolean;
+  page: WorkspacePage;
 }) {
   const navigate = useNavigate();
   const tree = useMemo(() => buildTree(folders), [folders]);
@@ -48,19 +69,14 @@ export function FolderTree({
       aria-label="Folders"
       data-drawer={drawerOpen ? "open" : undefined}
     >
+      {/* Ways through everything at once, apart from the tree: neither is a
+          folder, and under Everything they would read as if they were. */}
+      <ul className="folder-tree folder-tree-head">
+        <PageLink to="/" icon="clock" label="Recent" current={page === "recent"} />
+        <PageLink to="/shared" icon="team" label="Shared with me" current={page === "shared"} />
+      </ul>
       <ul className="folder-tree">
-        <li className="folder-item">
-          <button
-            type="button"
-            className="folder-link"
-            aria-current={currentFolderId === null && !inTrash ? "page" : undefined}
-            onClick={() => navigate("/")}
-          >
-            <span className="folder-twisty" />
-            <Icon name="doc" size={15} />
-            <span className="folder-name">Everything</span>
-          </button>
-        </li>
+        <PageLink to="/everything" icon="doc" label="Everything" current={page === "everything"} />
         {rows.map((node) => {
           const id = node.folder.folderId;
           const hasChildren = node.children.length > 0;
@@ -70,7 +86,7 @@ export function FolderTree({
               <button
                 type="button"
                 className="folder-link"
-                aria-current={currentFolderId === id ? "page" : undefined}
+                aria-current={page === "folder" && currentFolderId === id ? "page" : undefined}
                 style={{ ["--folder-depth" as string]: node.depth }}
                 onClick={() => navigate(`/folder/${id}`)}
               >
@@ -103,18 +119,7 @@ export function FolderTree({
       </ul>
       {/* At the foot, apart from the folders: it is where things go, not one of them (SPEC §4). */}
       <ul className="folder-tree folder-tree-foot">
-        <li className="folder-item">
-          <button
-            type="button"
-            className="folder-link"
-            aria-current={inTrash ? "page" : undefined}
-            onClick={() => navigate("/trash")}
-          >
-            <span className="folder-twisty" />
-            <Icon name="trash" size={15} />
-            <span className="folder-name">Trash</span>
-          </button>
-        </li>
+        <PageLink to="/trash" icon="trash" label="Trash" current={page === "trash"} />
       </ul>
     </nav>
   );

@@ -23,16 +23,22 @@ export function Breadcrumb({
   folderId,
   folders,
   current,
+  rootTo = "/everything",
 }: {
   folderId: string | null;
   folders: FolderMeta[];
   /** The leaf, when it is not a folder. Every folder then becomes a link. */
   current?: string;
+  /**
+   * Where "Everything" goes. Signed out there is no workspace to go to, and
+   * a reader of a public document is sent to the landing page, not to sign up.
+   */
+  rootTo?: string;
 }) {
   const trail = breadcrumbFor(folderId, folders);
   return (
     <nav className="breadcrumb" aria-label={current ? "Document path" : "Folder path"}>
-      <Link to="/">Everything</Link>
+      <Link to={rootTo}>Everything</Link>
       {trail.map((folder, i) => (
         <Fragment key={folder.folderId}>
           {/* Marked so a narrow viewport can drop this crumb AND its separator

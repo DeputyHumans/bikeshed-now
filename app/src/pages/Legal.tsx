@@ -181,7 +181,8 @@ export function Privacy() {
         <li>
           <strong>Reading activity on documents you can see</strong> — that a
           document was opened, and roughly how long it was actively read for.
-          The owner of a document can see this for their own documents.
+          The owner of a document can see this for their own documents, and
+          you can see your own: it is what Recent lists.
         </li>
         <li>
           <strong>Provenance</strong> — whether an action came from the web app,
@@ -220,9 +221,9 @@ export function Privacy() {
         </li>
         <li>
           <strong>Your view choices</strong> — how you last sorted and laid out
-          your documents, kept in this browser's own storage so they are there
-          when you come back. They never leave the browser, and clearing this
-          site's data forgets them.
+          your documents, and which filters you left on. They are kept in this
+          browser so they are there when you come back, never leave it, and are
+          forgotten when you clear this site's data.
         </li>
       </ul>
       {analyticsConfigured() ? (

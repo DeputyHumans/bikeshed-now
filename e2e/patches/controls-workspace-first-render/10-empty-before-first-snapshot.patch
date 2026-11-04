@@ -1,11 +1,11 @@
 --- a/app/src/pages/DocList.tsx
 +++ b/app/src/pages/DocList.tsx
-@@ -674,7 +674,7 @@
-           </button>
-         </div>
+@@ -807,7 +807,7 @@
+           </div>
+         ) : null}
  
--        {loading || foldersLoading ? (
-+        {false && (loading || foldersLoading) ? (
+-        {loading || foldersLoading || (view === "recent" && reads.status === "loading") ? (
++        {false && (loading || foldersLoading || (view === "recent" && reads.status === "loading")) ? (
            layout === "list" ? <RowSkeletons /> : <CardSkeletons />
          ) : visibleDocs.length === 0 && visibleFolders.length === 0 ? (
            <div className="empty-state">

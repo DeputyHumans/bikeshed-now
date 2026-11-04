@@ -67,6 +67,8 @@ test("every collection named `viewers` is docs/{docId}/viewers", () => {
       'functions/src/index.ts: .collection("viewers")',
       // The editor's per-document breakdown.
       'app/src/firestore.ts: collection(db,"docs",docId,"viewers")',
+      // Recent's own reads: the same collection, as a group (SPEC §5).
+      'app/src/firestore.ts: collectionGroup(db,"viewers")',
     ].sort(),
     "A new place names a `viewers` collection. If it is docs/{docId}/viewers, add it here. If it is any other collection, the recursive own-reading rule in config/templates/firestore.rules.tmpl would let anyone list its rows by uid: change that rule first (ADR 0027).",
   );

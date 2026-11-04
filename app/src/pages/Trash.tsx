@@ -100,7 +100,7 @@ export function Trash() {
 
   return (
     <div className="workspace">
-      <FolderTree folders={folders} currentFolderId={null} inTrash />
+      <FolderTree folders={folders} currentFolderId={null} page="trash" />
       <div className="workspace-main">
         <div className="workspace-head">
           <h1 className="trash-title">Trash</h1>

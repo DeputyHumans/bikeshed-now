@@ -58,6 +58,7 @@ export function ViewerToolbar({
   title,
   folderId,
   folders,
+  signedIn = true,
   versionLabel,
   onDetails,
   expiresAt,
@@ -96,6 +97,8 @@ export function ViewerToolbar({
   /** The folder holding this document, for the trail back out of it. */
   folderId: string | null;
   folders: FolderMeta[];
+  /** Signed out, the trail's root is the landing page: there is no workspace to go back to. */
+  signedIn?: boolean;
   versionLabel: string;
   /** The chip's tap: the document's details. Absent, the chip is only a label. */
   onDetails?: () => void;
@@ -147,7 +150,7 @@ export function ViewerToolbar({
           from a link used to be a dead end: its folder was named nowhere, and
           the only way back to the workspace was the browser's back button. */}
       <div className="viewer-title">
-        <Breadcrumb folderId={folderId} folders={folders} current={title} />
+        <Breadcrumb folderId={folderId} folders={folders} current={title} rootTo={signedIn ? "/everything" : "/"} />
       </div>
       {onDetails ? (
         <button

@@ -1,6 +1,6 @@
 --- a/app/src/pages/DocList.tsx
 +++ b/app/src/pages/DocList.tsx
-@@ -537,7 +537,10 @@
+@@ -732,7 +732,10 @@
              type="search"
              placeholder="Search everything"
              value={search}
@@ -11,4 +11,4 @@
 +            }}
            />
  
-           <label className="visually-hidden" htmlFor="workspace-sort">
+           {/* Recent's order is its point; a search on it is sorted as anywhere else. */}

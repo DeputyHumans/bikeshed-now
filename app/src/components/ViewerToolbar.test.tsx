@@ -161,3 +161,14 @@ describe("the version chip", () => {
   });
 });
 
+
+describe("the trail back out of a document", () => {
+  test("goes to Everything for somebody signed in, and to the front page for somebody who is not", () => {
+    // Signed out there is no workspace: /everything would ask them to sign up.
+    const signedIn = renderToolbar();
+    expect(screen.getByRole("link", { name: "Everything" }).getAttribute("href")).toBe("/everything");
+    signedIn.unmount();
+    renderToolbar({ signedIn: false });
+    expect(screen.getByRole("link", { name: "Everything" }).getAttribute("href")).toBe("/");
+  });
+});

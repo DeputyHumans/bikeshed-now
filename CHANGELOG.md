@@ -18,6 +18,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Added
 
+- **Signing in opens Recent.** The documents you read and every new version of a document you can read, from the last 30 days, in one list, newest first. Each row says why it is there ("You read it 2h ago", "New version 2h ago by …") and is marked "New since you read it" when someone else published after your last read. Three quick filters, Opened by me, Shared with me and New since I read, combine and are remembered. If your reads cannot be fetched, as for the minutes after a deploy while the new index builds, Recent lists new versions only and says so. Everything, the top of the folder tree, moves to `/everything` (SPEC §13 "Recent", ADR 0027).
+- **Shared with me** in the rail lists every document someone else owns, from every folder, including one shared with you inside a folder you were not given, which until now no page listed.
+
 - **The workspace has a list.** A switch beside the sort shows folders and documents as rows instead of cards: a small cover, the title and its chips, the owner, the last update, the reads and the menu. The Name, Updated and Reads headers sort, and a folder row takes a dropped file into that folder as its card does. On a phone each row is the cover, the title and one line. Cards stay the default on Everything and in folders (SPEC §13 "Grid and list").
 - **Search results say where each document is filed**, on a card and in a row: "Everything", the folder's path, or "A folder you can't open" for one shared with you without its folder.
 - **The workspace remembers how you left it.** The sort and the layout survive opening a document and coming back, in this browser's own storage, which never leaves it. The privacy policy says so.

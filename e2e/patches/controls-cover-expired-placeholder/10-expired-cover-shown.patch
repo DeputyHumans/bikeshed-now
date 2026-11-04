@@ -1,6 +1,6 @@
 --- a/app/src/pages/DocList.tsx
 +++ b/app/src/pages/DocList.tsx
-@@ -719,7 +719,7 @@
+@@ -880,7 +880,7 @@
                        through={liveReach(doc.folderId ? folderById.get(doc.folderId) : undefined)}
                        menu={docMenu(doc)}
                        onShare={isOwner ? () => shareDoc(doc) : undefined}
@@ -8,13 +8,13 @@
 +                      showCover={isOwner || !isExpired(doc.expiresAt) || true}
                        location={spansFolders ? placeOf(doc.folderId) : undefined}
                        owner={ownerLabel(doc.ownerEmail)}
-                     />
-@@ -755,7 +755,7 @@
+                       reason={reasonFor(doc)}
+@@ -917,7 +917,7 @@
                            through={liveReach(doc.folderId ? folderById.get(doc.folderId) : undefined)}
                            menu={docMenu(doc)}
                            onShare={isOwner ? () => shareDoc(doc) : undefined}
 -                          showCover={isOwner || !isExpired(doc.expiresAt)}
 +                          showCover={isOwner || !isExpired(doc.expiresAt) || true}
                            location={spansFolders ? placeOf(doc.folderId) : undefined}
+                           reason={reasonFor(doc)}
                          />
-                       );

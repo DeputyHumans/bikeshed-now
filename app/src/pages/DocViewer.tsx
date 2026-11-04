@@ -1037,6 +1037,7 @@ export function DocViewer() {
           title={doc.title}
           folderId={doc.meta?.folderId ?? null}
           folders={folders}
+          signedIn={signedIn}
           versionLabel={draftOnScreen ? `${doc.currentVersion} · draft` : `${doc.currentVersion}${shownWords === undefined ? "" : ` · ${readingMinutes(shownWords)} min`}`}
           onDetails={() => setDialog("details")}
           // The member record, or the projection: a reader of a public document

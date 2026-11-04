@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // The workspace: folders, documents, and everything you can do to them (SPEC §5, §13).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
 import {
   listMyDocs,
   listMyFolders,
+  listMyReading,
   listMyTeams,
   watchUser,
 } from "../firestore";
@@ -25,14 +26,23 @@ import {
   sortDocs,
   type SortKey,
 } from "../workspace/tree";
-import { PREF_KEYS, isLayout, useRemembered } from "../workspace/prefs";
+import { PREF_KEYS, isLayout, useRemembered, type Layout, type PrefKey } from "../workspace/prefs";
+import {
+  NO_FILTERS,
+  RECENT_READS_LIMIT,
+  filterRecent,
+  isRecentFilters,
+  recentRows,
+  type RecentFilters,
+  type RecentRow,
+} from "../workspace/recent";
 import { useIsSingleColumn } from "../hooks/useMediaQuery";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { UPLOAD_HINT, isUploadable, uploadDoc } from "../upload";
 import { logEvent } from "../analytics";
 
 import { Breadcrumb } from "../components/Breadcrumb";
-import { FolderTree } from "../components/FolderTree";
+import { FolderTree, type WorkspacePage } from "../components/FolderTree";
 import { Icon } from "../components/Icon";
 import { UpdatedLine } from "../components/UpdatedLine";
 import { Menu, type MenuEntry } from "../components/Menu";
@@ -45,6 +55,7 @@ import {
   DocTable,
   FolderRow,
   LayoutToggle,
+  RecentReason,
   UNREADABLE_FOLDER,
   VisibilityChip,
 } from "../components/WorkspaceList";
@@ -60,6 +71,29 @@ import { isExpired } from "../expiry";
 import { useToast } from "../components/Toast";
 import { DEPLOYMENT_MARKING } from "../config";
 import type { DocMeta, FolderMeta, Marking, TeamMeta, UserRecord } from "../types";
+
+/** The kinds of page this one component serves (SPEC §13). */
+export type WorkspaceView = "recent" | "everything" | "shared" | "folder";
+
+/** Each kind's own remembered layout, and where it starts before anyone chooses. */
+const LAYOUT: Record<WorkspaceView, { key: PrefKey; initial: Layout }> = {
+  // Recent and Shared span folders and are about time and people: rows.
+  recent: { key: PREF_KEYS.layoutRecent, initial: "list" },
+  shared: { key: PREF_KEYS.layoutShared, initial: "list" },
+  // Everything and folders are for browsing, where a cover is recognisable.
+  everything: { key: PREF_KEYS.layoutFolders, initial: "grid" },
+  folder: { key: PREF_KEYS.layoutFolders, initial: "grid" },
+};
+
+/** Long enough for a cold function; past it, Recent stops waiting for your reads. */
+const READS_TIMEOUT_MS = 8_000;
+
+/** Recent's quick filters, in the order they are shown. */
+const FILTERS: { key: keyof RecentFilters; label: string; needsReads: boolean }[] = [
+  { key: "opened", label: "Opened by me", needsReads: true },
+  { key: "shared", label: "Shared with me", needsReads: false },
+  { key: "unread", label: "New since I read", needsReads: true },
+];
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "recent", label: "Recently updated" },
@@ -77,6 +111,7 @@ function DocCard({
   onShare,
   showCover,
   location,
+  reason,
 }: {
   doc: DocMeta;
   /** The level its folder's reach gives it, when the folder is one this account can read. */
@@ -88,6 +123,8 @@ function DocCard({
   showCover: boolean;
   /** Where it is filed, when the cards on screen come from more than one folder. */
   location?: string;
+  /** On Recent: why it is there, in place of its last update. */
+  reason?: ReactNode;
 }) {
   const cover = showCover ? coverUrl(doc.docId, doc.thumb) : null;
   return (
@@ -158,7 +195,7 @@ function DocCard({
             <Icon name="fork" size={12} /> {doc.stats.forks}
           </span>
         ) : null}
-        <CardUpdated doc={doc} />
+        {reason ?? <CardUpdated doc={doc} />}
       </div>
     </div>
   );
@@ -223,8 +260,12 @@ function FolderCard({
   );
 }
 
-export function DocList() {
-  const { folderId = null } = useParams();
+export function DocList({ view: given = "everything" }: { view?: Exclude<WorkspaceView, "folder"> } = {}) {
+  const params = useParams();
+  // A folder's address names it; everything else is the kind of page routed here.
+  const view: WorkspaceView = params.folderId ? "folder" : given;
+  const folderId = params.folderId ?? null;
+  const across = view === "recent" || view === "shared";
   const navigate = useNavigate();
   const toast = useToast();
   const { user, emailLower } = useAuth();
@@ -243,7 +284,14 @@ export function DocList() {
   // Remembered in this browser, so opening a document and coming back finds
   // the workspace as it was left.
   const [sort, setSort] = useRemembered<SortKey>(PREF_KEYS.sort, "recent", isSortKey);
-  const [layout, setLayout] = useRemembered(PREF_KEYS.layoutFolders, "grid", isLayout);
+  const [layout, setLayout] = useRemembered(LAYOUT[view].key, LAYOUT[view].initial, isLayout);
+  const [filters, setFilters] = useRemembered(PREF_KEYS.recentFilters, NO_FILTERS, isRecentFilters);
+  // Your own reads, for Recent: kept between visits to it while this page
+  // stays mounted, so coming back does not blank the list while they reload.
+  const [reads, setReads] = useState<{ status: "loading" | "ready" | "failed"; map: Map<string, number> | null }>({
+    status: "loading",
+    map: null,
+  });
   const [drawer, setDrawer] = useState(false);
   const [uploading, setUploading] = useState(false);
   // A document brings its visibility triple along; a folder its level and date.
@@ -302,6 +350,32 @@ export function DocList() {
     if (!user) return;
     return watchUser(user.uid, setAccount);
   }, [user]);
+
+  // Fetched again on every visit to Recent: a read moves with every minute
+  // somebody spends in a document, and none of it is live.
+  const uid = user?.uid;
+  useEffect(() => {
+    if (view !== "recent" || !uid) return;
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timed out")), READS_TIMEOUT_MS);
+    });
+    Promise.race([listMyReading(uid, RECENT_READS_LIMIT), late])
+      .then((map) => {
+        if (live) setReads({ status: "ready", map });
+      })
+      .catch(() => {
+        // The index still building after a deploy, offline, or refused: the
+        // new versions alone, said so, rather than an error page (ADR 0027).
+        if (live) setReads((prev) => (prev.map ? prev : { status: "failed", map: null }));
+      })
+      .finally(() => clearTimeout(timer));
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [view, uid]);
 
   const defaultMarkingRef = useRef(DEPLOYMENT_MARKING as Marking);
   defaultMarkingRef.current = account?.defaultMarking ?? DEPLOYMENT_MARKING;
@@ -363,10 +437,23 @@ export function DocList() {
     dropping === null,
   );
 
+  const me = emailLower ?? "";
+  const haveReads = reads.status === "ready";
+  const recent: RecentRow[] = useMemo(
+    () => (view === "recent" ? recentRows(docs, reads.map, me, Date.now()) : []),
+    [view, docs, reads.map, me],
+  );
+  const recentShown = useMemo(() => filterRecent(recent, filters, me, haveReads), [recent, filters, me, haveReads]);
+  const recentById = useMemo(() => new Map(recentShown.map((r) => [r.doc.docId, r])), [recentShown]);
+
+  // A search reaches every document, from any page; otherwise each kind of
+  // page has its own selection.
   const visibleDocs = useMemo(() => {
-    const scoped = search ? docs : docsInFolder(docs, folderId);
-    return sortDocs(filterDocs(scoped, search), sort);
-  }, [docs, folderId, search, sort]);
+    if (search) return sortDocs(filterDocs(docs, search), sort);
+    if (view === "recent") return recentShown.map((r) => r.doc);
+    if (view === "shared") return sortDocs(docs.filter((d) => d.ownerEmail !== me), sort);
+    return sortDocs(docsInFolder(docs, folderId), sort);
+  }, [docs, folderId, search, sort, view, recentShown, me]);
 
   // Covers nobody has captured yet are filled in here, for the cards on
   // screen, by an editor's browser. The viewer captures on open; this is for
@@ -374,12 +461,14 @@ export function DocList() {
   useCoverBackfill(visibleDocs, emailLower ?? "");
 
 
+  // Recent and Shared with me list documents; shared folders are in the rail.
   const visibleFolders = useMemo(() => {
+    if (across && !search) return [];
     const scoped = search
       ? folders
       : folders.filter((f) => (f.parentId ?? null) === folderId);
     return filterFolders(scoped, search).sort((a, b) => a.name.localeCompare(b.name));
-  }, [folders, folderId, search]);
+  }, [folders, folderId, search, across]);
 
   const defaultMarking: Marking = account?.defaultMarking ?? DEPLOYMENT_MARKING;
 
@@ -417,10 +506,17 @@ export function DocList() {
 
   const folderById = useMemo(() => new Map(folders.map((f) => [f.folderId, f])), [folders]);
   // A search reaches into every folder, so what it finds says where each is.
-  // The same test the scoping above uses, so the two never disagree.
-  const spansFolders = Boolean(search);
+  // The same test the scoping above uses, so the two never disagree; Recent
+  // and Shared with me always come from every folder.
+  const spansFolders = Boolean(search) || across;
   const placeOf = (id: string | null | undefined) => locationOf(id, folders) ?? UNREADABLE_FOLDER;
   const ownerLabel = (email: string) => (email === emailLower ? "You" : email);
+  /** On Recent, and not while a search is on: why each document is there. */
+  const reasonFor = (doc: DocMeta) => {
+    if (view !== "recent" || search) return undefined;
+    const row = recentById.get(doc.docId);
+    return row ? <RecentReason row={row} me={me} /> : undefined;
+  };
   // The folder this page is showing, looked up once for its header, its name
   // and whether this account can see it at all.
   const current = folderId ? folderById.get(folderId) : undefined;
@@ -566,7 +662,7 @@ export function DocList() {
           // Trashed from inside itself, the page would be left on a folder
           // only its owner can still see, in the Trash. Go up first.
           if (folder.folderId === folderId) {
-            navigate(folder.parentId ? `/folder/${folder.parentId}` : "/");
+            navigate(folder.parentId ? `/folder/${folder.parentId}` : "/everything");
           }
           void moveToTrash(toast, "folder", folder.folderId, folder.name);
         },
@@ -588,7 +684,7 @@ export function DocList() {
 
   return (
     <div className="workspace">
-      <FolderTree folders={folders} currentFolderId={folderId} drawerOpen={drawer} />
+      <FolderTree folders={folders} currentFolderId={folderId} drawerOpen={drawer} page={view as WorkspacePage} />
 
       {/* The drop zone is the whole column, not just the grid: "free space" on
           a workspace with two documents in it is mostly below them. */}
@@ -598,7 +694,13 @@ export function DocList() {
         {...workspaceDrop.handlers}
       >
         <div className="workspace-head">
-          <Breadcrumb folderId={folderId} folders={folders} />
+          {view === "recent" ? (
+            <h1 className="workspace-title">Recent</h1>
+          ) : view === "shared" ? (
+            <h1 className="workspace-title">Shared with me</h1>
+          ) : (
+            <Breadcrumb folderId={folderId} folders={folders} />
+          )}
           {current ? (
             <div className="workspace-head-actions">
               {ownsCurrent ? (
@@ -639,53 +741,107 @@ export function DocList() {
             onChange={(e) => setSearch(e.target.value)}
           />
 
-          <label className="visually-hidden" htmlFor="workspace-sort">
-            Sort
-          </label>
-          <select
-            id="workspace-sort"
-            className="toolbar-select"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-          >
-            {SORTS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          {/* Recent's order is its point; a search on it is sorted as anywhere else. */}
+          {view !== "recent" || search ? (
+            <>
+              <label className="visually-hidden" htmlFor="workspace-sort">
+                Sort
+              </label>
+              <select
+                id="workspace-sort"
+                className="toolbar-select"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+              >
+                {SORTS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : null}
 
           <LayoutToggle layout={layout} onChange={setLayout} />
 
           <span style={{ flex: 1 }} />
 
-          <button
-            type="button"
-            className="btn btn-sm"
-            disabled={creatingFolder}
-            aria-busy={creatingFolder}
-            onClick={() => {
-              const name = window.prompt("Folder name");
-              if (!name) return;
-              setCreatingFolder(true);
-              void createFolder(name, folderId)
-                .catch((e) => toast.error(e.message))
-                .finally(() => setCreatingFolder(false));
-            }}
-          >
-            <Icon name="plus" size={15} /> Folder
-          </button>
+          {across ? null : (
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={creatingFolder}
+              aria-busy={creatingFolder}
+              onClick={() => {
+                const name = window.prompt("Folder name");
+                if (!name) return;
+                setCreatingFolder(true);
+                void createFolder(name, folderId)
+                  .catch((e) => toast.error(e.message))
+                  .finally(() => setCreatingFolder(false));
+              }}
+            >
+              <Icon name="plus" size={15} /> Folder
+            </button>
+          )}
           <button type="button" className="btn btn-primary btn-sm" onClick={() => setUploading(true)}>
             <Icon name="upload" size={15} /> Upload
           </button>
         </div>
 
-        {loading || foldersLoading ? (
+        {view === "recent" && !search ? (
+          <div className="recent-filters" role="group" aria-label="Show only">
+            {FILTERS.map((f) => {
+              const unavailable = f.needsReads && reads.status === "failed";
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  className="chip recent-filter"
+                  aria-pressed={filters[f.key] && !unavailable}
+                  disabled={unavailable}
+                  title={unavailable ? "Your reading history isn't available just now" : undefined}
+                  onClick={() => setFilters({ ...filters, [f.key]: !filters[f.key] })}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+            {reads.status === "failed" ? (
+              <span className="recent-note">Your reading history isn't available just now, so this shows new versions only.</span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {loading || foldersLoading || (view === "recent" && reads.status === "loading") ? (
           layout === "list" ? <RowSkeletons /> : <CardSkeletons />
         ) : visibleDocs.length === 0 && visibleFolders.length === 0 ? (
           <div className="empty-state">
             {search ? (
               <p>Nothing matches “{search}”.</p>
+            ) : view === "recent" && recent.length > 0 ? (
+              <>
+                <p>Nothing matches these filters.</p>
+                <button type="button" className="btn" onClick={() => setFilters(NO_FILTERS)}>
+                  Clear filters
+                </button>
+              </>
+            ) : view === "recent" ? (
+              <>
+                <h2>Nothing in the last 30 days</h2>
+                <p>
+                  What you read shows up here, and so does every new version
+                  of a document you can read.
+                </p>
+                <p>
+                  <Link to="/everything">Go to Everything</Link>
+                </p>
+              </>
+            ) : view === "shared" ? (
+              <>
+                <h2>Nothing shared with you yet</h2>
+                <p>When somebody shares a document with your address, it appears here the moment they do.</p>
+              </>
             ) : (
               <>
                 <h2>Nothing here yet</h2>
@@ -704,7 +860,12 @@ export function DocList() {
         ) : (
           <>
             {layout === "list" ? (
-              <DocTable showLocation={spansFolders} sort={sort} onSort={setSort}>
+              <DocTable
+                showLocation={spansFolders}
+                sort={sort}
+                onSort={view === "recent" && !search ? undefined : setSort}
+                recent={view === "recent" && !search}
+              >
                 {visibleFolders.map((folder) => (
                   <FolderRow
                     key={folder.folderId}
@@ -728,6 +889,7 @@ export function DocList() {
                       showCover={isOwner || !isExpired(doc.expiresAt)}
                       location={spansFolders ? placeOf(doc.folderId) : undefined}
                       owner={ownerLabel(doc.ownerEmail)}
+                      reason={reasonFor(doc)}
                     />
                   );
                 })}
@@ -763,6 +925,7 @@ export function DocList() {
                           onShare={isOwner ? () => shareDoc(doc) : undefined}
                           showCover={isOwner || !isExpired(doc.expiresAt)}
                           location={spansFolders ? placeOf(doc.folderId) : undefined}
+                          reason={reasonFor(doc)}
                         />
                       );
                     })}

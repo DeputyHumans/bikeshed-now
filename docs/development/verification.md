@@ -284,17 +284,40 @@ Publish `deck-animated` and sign in as its owner.
 2. The rail's thumbnails are `<img src="/thumb/…">`, not preview frames. Every
    slide shows its final state: the badge on the first, every bar on the
    third at its value.
-3. Back on the workspace, the card leads with the first slide. Reload: the
+3. Back on Everything, the card leads with the first slide. Reload: the
    cover comes from the browser's cache, with no request reaching the function.
 4. As `reviewer@example.com`, the cover and rail load, and opening the deck
    sends no `POST /thumb`. A non-member asking for the same image URL gets the
    same `404` as for one that does not exist.
-5. Publish `deck-quarter-review` and `markdown-reference` and open only the
-   workspace, as their owner. Within a few seconds each sends one
+5. Publish `deck-quarter-review` and `markdown-reference` and open only
+   Everything, as their owner. Within a few seconds each sends one
    `POST /thumb … kind=cover` from the workspace itself, and both cards show
    their first screen. `deck-animated`, trusted and scripted, keeps its
    placeholder until it is opened. A document whose expiry has passed gets a
    cover in its owner's workspace, and stays a placeholder for its editors.
+
+### 12b · Recent lists what you read and what changed, and says which
+
+1. Sign in as `owner@example.com`: the page is Recent, at `/`, in rows. Every
+   sample published in the last 30 days is listed by its new version; one you
+   have opened says "You read it …" and sits by the time you read it.
+2. As `reviewer@example.com`, open a document shared with you, then, as its
+   owner, publish a new version. Back on the reviewer's Recent the row reads
+   "New version … by owner@example.com" with "New since you read it"; opening
+   it and coming back clears the mark.
+3. Turn on "Opened by me", then "New since I read": each narrows the list, and
+   a reload keeps them. With both on and nothing left, "Clear filters" brings
+   everything back.
+4. In the Firestore emulator's request log, the visit made one query on the
+   `viewers` collection group, filtered to the reader's uid. A read of someone
+   else's rows the same way is refused.
+5. Shared with me, in the rail, lists the documents the owner shared with the
+   reviewer, each with its folder; Everything is at `/everything`, and a
+   document's trail leads there.
+
+What this cannot show: the collection-group index, which the emulator never
+enforces. After a deploy, confirm it is READY, and until it is, that Recent
+says it is showing new versions only rather than an error (ADR 0027).
 
 ### 13 · A suggestion is decided by an approver, as an edit everyone sees
 
