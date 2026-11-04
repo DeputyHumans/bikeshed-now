@@ -219,7 +219,7 @@ export function DocRow({
         <span role="cell" data-col="why">{reason}</span>
       ) : (
         <>
-          <span role="cell" data-col="owner">{owner}</span>
+          <span role="cell" data-col="owner" title={owner}>{owner}</span>
           <span role="cell" data-col="updated">{updated}</span>
           <span role="cell" data-col="reads" className="numeric" title={`Read ${views === 1 ? "once" : `${views} times`} by people`}>
             {views}
@@ -273,7 +273,7 @@ export function FolderRow({
         ) : null}
       </span>
       {location !== undefined ? <span role="cell" data-col="location" title={location}>{location}</span> : null}
-      <span role="cell" data-col="owner">{owner}</span>
+      <span role="cell" data-col="owner" title={owner}>{owner}</span>
       <span role="cell" data-col="people" aria-colspan={2}>{people}</span>
       <span role="cell" data-col="summary">{people}</span>
       <RowMenu label={folder.name} entries={menu} />
