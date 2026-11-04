@@ -3651,6 +3651,37 @@ The app sends `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, `asserti
 
 An unreachable issuer, an unreadable client metadata document or a failed account lookup is `500 server_error`, never `invalid_grant` or `invalid_client`.
 
+An exchange, illustrated (the claims are the ones Claude's issuer lists in its discovery document; `scope` is ignored, since a grant here has no scopes):
+
+```
+POST /oauth/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
+&assertion=<header>.<claims>.<ES256 signature>
+&client_id=https://claude.ai/oauth/mcp-oauth-client-metadata
+```
+
+```json
+{ "typ": "oauth-id-jag+jwt", "alg": "ES256", "kid": "<one of the issuer's keys>" }
+{
+  "iss": "https://identity.anthropic.com/issuers/iss_<workspace id>",
+  "sub": "<the issuer's id for the person>",
+  "aud": "https://<deployment>",
+  "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+  "email": "ana@example.com",
+  "jti": "<unique>",
+  "iat": 1793761159,
+  "exp": 1793761459
+}
+```
+
+```json
+{ "access_token": "bsa_<tokenId>.<secret>", "token_type": "Bearer", "expires_in": 3600 }
+```
+
+`aud` is this deployment's issuer, the `issuer` of its authorization-server metadata. With no `resource` claim or parameter, the token is bound to the `/mcp` of the host the request arrived on.
+
 The gate is applied as at a sign-in: each assertion is a fresh sign-in by the issuer. A "sign out everywhere" ends the tokens issued before it, within their hour, and does not bar what the organisation signs afterwards.
 
 The connection is one row in `tokens/` per (issuer, person, address, client), with an id derived from the four, `kind: "oauth"`, channel `mcp`, and `managed: { issuer, subject }`. A different app, or the same person after an address move (§14), gets a row of its own. Its mirror carries `managedBy`, the issuer's host, so the account screen says the organisation connected it. There is **no refresh token**, as the draft asks: the app presents a fresh assertion instead.

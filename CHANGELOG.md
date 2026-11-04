@@ -14,6 +14,12 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **Trusting an organisation's issuer is documented with examples.** `functions/.env.example` shows what `BIKESHED_ID_JAG_ISSUERS` looks like for a Claude workspace and points to the walkthrough. `docs/operations/overview.md` now covers setting the variable and the secret it is deployed from, checking the metadata (with the expected output), reading the `id-jag` log lines, and a table of what Claude is told when Test connection fails, with the cause and the fix for each. SPEC §23 shows an exchange end to end (ADR 0026).
+
 ## 0.31.0 — 2026-11-03
 
 ### Added

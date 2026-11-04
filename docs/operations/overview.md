@@ -48,7 +48,7 @@ npm run test:rules:emulated # rules tests need the emulators; this starts them
 | Firebase project id | `.firebaserc` | `.firebaserc.example` |
 | Content bucket, optional public media bucket, public origin (stamped into `/llms.txt`) | `config/deploy.json` | `config/deploy.example.json` |
 | Web SDK config, measurement id, optional landing media base URL | `app/.env.local` | `app/.env.example` |
-| Bucket, origin, sign-in hint | `functions/.env` | `functions/.env.example` |
+| Bucket, origin, sign-in hint, superadmins, trusted identity issuers | `functions/.env` | `functions/.env.example` |
 | Console account | **nowhere** — passed as `--account` | — |
 | Resend API key | Firebase Secret Manager | `functions/.env.example` names it |
 
@@ -244,15 +244,65 @@ folder's members, and all four membership fields are written together
 
 Claude's admin settings can connect a whole workspace to bikeshed without each person signing in ("managed authorization", identity source "Claude-issued"). Claude asks the operator to trust the workspace's issuer; this is how ([ADR 0026](../architecture/adr/0026-an-organisation-may-connect-its-people.md), SPEC §23 "Connected by an organisation").
 
-1. **Trust the issuer.** Add `BIKESHED_ID_JAG_ISSUERS=<issuer URL>` to the functions' environment: the deployer's `functions/.env` and the `PRODUCTION_FUNCTIONS_ENV` secret that `deploy.yml` writes it from. Copy the URL exactly as Claude shows it (`https://identity.anthropic.com/issuers/iss_…`); it is compared byte for byte. Several issuers are separated by commas or spaces. Never commit one: the id names the organisation, and `check:secrets` refuses its shape.
-2. **Deploy the functions.** The authorization-server metadata then lists the jwt-bearer grant and `authorization_grant_profiles_supported`. Check it: `curl -s https://<host>/.well-known/oauth-authorization-server`. It is cached for up to five minutes.
-3. **In Claude, leave Tenant ID empty**, then Continue and Test connection. A deployment is one workspace, and an assertion that names a tenant is refused.
+**1. Trust the issuer.** Claude's dialog shows the issuer URL under "Configure bikeshed's authorization server to trust your organization's issuer". Add it to the deployer's `functions/.env`, copied exactly: it is compared byte for byte, and a trailing slash is a different issuer. Several issuers are separated by commas or spaces.
 
-What each member needs: an account here whose verified address is the address on their Claude account, created by signing in once. An assertion never creates an account. The connection appears on their account screen as connected by their organisation. If they revoke it, it stays revoked for that issuer, and they can still connect Claude themselves.
+```
+# Claude-issued managed authorization for <workspace> (ADR 0026), set <date>.
+BIKESHED_ID_JAG_ISSUERS=https://identity.anthropic.com/issuers/iss_<workspace id>
+```
 
-The function log says what happened without naming anyone: `id-jag accepted:` with the assertion's lifetime, or `id-jag refused:` with the reason and the claim names. An assertion that expires more than ten minutes ahead is refused; if Claude's are longer, that log line shows by how much.
+Then put the same file into the secret `deploy.yml` writes it from. The secret is the whole file, so setting it replaces every line: first make sure the local file is what production runs, for instance by comparing it with the deployed function's environment (`gcloud run services describe oauth --region us-central1 --format=json`, the `env` of its container).
 
-**To stop it,** remove the issuer from the environment and deploy. The grant is refused at once, and access tokens already issued expire within the hour. In Claude, switch the connector back to browser sign-in.
+```bash
+gh secret set PRODUCTION_FUNCTIONS_ENV < functions/.env
+```
+
+Never commit an issuer URL: its id names the organisation, and `check:secrets` refuses the shape. The real one belongs in `DEPLOYMENT.local.md` beside the other deployment facts.
+
+**2. Deploy the functions**, which every push to `main` does, or run the deploy workflow by hand. Then check the metadata. It is cached for up to five minutes.
+
+```bash
+curl -s https://<host>/.well-known/oauth-authorization-server \
+  | jq '{grant_types_supported, authorization_grant_profiles_supported}'
+```
+
+```json
+{
+  "grant_types_supported": ["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"],
+  "authorization_grant_profiles_supported": ["urn:ietf:params:oauth:grant-profile:id-jag"]
+}
+```
+
+With the variable unset, or before the deploy, only the first two grants appear, the profile is `null`, and a jwt-bearer request answers `unsupported_grant_type`.
+
+**3. In Claude, leave Tenant ID empty**, then Continue and Test connection. A deployment is one workspace, and an assertion that names a tenant is refused.
+
+What each member needs: an account here whose verified address is the address on their Claude account, created by signing in once. An assertion never creates an account. The connection appears on their account screen as "connected by your organisation". If they revoke it, it stays revoked for that app, and they can still connect Claude themselves.
+
+**Reading the log.** The `oauth` function logs every accepted assertion, and every assertion whose claims fail once its signature has verified, without naming anyone:
+
+```
+id-jag accepted: { client: 'claude.ai', lifetimeS: 300, retried: false }
+id-jag refused: assertion expires too far ahead { claims: 'aud client_id email exp iat iss jti scope sub', lifetimeS: 900 }
+```
+
+`lifetimeS` is the assertion's own lifetime. An assertion expiring more than ten minutes ahead is refused (`MAX_AHEAD_MS` in `functions/src/oauth/assertion.ts`); if Claude's turn out longer, this line shows by how much. `retried: true` is Claude presenting the same assertion again within a minute and getting the same token back.
+
+**When Test connection fails,** Claude is told one of these. Refusals about the account (`access_denied`) are not logged; only the client sees them.
+
+| Error, and its description | Cause | Fix |
+|---|---|---|
+| `unsupported_grant_type` | the variable is not in the deployed environment | set it, deploy, check the metadata |
+| `invalid_grant`: "this deployment does not trust the assertion's issuer" | the configured URL differs from Claude's | copy it again from the dialog |
+| `invalid_grant`: "leave the tenant ID empty" | a Tenant ID was entered in Claude | clear it |
+| `invalid_grant`: "assertion expires too far ahead" | Claude's assertions outlive ten minutes | raise `MAX_AHEAD_MS` to what the log shows, as a release |
+| `access_denied`: "no account here uses this address" | nobody has signed up here with that Claude address | the member signs in once with it |
+| `access_denied`: "this account cannot be connected" | the account is unverified, disabled, or outside the allowlist | as for any sign-in |
+| `access_denied`: "automatic connection was turned off" | the member revoked it | nothing: it is their decision, and they can connect Claude themselves |
+| `access_denied`: "belongs to a different account at the issuer now" | the address was given to someone else in the Claude workspace | delete or move the old account here first |
+| `500 server_error` | the issuer's keys, Claude's metadata or Auth could not be reached | transient; Claude tries again |
+
+**To stop it,** remove the issuer from `functions/.env` and the secret, and deploy. The grant is refused at once, and access tokens already issued expire within the hour. In Claude, switch the connector back to browser sign-in.
 
 ### The guides at `/docs` and `/docs/developers`
 
