@@ -14,7 +14,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.33.1 — 2026-11-04
 
 ### Security
 
@@ -28,13 +28,9 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 ### Changed
 
 - **The ACF files are Apache-2.0 now.** `docs/acf/**` and `.claude/scripts/status-line.py` are copies of [ACF Tools](https://github.com/fib7/acf-tools) files, which Fibonacci Seven relicensed under Apache-2.0 on 2026-10-28. `NOTICE`, `README.md` and `THIRD_PARTY_LICENSES.md` stop calling them proprietary, `NOTICE` maps each copy to its upstream file, and `docs/acf/organization.md` says in its first line that it differs from upstream. The copies take the plugins' current versions, and the project settings no longer name the status line, which the plugin now provides.
-
 - **Every GitHub Action is pinned to a commit.** CI, deployment and operations name each action by full SHA with its version in a comment, so a moved tag cannot change what runs with the production credential. `upload-artifact` moves to v7 in the same change. The rules job installs the Firebase CLI at the version deployment already pins, 15.25.1, instead of whatever is newest.
-
 - **`CONTRIBUTING.md` states what CI enforces.** The attribution-trailer rule, the binary allowlist and the changelog entry were only in the agent instructions, so a contributor learned them from a red check. The quickstart blocks also gain the step that points the app at the emulators, and the app row of the verification table now runs the coverage it claims to measure.
-
 - **The documentation says what is true again.** The ADR count, the deletion claim in the README, the walkthrough and prerequisite counts, and the CLI publishing guide, which was still written as if the package were unpublished. `docs/operations/config.md` now lists the seven settings it left out, and `docs/operations/overview.md` names the three repository secrets it left out, without which the `report` job fails on every push.
-
 - **A security report can go through GitHub privately**, as well as by email. `SECURITY.md` asks researchers to test their own copy rather than `bikeshed.now`, and names what is supported, including the CLI. The Code of Conduct gives a route for a report about a maintainer.
 
 ### Fixed
