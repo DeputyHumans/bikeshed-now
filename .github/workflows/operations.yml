@@ -27,6 +27,20 @@ jobs:
           workload_identity_provider: ${{ secrets.PRODUCTION_WIF_PROVIDER }}
           service_account: ${{ secrets.PRODUCTION_OPS_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v3
+      # The audit can name the health function's direct Cloud Run host in a
+      # finding, and this repository's run logs are public (deploy.yml says why
+      # the suffix is enough).
+      - name: Mask this project's function hosts
+        env:
+          PROJECT: ${{ secrets.PRODUCTION_FIREBASE_PROJECT }}
+        run: |
+          uri=$(gcloud functions describe health --gen2 --region us-central1 --project "$PROJECT" --format='value(serviceConfig.uri)' 2>/dev/null || true)
+          suffix="${uri#https://health}"
+          if [ -n "$uri" ] && [ "$suffix" != "$uri" ]; then
+            echo "::add-mask::$suffix"
+          else
+            echo "::warning::could not read the function host suffix, so this run's log may name direct function hosts"
+          fi
       - name: Audit without changing production
         env:
           PROJECT: ${{ secrets.PRODUCTION_FIREBASE_PROJECT }}

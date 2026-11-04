@@ -525,9 +525,9 @@ performs it. Public caches may retain already-served media after removal.
 that passes all three CI jobs. A push to `develop` runs CI and stops there,
 until a staging project exists ([below](#staging-later)).
 
-**Pushing `main` is deploying.** Nothing asks for approval in between: on
-GitHub's free plan a private repository has no branch protection and no
-environment approvals. CI is the only gate.
+**Pushing `main` is deploying.** Nothing asks for approval in between, and CI is the only gate. The repository's credential boundary is the OIDC subject below, not a GitHub setting. A GitHub environment would add an approval step on GitHub's side, but a job that names one presents the subject `repo:<owner>/<repo>:environment:<name>` instead of `…:ref:refs/heads/main`. Bind that subject to the deployer and operations service accounts before the workflow names the environment, and remove the `ref` binding only after a green deploy.
+
+The run logs are public in a public repository. Secrets are masked, and so is the direct Cloud Run host suffix the functions share: `firebase deploy` prints every HTTPS function's address, and only Hosting is meant to be the public face.
 
 One run, in order:
 

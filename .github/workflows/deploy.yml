@@ -7,11 +7,13 @@
 # PRODUCTION_ prefix on every secret leaves room for a STAGING_ job beside this
 # one.
 #
-# The production credential is scoped on Google's side, not GitHub's. This
-# organization's plan has no branch protection and no environment secrets for a
-# private repository, so the deployer service account trusts exactly one OIDC
-# subject: a workflow running on refs/heads/main of this repository. A workflow
-# on any other ref cannot mint the token, whatever it is edited to say.
+# The production credential is scoped on Google's side, not GitHub's: the
+# deployer service account trusts exactly one OIDC subject, a workflow running
+# on refs/heads/main of this repository. A workflow on any other ref cannot mint
+# the token, whatever it is edited to say. A GitHub environment would add a
+# second gate on GitHub's side, but a job that names one presents a different
+# subject (`environment:<name>`), so adopting one starts with binding that
+# subject (docs/operations/overview.md, "Continuous deployment").
 #
 # Set the repository variable DEPLOY_PAUSED to `true` to hold deploys while CI
 # keeps running — for a migration whose order is not this one
@@ -110,6 +112,22 @@ jobs:
           service_account: ${{ secrets.PRODUCTION_DEPLOY_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v3
+
+      # firebase deploy prints every HTTPS function's direct Cloud Run address.
+      # Hosting is the public face; the direct hosts are not, and this
+      # repository's run logs are public. Every function in a project shares one
+      # host suffix (`-<project hash>-<region>.a.run.app`), so masking it once
+      # covers every later step. A project with no health function yet has no
+      # suffix to read, which only happens on its first deploy.
+      - name: Mask this project's function hosts
+        run: |
+          uri=$(gcloud functions describe health --gen2 --region us-central1 --project "$PROJECT" --format='value(serviceConfig.uri)' 2>/dev/null || true)
+          suffix="${uri#https://health}"
+          if [ -n "$uri" ] && [ "$suffix" != "$uri" ]; then
+            echo "::add-mask::$suffix"
+          else
+            echo "::warning::could not read the function host suffix, so this run's log may name direct function hosts"
+          fi
 
       - name: Preserve deployment evidence
         run: node scripts/ops.mjs snapshot --project "$PROJECT" --output /tmp/bikeshed-ops/before.json
