@@ -5,5 +5,5 @@
      async run(ctx, args) {
 -      const { ref, data } = await loadDoc(ctx, str(args, "id"));
 +      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
-       // Moving a document changes who inherits access to it: the destination
-       // folder's members become its members. So it takes the REAL editor set,
+       // Moving a document changes who can read it: the destination folder's
+       // members become its members, and its link and public level reach it.
