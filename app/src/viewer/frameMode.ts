@@ -41,6 +41,25 @@ export function readsDraft(r: {
 }
 
 /**
+ * Whether a reading frame is sandboxed, which is to say its script does not run.
+ *
+ * A draft never runs: any editor may have written it. An older version never
+ * runs either, trusted or not: trust is for the head, the version somebody
+ * vouched for, and the server refuses to run any other (SPEC §6c). Only the
+ * head, effectively trusted for this reader, runs. A head not yet known is
+ * not the head.
+ */
+export function readingSandboxed(r: {
+  draft: boolean;
+  trusted: boolean;
+  shownVersion: string;
+  headVersion: string;
+}): boolean {
+  const isHead = r.headVersion !== "" && r.shownVersion === r.headVersion;
+  return r.draft || !r.trusted || !isHead;
+}
+
+/**
  * The iframe's React key.
  *
  * Extracted from an inline template literal that needed three paragraphs of

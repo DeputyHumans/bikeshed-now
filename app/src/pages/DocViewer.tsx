@@ -41,7 +41,7 @@ import { useLiveSync } from "../viewer/useLiveSync";
 import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
 import { useVersionDrop } from "../viewer/useVersionDrop";
-import { contentBase, readsDraft, type FrameMode } from "../viewer/frameMode";
+import { contentBase, readingSandboxed, readsDraft, type FrameMode } from "../viewer/frameMode";
 
 import { EditToolbar } from "../wysiwyg/EditToolbar";
 import { ViewerToolbar } from "../components/ViewerToolbar";
@@ -239,8 +239,11 @@ export function DocViewer() {
       headVersion,
     });
     // A draft's script never runs, trusted or not: any editor may have written
-    // it, and the server serves it locked anyway (ADR 0021).
-    return { kind: "reading", versionId: doc.currentVersion, draft, sandboxed: draft || !trust.trusted };
+    // it, and the server serves it locked anyway (ADR 0021). Nor does an older
+    // version's: trust is for the head, the one somebody vouched for, and the
+    // server refuses to run any other (SPEC §6c).
+    const sandboxed = readingSandboxed({ draft, trusted: trust.trusted, shownVersion: doc.currentVersion, headVersion });
+    return { kind: "reading", versionId: doc.currentVersion, draft, sandboxed };
   }, [editingOrigin, doc.currentVersion, doc.meta?.draft, canEdit, headVersion, trust.trusted]);
   /** A draft never runs its script, so trusting it would change nothing to offer. */
   const showsDraft = mode.kind === "reading" && mode.draft;
@@ -1060,7 +1063,7 @@ export function DocViewer() {
           onOpenForks={() => setDialog("forks")}
           editing={wantsEdit}
           onToggleEdit={() => void (wantsEdit ? stopEditing() : canEdit && setWantsEdit(true))}
-          offerTrust={liveTrust.shouldOffer && !showsDraft}
+          offerTrust={liveTrust.shouldOffer && !showsDraft && isCurrent}
           onOpenTrust={() => setDialog("trust")}
           hasSlides={hasSlides}
           railOpen={railOpen}
@@ -1107,7 +1110,7 @@ export function DocViewer() {
         }}
         onKeepMine={live.dismissConflict}
         orphanedCount={annotationLayer.orphaned.length}
-        offerTrust={liveTrust.shouldOffer && !showsDraft}
+        offerTrust={liveTrust.shouldOffer && !showsDraft && isCurrent}
         scriptsBuildContent={deck.scan.kind === "script-required"}
         onOpenTrust={() => setDialog("trust")}
       />

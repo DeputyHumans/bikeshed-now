@@ -438,15 +438,23 @@ function setScriptLock(
 
 /**
  * The run variant's question: does a superadmin's global trust, or this
- * reader's own consent, stand behind running this document's script? The
+ * reader's own consent, stand behind running this version's script? The
  * reader's consent is `docs/{docId}/trust/{uid}`, their own record; a stranger,
  * a signed-out visitor and a page elsewhere (the session cookie is
  * `SameSite=Strict`) have none.
+ *
+ * Trust is for the CURRENT version only. Either scope is granted while one
+ * version is current and withdrawn whenever another becomes current, so the
+ * scripts somebody vouched for are the head's. An older version is one nobody
+ * vouched for under this grant: an editor's, say, whose commit withdrew trust
+ * at the time. Without this check, trusting the head again ran that one too.
  */
 async function mayRunScript(
   gate: ReadGate,
   caller: Awaited<ReturnType<typeof resolveCaller>>,
+  versionId: string,
 ): Promise<boolean> {
+  if (versionId !== (gate.docData as { currentVersion?: unknown }).currentVersion) return false;
   if (globallyTrusted(gate.docData)) return true;
   if (!caller) return false;
   const consent = await gate.docSnap.ref.collection("trust").doc(caller.uid).get();
@@ -667,7 +675,7 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
   // variant: the content must embed same-origin in the app's iframe, which is
   // what makes annotation possible.
   const runs = parts.run && isScriptable(contentTypeOf(relPath));
-  const granted = runs ? await mayRunScript(gate, caller) : false;
+  const granted = runs ? await mayRunScript(gate, caller, versionId) : false;
   if (runs) {
     // Unlocked or not, this answer depends on who asked, so no cache may
     // keep it for the next person at this URL.

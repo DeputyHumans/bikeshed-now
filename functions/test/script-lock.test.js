@@ -232,6 +232,29 @@ test("the run variant runs a document only for a superadmin's trust or the reade
   assert.deepEqual([js.headers["cache-control"], js.headers["content-security-policy"]], ["public, max-age=300", RUN_ANCESTORS]);
 });
 
+test("trust runs the current version only, never an older one", async () => {
+  // v1 is the older version: say an editor's, whose commit withdrew trust at
+  // the time. The head is v2, and trust has since been granted on it again.
+  const older = (docId) => ({ [`docs/${docId}/versions/v2`]: { versionId: "v2", entry: "index.html", format: "html" } });
+  const w = world({
+    ...older("global"),
+    ...older("page"),
+    "docs/page/trust/u-reader": { uid: READER.uid, email: READER.emailLower },
+  });
+  w.store.set("docs/global", { ...w.store.get("docs/global"), currentVersion: "v2" });
+  w.store.set("docs/page", { ...w.store.get("docs/page"), currentVersion: "v2" });
+  const c = caller(w);
+  const unlocked = (r) => r.headers["content-security-policy"] === RUN_ANCESTORS;
+
+  assert.ok(unlocked(await c.head(null, "/content/!run/global/v2/index.html")), "the trusted head runs");
+  assert.ok(unlocked(await c.head(READER, "/content/!run/page/v2/index.html")), "the consented head runs");
+  for (const [who, path] of [[null, "/content/!run/global/v1/index.html"], [READER, "/content/!run/page/v1/index.html"]]) {
+    const r = await c.head(who, path);
+    assert.equal(r.status, 200, path);
+    assert.equal(r.headers["content-security-policy"], `${SCRIPT_LOCK}; ${RUN_ANCESTORS}`, path);
+  }
+});
+
 test("a draft never runs its script, for anyone", async () => {
   const w = world({ "docs/global": { ...world().store.get("docs/global"), draft: null } });
   const c = caller(w);

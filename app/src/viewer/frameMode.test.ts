@@ -8,6 +8,7 @@ import {
   frameSandbox,
   frameSrc,
   isEffectivelyTrusted,
+  readingSandboxed,
   readsDraft,
   type FrameMode,
 } from "./frameMode";
@@ -179,4 +180,29 @@ it("binds the editor frame URL and key to the exact prepared revision and live e
   expect(Object.fromEntries(url.searchParams)).toEqual({ r: "3", baseVersion: "v2", liveEpoch: "fresh", draftRevision: "a".repeat(64) });
   expect(frameKey(mode, "t", 0)).not.toBe(frameKey({ ...mode, draftRevision: "b".repeat(64) }, "t", 0));
   expect(frameKey(mode, "t", 0)).not.toBe(frameKey({ ...mode, liveEpoch: "newer" }, "t", 0));
+});
+
+describe("readingSandboxed", () => {
+  const HEAD = { draft: false, trusted: true, shownVersion: "v2", headVersion: "v2" };
+
+  it("runs the head for a reader who trusts it", () => {
+    expect(readingSandboxed(HEAD)).toBe(false);
+  });
+
+  it("never runs an older version, whatever the document's trust says", () => {
+    // Trust is for the head: an older version may be an editor's, whose
+    // commit withdrew trust at the time, and trusting the head again must not
+    // run it (SPEC §6c).
+    expect(readingSandboxed({ ...HEAD, shownVersion: "v1" })).toBe(true);
+  });
+
+  it("never runs a draft, or an untrusted head", () => {
+    expect(readingSandboxed({ ...HEAD, draft: true })).toBe(true);
+    expect(readingSandboxed({ ...HEAD, trusted: false })).toBe(true);
+  });
+
+  it("sandboxes while the head is not yet known", () => {
+    expect(readingSandboxed({ ...HEAD, headVersion: "" })).toBe(true);
+    expect(readingSandboxed({ ...HEAD, shownVersion: "", headVersion: "" })).toBe(true);
+  });
 });
