@@ -17,28 +17,28 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
-    "cookie": "^0.6.0",
-    "firebase-admin": "^12.7.0",
-    "firebase-functions": "^6.1.0",
+    "adm-zip": "^0.6.1",
+    "cookie": "^2.0.1",
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0",
     "markdown-it": "14.1.0",
-    "mime-types": "^2.1.35",
-    "resend": "^4.0.1",
+    "mime-types": "^3.0.2",
+    "resend": "^6.37.0",
     "turndown": "7.2.0",
     "turndown-plugin-gfm": "1.0.2",
-    "@react-email/components": "^0.0.25",
-    "@react-email/render": "^1.0.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.5",
-    "@types/cookie": "^0.6.0",
+    "@types/adm-zip": "^0.6.0",
+    "@types/cookie": "^1.0.0",
     "@types/markdown-it": "^14.1.2",
-    "@types/mime-types": "^2.1.4",
-    "@types/node": "^24.19.1",
-    "@types/react": "^18.3.11",
+    "@types/mime-types": "^3.0.1",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
     "@types/turndown": "^5.0.5",
-    "typescript": "^5.6.2"
+    "typescript": "^7.0.2"
   }
 }
