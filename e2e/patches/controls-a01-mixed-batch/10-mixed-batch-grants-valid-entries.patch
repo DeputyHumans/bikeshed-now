@@ -1,10 +1,10 @@
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
-@@ -75,3 +75,3 @@
+@@ -110,3 +110,3 @@
    const invalid = invalidPrincipals(delta);
 -  if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
 +  delta.add = delta.add.filter(a => !invalid.includes(a.principal));
-   let before = membershipOf(data);
+   await refuseStrangersTeams(ctx, data, delta.add.map((a) => a.principal));
 @@ -115,2 +115,3 @@
    }
 +  if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
