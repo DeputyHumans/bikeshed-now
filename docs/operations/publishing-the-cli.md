@@ -9,17 +9,15 @@ somebody reaches one from a terminal — or how an agent installs the skills, si
 That instruction is served to agents, so the package existing is not optional
 once it has been named.
 
-## Before the first publish
+## Before you publish
 
 An npm account with 2FA, added to the package as an owner. `npm whoami` should
-answer. Node 24, as everywhere here.
-
-The first publish claims the name. It is the one step that cannot be rehearsed,
-so read the file list before running it.
+answer. Node 24, as everywhere here. Read the file list before running it: a
+published version cannot be taken back (see [Never](#never)).
 
 ## What ships
 
-Three source files and no dependencies. `files` in `cli/package.json` is an
+Four source files and no dependencies. `files` in `cli/package.json` is an
 allowlist, not an ignore list — nothing is published because somebody forgot to
 exclude it. `prepack` copies `LICENSE` and `NOTICE` in (both gitignored, so the
 tree keeps one copy of each) and `postpack` removes them again.
@@ -48,8 +46,7 @@ npx -y bikeshed-now --help
 ```
 
 The package name and the command differ, and npx resolves the sole binary
-regardless — verified against a local install, but only a published package
-proves the registry path. Do that check once, after the first publish.
+regardless — only a published package proves the registry path.
 
 ## Never
 
@@ -68,9 +65,7 @@ the deployment are independent: an older client talking to a newer deployment is
 the normal case, which is why `bikeshed skills install` fetches the skills from
 the deployment rather than bundling them.
 
-Bumping the version touches `CLIENT_NAME` in `cli/src/client.mjs` — the
-`X-Bikeshed-Client` value stamped on every request and shown in activity feeds —
-and the fixtures in `functions/test/provenance.test.js` that spell it.
+`CLIENT_NAME` in `cli/src/client.mjs`, the `X-Bikeshed-Client` value stamped on every request and shown in activity feeds, reads the version from `package.json`, so a bump changes it with nothing else to edit.
 
 `docs/agents/agent-guide.md` names the package, and `functions/test/skills.test.js`
 asserts it matches `cli/package.json`, so a rename fails the build until the guide
@@ -81,4 +76,4 @@ is regenerated with `npm run build:agents`.
 `cli/src/config.mjs` defaults the origin to the public deployment. Somebody who
 installs the package and runs a command without configuring anything talks to
 that host — deliberate, since it is the deployment the package is named after,
-but worth knowing before the name is public.
+but worth knowing.

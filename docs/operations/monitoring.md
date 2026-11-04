@@ -18,9 +18,9 @@ object creation/read. Enable the Monitoring, Logging and Personalized Service
 Health APIs. Deploy the health function before creating the uptime checks.
 
 ```sh
-node scripts/ops.mjs marker --project demo-bikeshed --account "$OPERATOR" --bucket "$BUCKET" --apply
-node scripts/ops.mjs provision --project demo-bikeshed --account "$OPERATOR" --origin "$ORIGIN" --email "$INCIDENT_EMAIL"
-node scripts/ops.mjs provision --project demo-bikeshed --account "$OPERATOR" --origin "$ORIGIN" --email "$INCIDENT_EMAIL" --apply
+node scripts/ops.mjs marker --project "$PROJECT" --account "$OPERATOR" --bucket "$BUCKET" --apply
+node scripts/ops.mjs provision --project "$PROJECT" --account "$OPERATOR" --origin "$ORIGIN" --email "$INCIDENT_EMAIL"
+node scripts/ops.mjs provision --project "$PROJECT" --account "$OPERATOR" --origin "$ORIGIN" --email "$INCIDENT_EMAIL" --apply
 ```
 
 Provisioning first shows the diff, then reconciles only resources labeled
@@ -37,6 +37,8 @@ Workload Identity provider with a separate service-account binding restricted
 to this repository's main branch. Add `PRODUCTION_OPS_SERVICE_ACCOUNT`,
 `PRODUCTION_PUBLIC_ORIGIN` and `PRODUCTION_INCIDENT_EMAIL` as repository secrets. Existing project and provider
 secrets are reused. No JSON service-account keys are needed.
+
+**A public repository's schedule can stop.** GitHub disables scheduled workflows in a public repository after 60 days without repository activity, and nothing alerts when the hourly audit stops running. `gh workflow enable operations` turns it back on. The Cloud Monitoring uptime checks run on Google's side and do not depend on it.
 
 The deployer also needs Cloud Build Builds Viewer for evidence and Logs Writer
 for the post-deploy audit. Create the marker once with the operator identity;

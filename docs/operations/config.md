@@ -70,6 +70,8 @@ No default, and an unresolvable id is a clean error, not a stack trace.
 |---|---|
 | `bucket` | the private content bucket, for the operator scripts |
 | `domain` | the public origin, stamped into the agent instructions the app build serves |
+| `mediaBucket` | optional: the separate **public** bucket for the landing-page explainer, for `scripts/media.mjs` and the deploy preflight. `BIKESHED_MEDIA_BUCKET` or `--media-bucket` overrides it for the script |
+| `databaseURL` | optional: the Realtime Database the operator scripts use, as an HTTPS origin. `BIKESHED_DATABASE_URL` overrides it. Unset, they use none |
 
 A bare domain or a full origin, either works: `example.com` and
 `https://example.com/` normalize to the same thing, and anything carrying a
@@ -99,6 +101,8 @@ secret; what is kept out of git is the binding.
 | `VITE_EXPORT_MARK_ENABLED` | no | Seeds each new account's export-marking default |
 | `VITE_EXPORT_MARK_LABEL` | no | Corner label, ≤40 characters |
 | `VITE_EXPORT_MARK_FOOTER` | no | Footer line, ≤300 characters |
+| `VITE_LANDING_MEDIA_BASE_URL` | no | The explainer's media revision, from `scripts/media.mjs publish`. Needs `mediaBucket`. Unset hides the video and keeps the written introduction |
+| `VITE_LEGAL_CONTACT` | no | Who to contact about `/terms` and `/privacy`, which describe this deployment's handling of data. Unset, the pages say no contact is published |
 
 ### Analytics is opt-in, and quiet by default
 
@@ -148,6 +152,9 @@ the `javascript:` scrub — stays unconditional.
 | `BIKESHED_PUBLIC_ORIGIN` | recommended | Origin for links in email and `sitemap.xml`, and the origin the document page fetches the app shell from |
 | `BIKESHED_MAIL_FROM` | recommended | The address email is sent FROM, e.g. `Bikeshed <noreply@example.com>` |
 | `BIKESHED_SIGN_IN_HINT` | no | One sentence returned by `GET /config` to a rejected visitor |
+| `BIKESHED_SUPERADMINS` | no | Addresses, separated by commas, that may trust a document for everyone, on documents they own ([ADR 0021](../architecture/adr/0021-a-documents-script-runs-only-with-consent.md)). Unset means nobody may. Never commit them |
+| `BIKESHED_ID_JAG_ISSUERS` | no | Identity issuers trusted to connect an organisation's apps. Unset means the grant is neither accepted nor advertised. Never commit one: its id names the organisation. [`overview.md`](overview.md) walks through it |
+| `BIKESHED_ID_JAG_DOMAINS` | with issuers | The address domains those issuers may vouch for. Unset turns the grant off, because an issuer trusted for every domain could connect any account here |
 
 Set `BIKESHED_PUBLIC_ORIGIN` explicitly. The fallback is the default site's
 `.web.app` host, which is the app only when the site id equals the project id;

@@ -33,6 +33,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **`CONTRIBUTING.md` states what CI enforces.** The attribution-trailer rule, the binary allowlist and the changelog entry were only in the agent instructions, so a contributor learned them from a red check. The quickstart blocks also gain the step that points the app at the emulators, and the app row of the verification table now runs the coverage it claims to measure.
 
+- **The documentation says what is true again.** The ADR count, the deletion claim in the README, the walkthrough and prerequisite counts, and the CLI publishing guide, which was still written as if the package were unpublished. `docs/operations/config.md` now lists the seven settings it left out, and `docs/operations/overview.md` names the three repository secrets it left out, without which the `report` job fails on every push.
+
 ### Fixed
 
 - **Patched dependencies in the functions.** `node-forge`, `@grpc/grpc-js`, `body-parser` and `qs` move to fixed versions in the lockfile, with no change to `package.json`.

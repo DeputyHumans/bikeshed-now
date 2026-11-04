@@ -6,10 +6,7 @@ email alerts, hourly audits, runtime maintenance and incident response.
 Deploying a Bikeshed, running it, and taking it down. Every command here is
 copy-pasteable; the ones that can run without a deployment are run by CI.
 
-**Placeholders only.** No file in this repository names a real Firebase project,
-console account, bucket or domain. `your-firebase-project-id` means yours, and
-`demo-bikeshed` is the emulator-only id Firebase refuses to point at a real
-backend.
+**Placeholders only.** No file in this repository names a real Firebase project, console account or bucket. `your-firebase-project-id` means yours, and `demo-bikeshed` is the emulator-only id Firebase refuses to point at a real backend. The one real address is the public `bikeshed.now`, which is the CLI's default origin and the project's homepage; your own deployment never depends on it.
 
 ---
 
@@ -41,7 +38,7 @@ npm run test:rules:emulated # rules tests need the emulators; this starts them
 
 ## Deploying
 
-### 1. Decide the five facts, and write them where git cannot see them
+### 1. Decide the six facts, and write them where git cannot see them
 
 | Fact | File | Tracked example |
 |---|---|---|
@@ -651,6 +648,8 @@ gh secret set PRODUCTION_DEPLOY_JSON < config/deploy.json
 
 When one of those files changes, set its secret again. The pipeline reads only
 the secret, never your disk.
+
+Three more are read by the `report` job in `deploy.yml` and by `operations.yml`: `PRODUCTION_OPS_SERVICE_ACCOUNT`, `PRODUCTION_PUBLIC_ORIGIN` and `PRODUCTION_INCIDENT_EMAIL`. [`monitoring.md`](monitoring.md) sets up the account they name. Without them a deploy still ships, but the `report` job fails on every push and the hourly audit fails too.
 
 #### Staging, later
 

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Dependency updates, grouped so review stays possible (SPEC §12).
 #
-# Grouped rather than one PR per package: four npm ecosystems at
-# `open-pull-requests-limit: 10` each would be forty pull requests a week
-# against a codebase with a dependency budget of seventeen. A grouped update is
+# Grouped rather than one PR per package: three npm directories at
+# `open-pull-requests-limit: 10` each would be thirty pull requests a week
+# against a codebase with a dependency budget of eighteen. A grouped update is
 # one review with one CI run, which is a review that actually happens.
 #
 # Three markdown packages are EXCLUDED from grouping and from automatic updates

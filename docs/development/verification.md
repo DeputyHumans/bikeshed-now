@@ -40,7 +40,7 @@ below possible. `npm run check:content` keeps them that way. The fourth,
 it, and its slide thumbnails are what show whether a preview reaches a slide's
 final state.
 
-Three prerequisites for the document page, which the Hosting emulator serves
+Four prerequisites for the document page, which the Hosting emulator serves
 through `docShell` exactly as production does:
 
 - **`functions/.env.local` containing `BIKESHED_PUBLIC_ORIGIN=http://127.0.0.1:5050`.**

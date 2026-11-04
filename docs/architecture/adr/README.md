@@ -9,6 +9,8 @@ and wins over anything here. When a decision is reversed, the ADR is marked
 superseded rather than edited — the point is to preserve the reasoning that was
 actually available at the time.
 
+Number 0022 is unused: it was set aside for a decision that has not been made.
+
 | | Decision | Status |
 |---|---|---|
 | [0001](0001-same-origin-iframe.md) | Render documents in a same-origin iframe | Accepted |
