@@ -2,8 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email **info@bikeshed.now**. Please do not open a public issue for
-anything that lets someone read a document they should not.
+Report it privately, either through [GitHub](https://github.com/DeputyHumans/bikeshed-now/security/advisories/new) or by email to **info@bikeshed.now**. Please do not open a public issue for anything that lets someone read a document they should not.
 
 Include what you can: the version or commit, what you did, what happened, and
 what you expected. A minimal reproduction is worth more than a long description.
@@ -15,6 +14,10 @@ days. We will tell you what we decided and when we expect a fix. If we disagree
 that it is a vulnerability, we will explain why rather than going quiet.
 
 We will credit you in the release notes unless you would rather we did not.
+
+## Testing
+
+Test against your own copy. The emulators need no account and no card, and `README.md` gets you running in five commands. Please do not test against `bikeshed.now`: it holds other people's documents. If a finding can only be shown on a real deployment, ask first at the address above.
 
 ## Scope
 
@@ -48,5 +51,4 @@ Stated plainly, because "not built" is a decision and not an oversight:
 
 ## Supported versions
 
-The `main` branch is the supported version. This project has not cut a
-maintenance release line; a fix lands on `main` and in the next tag.
+The `main` branch and its latest `vX.Y.Z` tag are supported, along with the latest `bikeshed-now` CLI on npm, which is versioned on its own. This project has not cut a maintenance release line; a fix lands on `main` and in the next tag.

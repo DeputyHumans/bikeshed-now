@@ -2,9 +2,10 @@
 # that does not fit either of them is still worth having.
 #
 # The one link here exists to keep security reports out of the public tracker.
-# It points at SECURITY.md, which both issue templates also name.
+# It opens a private advisory; SECURITY.md, which both issue templates also name,
+# gives the email route.
 blank_issues_enabled: true
 contact_links:
   - name: Report a security issue
-    url: https://github.com/DeputyHumans/bikeshed-now/blob/main/SECURITY.md
+    url: https://github.com/DeputyHumans/bikeshed-now/security/advisories/new
     about: Please do not open a public issue for anything that lets somebody read a document they should not.

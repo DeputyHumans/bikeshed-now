@@ -28,9 +28,7 @@ where you are representing the project.
 
 ## Reporting
 
-Report a problem privately to **info@bikeshed.now**. Reports are read by
-the maintainers and are not shared further without your consent, except where
-we are legally obliged to.
+Report a problem privately to **info@bikeshed.now**. Reports are read by the maintainers and are not shared further without your consent, except where we are legally obliged to. If your report is about a maintainer and you would rather it did not reach them, use [GitHub's abuse report form](https://github.com/contact/report-abuse), which does not pass through this project.
 
 Tell us what happened, where, and when. Links help. You do not need to have a
 solution in mind, and you do not need to be the target — reporting something you
@@ -42,5 +40,4 @@ We will acknowledge your report within a few days and tell you what we intend to
 do. Depending on severity, that ranges from a private word, through a warning,
 to a temporary or permanent ban from the project's spaces.
 
-Maintainers who do not uphold this document in good faith face the same
-consequences as anyone else, decided by the other maintainers.
+Maintainers who do not uphold this document in good faith face the same consequences as anyone else.

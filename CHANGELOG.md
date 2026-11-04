@@ -35,6 +35,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **The documentation says what is true again.** The ADR count, the deletion claim in the README, the walkthrough and prerequisite counts, and the CLI publishing guide, which was still written as if the package were unpublished. `docs/operations/config.md` now lists the seven settings it left out, and `docs/operations/overview.md` names the three repository secrets it left out, without which the `report` job fails on every push.
 
+- **A security report can go through GitHub privately**, as well as by email. `SECURITY.md` asks researchers to test their own copy rather than `bikeshed.now`, and names what is supported, including the CLI. The Code of Conduct gives a route for a report about a maintainer.
+
 ### Fixed
 
 - **Patched dependencies in the functions.** `node-forge`, `@grpc/grpc-js`, `body-parser` and `qs` move to fixed versions in the lockfile, with no change to `package.json`.
