@@ -654,6 +654,8 @@ tab finds the first one's job. `POST /session` creates it, and the
 `moveAccount` trigger finishes it. Its own account may `get` it, to know when
 to sign in again. No client lists or writes one.
 
+**`verifyTargets/{addressHash}`** is `{ sentAt }`: when codes went to one address in the last day, keyed by `sha256(address)` so the record names no address (§14). Server-only: a client that could clear it could guess at an address with as many accounts as it has.
+
 **`verifications/{uid}`** is `{ hash, email, expiresAt, attempts, sentAt, reservationId, attemptIds? }`: the one code an account has asked for to prove an address (§14). It is server-only, its own account included, because `hash` is `sha256(uid:code)` and a six-digit code's hash is the code to whoever reads it. It was kept on `users/{uid}` as `verification` until 0.29.1, where its account could read it; that field is no longer read, stays unwritable by clients, and is cleared when a verification completes or an account moves.
 
 **`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
@@ -1727,7 +1729,7 @@ at most five wrong code comparisons; the next attempt, including the right
 code, is refused with 429 and retires the challenge. Concurrent attempts share
 that budget. A resend reserves at most one new challenge per account in sixty
 seconds, so concurrent requests produce one accepted request and one code
-mail; the others receive 429. The reservation and attempt count are checked
+mail; the others receive 429. And an ADDRESS is sent at most five codes in a rolling day, whichever accounts ask (`verifyTargets/{sha256(address)}`, §4): the sixth is 429 and mails nothing. Each code brings five fresh guesses and the sixty seconds are per account, so until 0.32.0 a hundred throwaway accounts could make 720,000 guesses a day at an address with shares waiting for it, about even odds of taking them all in a day; now an address gets 25 guesses a day. The cost is that anybody can keep an address from being verified by email for a day by asking for five codes for it, which mails its holder five codes they did not ask for. The reservation and attempt count are checked
 and updated transactionally. Email delivery and Firebase Auth updates happen
 outside transaction retries. A successful completion retires only the
 challenge it checked, preserving a newer challenge reserved while Auth was

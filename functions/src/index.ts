@@ -2310,6 +2310,15 @@ export const unlockDoc = onRequest(PLAIN, async (req, res) => {
 
 const VERIFY_MAX_ATTEMPTS = 5;
 const VERIFY_RESEND_GAP_MS = 60 * 1000;
+/**
+ * Codes sent to one ADDRESS in a rolling day, whoever asks. The gap above is
+ * per account, and each new code comes with five fresh guesses, so without
+ * this a hundred throwaway accounts could make 720,000 guesses a day at an
+ * address with shares waiting for it: about even odds of taking them all in a
+ * day. Here an address gets 25 guesses a day, however many accounts ask.
+ */
+const VERIFY_CODES_PER_ADDRESS = 5;
+const VERIFY_ADDRESS_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function sixDigitCode(): string {
   // randomInt-free so the dependency surface stays at crypto primitives we
@@ -2375,11 +2384,18 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
 
     const code = sixDigitCode();
     const reservationId = randomBytes(16).toString("hex");
-    const reserved = await db().runTransaction(async (tx) => {
+    // Keyed by a hash so the record names no address; server-only, like the
+    // challenge itself (firestore.rules).
+    const targetRef = db().collection("verifyTargets").doc(createHash("sha256").update(email).digest("hex"));
+    const reserved = await db().runTransaction(async (tx): Promise<"ok" | "account" | "address"> => {
       const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
-      if (existing?.reservationId === reservationId) return true;
+      const target = (await tx.get(targetRef)).data() as { sentAt?: unknown } | undefined;
+      if (existing?.reservationId === reservationId) return "ok";
       const at = Date.now();
-      if (existing?.sentAt && at - existing.sentAt < VERIFY_RESEND_GAP_MS) return false;
+      if (existing?.sentAt && at - existing.sentAt < VERIFY_RESEND_GAP_MS) return "account";
+      const recent = (Array.isArray(target?.sentAt) ? target.sentAt : [])
+        .filter((t): t is number => typeof t === "number" && at - t < VERIFY_ADDRESS_WINDOW_MS);
+      if (recent.length >= VERIFY_CODES_PER_ADDRESS) return "address";
       // Reserve once before sending: retrying this transaction never mails an
       // obsolete candidate code or resets a newer challenge's attempt budget.
       tx.set(ref, {
@@ -2390,10 +2406,15 @@ export const verifyEmail = onRequest(MAILING, async (req, res) => {
         sentAt: at,
         reservationId,
       });
-      return true;
+      tx.set(targetRef, { sentAt: [...recent, at] });
+      return "ok";
     });
-    if (!reserved) {
+    if (reserved === "account") {
       res.status(429).json({ error: "a code was just sent; wait a minute" });
+      return;
+    }
+    if (reserved === "address") {
+      res.status(429).json({ error: "too many codes were sent to this address today; try again tomorrow" });
       return;
     }
 

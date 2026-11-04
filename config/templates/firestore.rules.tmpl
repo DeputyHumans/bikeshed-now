@@ -382,6 +382,13 @@ service cloud.firestore {
       allow read, write: if false; // POST /verify/start, POST /verify/complete
     }
 
+    // How many codes went to one address today, keyed by its hash, whoever
+    // asked (SPEC §14). Server-only: a client that could clear it could make
+    // as many guesses at an address as it has accounts.
+    match /verifyTargets/{addressHash} {
+      allow read, write: if false; // POST /verify/start
+    }
+
     // --- Codes to delete from the Trash forever (SPEC §4, ADR 0025) -------
     // Server-only for the same reason: the code confirms a deletion that
     // cannot be undone, and its hash is the code to whoever reads it.

@@ -340,6 +340,7 @@ describe("firestore rules", () => {
         emailCooldowns: { "private-doc": 1 },
       });
       await setDoc(doc(db, "verifications/u-owner"), { hash: "secret", email: "invited@example.com", attempts: 0 });
+      await setDoc(doc(db, "verifyTargets/abc"), { sentAt: [1] });
       await setDoc(doc(db, "purgeCodes/u-owner"), { hash: "secret", key: "all", attempts: 0 });
       // A document deleted forever: its tombstone (lib/purge.ts).
       await setDoc(doc(db, "docs/purged-doc"), { purgedAt: new Date() });
@@ -1215,6 +1216,12 @@ describe("firestore rules", () => {
     await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "verifications/u-owner")));
     await assertFails(getDoc(doc(env.authenticatedContext(OWNER.uid, { email: OWNER.email, email_verified: false }).firestore(), "verifications/u-owner")));
     await assertFails(setDoc(doc(verified(env, OWNER).firestore(), "verifications/u-owner"), { hash: "mine", email: OWNER.email }));
+  });
+
+  it("the codes an address was sent today are server-only", async () => {
+    await assertFails(getDoc(doc(verified(env, OWNER).firestore(), "verifyTargets/abc")));
+    await assertFails(setDoc(doc(verified(env, OWNER).firestore(), "verifyTargets/abc"), { sentAt: [] }));
+    await assertFails(deleteDoc(doc(verified(env, OWNER).firestore(), "verifyTargets/abc")));
   });
 
   it("a code to delete from the Trash is server-only, even to the account it belongs to", async () => {
