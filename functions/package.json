@@ -23,7 +23,7 @@
     "cookie": "^0.7.2",
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^6.1.0",
-    "markdown-it": "14.1.0",
+    "markdown-it": "14.3.3",
     "mime-types": "^2.1.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

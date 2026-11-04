@@ -34,7 +34,7 @@ import { MARKDOWN_THEME_CSS, MARKDOWN_THEME_ID } from "./theme";
  * Bumped whenever the rendered bytes can change. Recorded on every version so a
  * later "why did the hash move" has an answer.
  */
-export const RENDERER_VERSION = "markdown-it@14.1.0+bikeshed-1";
+export const RENDERER_VERSION = "markdown-it@14.3.3+bikeshed-1";
 
 /** Ids the renderer emits itself, reserved so a heading cannot collide with one. */
 const RESERVED_IDS = ["preamble"];

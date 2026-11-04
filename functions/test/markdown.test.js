@@ -268,6 +268,23 @@ test("the renderer version is pinned and recorded", () => {
   assert.equal(renderMarkdown("# x").rendererVersion, RENDERER_VERSION);
 });
 
+// Any signed-up account can upload Markdown, up to MAX_BUNDLE_BYTES, and it is
+// rendered inside the request. markdown-it 14.1.0 took 13.8 s on the first of
+// these and 12.2 s on the second; the time grew with the square of the input, so
+// a file well under the limit held a function until it timed out. The bound
+// leaves room for a loaded machine, and is still far below the broken renderer.
+for (const [name, source] of [
+  ["unclosed declarations", "a <!X ".repeat(80_000)],
+  ["unclosed processing instructions", "a <? ".repeat(160_000)],
+]) {
+  test(`${name} render in linear time`, () => {
+    const started = process.hrtime.bigint();
+    renderMarkdown(source);
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    assert.ok(elapsedMs < 2000, `took ${Math.round(elapsedMs)} ms`);
+  });
+}
+
 // --- Section wrapping and slugs --------------------------------------------
 
 test("every heading opens a section with a stable id", () => {

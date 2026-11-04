@@ -680,7 +680,7 @@ document is sandboxed, so it is the place to say what is missing.
 
 ### Markdown
 
-The renderer is markdown-it 14.1.0 (CommonMark) with tables, strikethrough and
+The renderer is markdown-it 14.3.3 (CommonMark) with tables, strikethrough and
 task lists. Nothing else is added.
 
 **Renders:** headings (each one opens a `<section>` with an id), tables,

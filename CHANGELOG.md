@@ -16,6 +16,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Security
+
+- **A Markdown upload can no longer hold a function.** Any signed-up account can upload Markdown, and it is rendered inside the request. markdown-it 14.1.0 took time that grew with the square of the input on unclosed inline HTML: 469 KB of unclosed declarations took 13.8 s, and the upload limit is 25 MB. It takes 28 ms on 14.3.3, and a test now holds that.
+- **Advisories left open, and why.** After this release `npm audit --omit=dev` reports no high advisory in the functions. It still lists `uuid` (needs firebase-admin 14) and `deepmerge`, `glob`, `minimatch` and `prismjs` (through `@react-email/*` and `resend`, which render only our own templates and load only to send mail). In the app it lists `undici` and `@grpc/grpc-js`, which are not in the browser bundle, and `react-router`, whose backslash redirect `safeNext` already refuses and whose hydration advisory needs server rendering, which this app does not do. The major upgrades that clear them are their own project.
+
+### Deploying
+
+- **markdown-it 14.3.3 is a renderer migration, and a small one.** It is not a breaking change, and existing versions are untouched. A Markdown document mints a new version on its next save only if its rendered bytes change, which takes one of these: an HTML comment spanning a blank line inside a list; a backslash and a space at the end of a line; `*` or `**` around an emoji or other astral character with a letter directly after the closing marker, which stays literal; a non-breaking or other Unicode space at the start or end of a heading or paragraph, which is now kept; a reference label over 999 characters, which stops being a link. Everything else renders byte for byte as before, including all 78 Markdown files in this repository and all 652 CommonMark specification examples.
+
 ### Changed
 
 - **The ACF files are Apache-2.0 now.** `docs/acf/**` and `.claude/scripts/status-line.py` are copies of [ACF Tools](https://github.com/fib7/acf-tools) files, which Fibonacci Seven relicensed under Apache-2.0 on 2026-10-28. `NOTICE`, `README.md` and `THIRD_PARTY_LICENSES.md` stop calling them proprietary, `NOTICE` maps each copy to its upstream file, and `docs/acf/organization.md` says in its first line that it differs from upstream. The copies take the plugins' current versions, and the project settings no longer name the status line, which the plugin now provides.
