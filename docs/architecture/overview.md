@@ -4,7 +4,7 @@
 is shaped this way, and — more usefully — what it deliberately is not.
 
 The individual decisions, with their costs and their reversal conditions, are in
-[`adr/`](adr/) — eighteen records of about thirty lines each.
+[`adr/`](adr/) — twenty-six records of about thirty lines each.
 
 ## The one-paragraph version
 

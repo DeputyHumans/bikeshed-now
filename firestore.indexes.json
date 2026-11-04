@@ -33,6 +33,14 @@
       ]
     },
     {
+      "collectionGroup": "viewers",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "uid", "order": "ASCENDING" },
+        { "fieldPath": "lastViewedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "annotations",
       "queryScope": "COLLECTION",
       "fields": [

@@ -200,7 +200,7 @@ anything outside the permissive allowlist.
 | `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/architecture/adr/` | twenty-five decisions, each with its reversal condition |
+| `docs/architecture/adr/` | twenty-six decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 
 ## Looks like a bug, is not

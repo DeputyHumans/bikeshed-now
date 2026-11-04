@@ -581,7 +581,7 @@ docs/{docId}/versions/{versionId}              DocVersion       (immutable but f
 .../annotations/{annId}                        Annotation
 .../annotations/{annId}/comments/{commentId}   Comment
 docs/{docId}/trust/{uid}                       PersonalTrust
-docs/{docId}/viewers/{uid}                     ViewerStat
+docs/{docId}/viewers/{uid}                     ViewerStat       (editors get it; its own reader lists theirs, §5)
 docs/{docId}/views/{sessionId}                 ViewSession
 docs/{docId}/acl/{entryId}                     AclChange        (append-only)
 docs/{docId}/events/{eventId}                  ChangeEvent      (append-only, server-only, ADR 0016)
@@ -688,7 +688,9 @@ the Admin SDK, always as a nested map under `set(..., { merge: true })` so the
 view writer and the edit writer never clobber each other.
 Reading identities never appear in this member-readable map. They live only in
 the editor-gated `views` and `viewers` collections; `lastViewedAt` is an
-anonymous aggregate timestamp. Read writers delete the legacy
+anonymous aggregate timestamp. The one exception is a person's own rows: they
+may list their own `viewers` rows across documents, and nobody else's (§5
+"Your own reading"). Read writers delete the legacy
 `stats.lastViewedByEmail` field. An existing installation must also run
 `scripts/redact-reader-stats.mjs` to erase it from documents nobody reads again.
 `recordView` deliberately does NOT touch `updatedAt` — that field means "the record changed", and a read must not masquerade as a change.
@@ -789,6 +791,28 @@ constraints** — rules are not filters. That forbids a transformed expression
 like `email.lower()` in the rule, which is why members are stored lowercased as
 an invariant. **Any change that makes `members` something other than a flat
 array of lowercased emails breaks this rule and therefore the entire workspace.**
+
+### Your own reading
+
+Recent (§13) asks for the documents its reader read lately, from their own rows
+of the per-person rollup (§4):
+
+```js
+query(collectionGroup(db, "viewers"),
+      where("uid", "==", uid),
+      orderBy("lastViewedAt", "desc"),
+      limit(100))
+```
+
+The rule allows `list` on `/{path=**}/viewers/{viewerId}` when the stored `uid`
+is the caller's and the identity gate passes, and nothing more: the
+per-document `get` stays the editors'. Its collection-group index is declared in
+`firestore.indexes.json`. A recursive match cannot name its parent, so this
+holds only while `viewers` names one collection, docs/{docId}/viewers, which
+`tools/viewers-collection.test.mjs` pins. A row outlives access to its
+document, and says only what its reader saw; the app shows only documents the
+workspace query above also returns
+([ADR 0027](adr/0027-a-reader-lists-their-own-reading.md)).
 
 ---
 

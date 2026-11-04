@@ -14,10 +14,13 @@ import {
 } from "@firebase/rules-unit-testing";
 import {
   collection,
+  collectionGroup,
   deleteField,
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -1087,7 +1090,7 @@ describe("firestore rules", () => {
 
   // --- Statistics ----------------------------------------------------------
 
-  it("per-person statistics are readable by editors and nobody else", async () => {
+  it("a per-person statistics row is gettable by editors only, its own reader included", async () => {
     const editor = verified(env, EDITOR).firestore();
     await assertSucceeds(getDoc(doc(editor, "docs/private-doc/viewers/u-viewer")));
     await assertSucceeds(getDoc(doc(editor, "docs/private-doc/views/s1")));
@@ -1105,6 +1108,71 @@ describe("firestore rules", () => {
     const suggester = verified(env, SUGGESTER).firestore();
     await assertSucceeds(getDoc(doc(suggester, "docs/ladder-doc")));
     await assertFails(getDoc(doc(suggester, "docs/ladder-doc/viewers/u-suggester")));
+  });
+
+  // --- Your own reading (SPEC §13 "Recent", ADR 0027) -----------------------
+
+  /** Rows of one reader across documents, one of which they can no longer open. */
+  async function seedReading() {
+    await seed(env, async (db) => {
+      await setDoc(doc(db, "docs/gone-doc"), {
+        docId: "gone-doc",
+        ownerUid: OWNER.uid,
+        ownerEmail: OWNER.email,
+        viewers: [],
+        members: [OWNER.email],
+        editorMembers: [OWNER.email],
+        visibility: "private",
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/gone-doc/viewers/u-viewer"), {
+        uid: VIEWER.uid, email: VIEWER.email, views: 2, lastViewedAt: new Date(Date.now() - 60_000),
+      });
+      await setDoc(doc(db, "docs/gone-doc/viewers/u-owner"), {
+        uid: OWNER.uid, email: OWNER.email, views: 5, lastViewedAt: new Date(),
+      });
+      await setDoc(doc(db, "docs/private-doc/viewers/u-viewer"), {
+        uid: VIEWER.uid, views: 1, lastViewedAt: new Date(),
+      });
+    });
+  }
+
+  /** The query Recent makes: one reader's rows, newest first, bounded. */
+  const myReading = (db, uid) =>
+    query(collectionGroup(db, "viewers"), where("uid", "==", uid), orderBy("lastViewedAt", "desc"), limit(100));
+
+  it("a reader lists their own rows across documents, newest first, and nobody else's", async () => {
+    await seedReading();
+    const db = verified(env, VIEWER).firestore();
+    const mine = await assertSucceeds(getDocs(myReading(db, VIEWER.uid)));
+    assert.deepEqual(
+      mine.docs.map((d) => d.ref.path),
+      ["docs/private-doc/viewers/u-viewer", "docs/gone-doc/viewers/u-viewer"],
+      "both of the reader's rows, newest first, the one for a document they can no longer open included",
+    );
+    await assertFails(getDocs(myReading(db, OWNER.uid)));
+    await assertFails(getDocs(query(collectionGroup(db, "viewers"), orderBy("lastViewedAt", "desc"), limit(100))));
+    await assertFails(getDocs(query(collectionGroup(db, "viewers"), where("views", ">", 0))));
+  });
+
+  it("listing your own reading needs the same verified identity as everything else", async () => {
+    await seedReading();
+    await assertFails(getDocs(myReading(unverified(env, VIEWER).firestore(), VIEWER.uid)));
+    await assertFails(getDocs(myReading(noEmail(env).firestore(), "u-noemail")));
+    await assertFails(getDocs(myReading(env.unauthenticatedContext().firestore(), VIEWER.uid)));
+  });
+
+  it("on one document, a reader may list only their own row, and still not get it", async () => {
+    // The recursive match also answers a list of ONE document's readers. It
+    // returns the caller's own row and nothing else, on a document they cannot
+    // open too; the per-document get stays the editors' (SPEC §4).
+    await seedReading();
+    const db = verified(env, VIEWER).firestore();
+    const one = await assertSucceeds(getDocs(query(collection(db, "docs/gone-doc/viewers"), where("uid", "==", VIEWER.uid))));
+    assert.deepEqual(one.docs.map((d) => d.id), ["u-viewer"]);
+    await assertFails(getDocs(collection(db, "docs/gone-doc/viewers")));
+    await assertFails(getDoc(doc(db, "docs/gone-doc/viewers/u-viewer")));
+    await assertFails(setDoc(doc(db, "docs/gone-doc/viewers/u-viewer"), { uid: VIEWER.uid, views: 999 }));
   });
 
   it("nobody writes statistics from a client", async () => {
@@ -1339,6 +1407,14 @@ describe("firestore rules with a domain allowlist", () => {
 
   it("an allowed domain still reads normally", async () => {
     await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "docs/d1")));
+  });
+
+  it("an address outside the allowed domains cannot list its own reading", async () => {
+    await seed(env, async (db) => {
+      await setDoc(doc(db, "docs/d1/viewers/u-outsider"), { uid: OUTSIDER.uid, views: 1, lastViewedAt: new Date() });
+    });
+    const db = verified(env, OUTSIDER).firestore();
+    await assertFails(getDocs(query(collectionGroup(db, "viewers"), where("uid", "==", OUTSIDER.uid), orderBy("lastViewedAt", "desc"))));
   });
 
   it("a subdomain of an allowed domain is NOT allowed", async () => {

@@ -178,7 +178,7 @@ export interface ViewStats {
   forks?: number;
 }
 
-/** Firestore: docs/{docId}/viewers/{uid} — per-account rollup. Editor-gated. */
+/** Firestore: docs/{docId}/viewers/{uid} — per-account rollup. Editors get it; its own reader lists theirs (SPEC §5). */
 export interface ViewerStat {
   uid: string;
   email: string;

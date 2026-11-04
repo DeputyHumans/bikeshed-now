@@ -288,6 +288,23 @@ service cloud.firestore {
       }
     }
 
+    // --- Your own reading (SPEC §4, §13 "Recent", ADR 0027) ----------------
+    // Recent lists the documents you read lately, from your own rows of the
+    // per-person rollup above. A collection-group query consults only a
+    // recursive match, and a recursive match cannot name its parent, so this
+    // block relies on `viewers` naming exactly ONE collection,
+    // docs/{docId}/viewers. tools/viewers-collection.test.mjs pins that: a
+    // second collection called `viewers` would be listable by its `uid` here.
+    //
+    // List only, and only rows whose stored `uid` is the caller's, so the
+    // query must filter on that field (rules are not filters). `get` stays
+    // the per-document editor read above. A row outlives access to its
+    // document, and says only what its reader saw: the app joins it against
+    // the workspace list, which is what decides what is shown.
+    match /{path=**}/viewers/{viewerId} {
+      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+    }
+
     // --- Public projection (SPEC §17) -------------------------------------
     // Firestore rules cannot project fields, so "anonymous may read a public
     // doc" cannot be an exception carved into the docs/{docId} rule without

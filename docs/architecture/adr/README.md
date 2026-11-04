@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Twenty-five decisions that a newcomer would otherwise re-argue in a pull request, each
+Twenty-six decisions that a newcomer would otherwise re-argue in a pull request, each
 about thirty lines: what was decided, what it costs, and what would make it
 wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
@@ -36,6 +36,7 @@ actually available at the time.
 | [0024](0024-deletion-goes-through-a-trash.md) | Deletion goes through a Trash | Accepted, amended by 0025 |
 | [0025](0025-the-trash-empties-on-one-daily-job.md) | The Trash empties on one daily job, or sooner with an emailed code | Accepted |
 | [0026](0026-an-organisation-may-connect-its-people.md) | An organisation's issuer may connect its people's apps, if the deployment trusts it | Accepted |
+| [0027](0027-a-reader-lists-their-own-reading.md) | A reader lists their own reading, across documents | Accepted |
 
 ## Format
 
