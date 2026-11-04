@@ -25,6 +25,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 ### Fixed
 
 - **Patched dependencies in the functions.** `node-forge`, `@grpc/grpc-js`, `body-parser` and `qs` move to fixed versions in the lockfile, with no change to `package.json`.
+- **`adm-zip` 0.6.1 and `cookie` 0.7.2.** The upload path only reads entries into memory and already refused a spoofed entry size, so none of the `adm-zip` advisories was reachable through it, but it no longer depends on that reasoning. The cookie fix rejects out-of-range names and attributes.
 - **Deployment logs no longer name each function's direct address.** `firebase deploy` prints the Cloud Run address of every HTTPS function, and run logs are public in a public repository. `deploy.yml` and `operations.yml` now mask the host suffix those addresses share. A run that cannot read the suffix says so in a warning.
 
 ## 0.33.0 — 2026-11-03
