@@ -333,6 +333,11 @@ export interface TokenSummary {
   registration?: "cimd" | "dcr";
   /** When the connection lapses if nothing uses it. */
   expiresAt?: Timestamp;
+  /**
+   * The issuer's host, for an app the person's organisation connected for
+   * them (ADR 0026). Revoking one stops the organisation reconnecting it.
+   */
+  managedBy?: string;
 }
 
 /**

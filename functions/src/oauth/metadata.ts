@@ -2,7 +2,24 @@
 // Discovery: the protected-resource and authorization-server metadata (SPEC §23).
 
 import type { Request } from "firebase-functions/v2/https";
-import { isEmulated, projectId, publicOrigin } from "../config";
+import { idJagIssuers, isEmulated, projectId, publicOrigin } from "../config";
+
+/** The RFC 7523 grant an identity assertion is presented with (ADR 0026). */
+export const JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+/** How a client learns that this server accepts identity assertions. */
+export const ID_JAG_PROFILE = "urn:ietf:params:oauth:grant-profile:id-jag";
+/** The `typ` an identity assertion's header must carry. */
+export const ID_JAG_TYP = "oauth-id-jag+jwt";
+
+/**
+ * The grants this deployment accepts. The assertion grant only when an issuer
+ * is configured: a deployment that trusts nobody should not invite assertions.
+ */
+export function grantTypesSupported(): string[] {
+  const grants = ["authorization_code", "refresh_token"];
+  if (idJagIssuers().length > 0) grants.push(JWT_BEARER);
+  return grants;
+}
 
 export const MCP_PATH = "/mcp";
 export const PRM_PATH = "/.well-known/oauth-protected-resource";
@@ -135,9 +152,14 @@ export function protectedResourceMetadata(req: Request): Record<string, unknown>
  * Claude use its published identity rather than registering a new client on
  * every connection; `authorization_response_iss_parameter_supported` is what
  * makes ChatGPT use its stable one.
+ *
+ * `authorization_grant_profiles_supported` appears only with an issuer
+ * configured. It is how Claude decides to present an identity assertion
+ * rather than send the person to /connect (ADR 0026).
  */
 export function authorizationServerMetadata(req: Request): Record<string, unknown> {
   const iss = issuer(req);
+  const grants = grantTypesSupported();
   return {
     issuer: iss,
     authorization_endpoint: `${iss}${AUTHORIZE_PATH}`,
@@ -145,7 +167,8 @@ export function authorizationServerMetadata(req: Request): Record<string, unknow
     registration_endpoint: `${iss}${REGISTER_PATH}`,
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
+    grant_types_supported: grants,
+    ...(grants.includes(JWT_BEARER) ? { authorization_grant_profiles_supported: [ID_JAG_PROFILE] } : {}),
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
     client_id_metadata_document_supported: true,

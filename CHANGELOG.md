@@ -14,6 +14,15 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **An organisation can connect Claude for its people.** Claude's admin settings offer "managed authorization": Claude signs an identity assertion for each member and presents it to the token endpoint, so nobody sees a consent page. A deployment that lists the organisation's issuer in `BIKESHED_ID_JAG_ISSUERS` now accepts it, through the jwt-bearer grant with an ID-JAG (the MCP extension `io.modelcontextprotocol/enterprise-managed-authorization`). The grant and `authorization_grant_profiles_supported` appear in the metadata only then. Unset, nothing changes (ADR 0026, SPEC §23 "Connected by an organisation").
+- The assertion must come from a configured issuer, be signed with one of its ES256 keys, be addressed to this server, expire within ten minutes and be used once; a retry within a minute gets back the same token. It connects an account that already exists under the same address and passes the usual gate; it never creates one. Each assertion gets its own access token of an hour, stored only as a hash, and no refresh token.
+- The account screen says when your organisation connected an app. Revoking that connection is permanent for that app, and you can still connect it yourself. If the organisation's issuer later names a different person for the same address, it is refused.
+- `check:secrets` refuses the shape of an issuer id, because an issuer URL names the organisation.
+
 ## 0.30.1 — 2026-11-02
 
 ### Fixed

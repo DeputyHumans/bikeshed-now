@@ -193,6 +193,24 @@ describe("the access token list", () => {
     expect(screen.getByText("Totally Claude").tagName).toBe("Q");
   });
 
+  it("says when an organisation connected the app, and what revoking it means (ADR 0026)", () => {
+    store.tokens = [{ ...APP, managedBy: "identity.example" }];
+    renderAccount();
+    const app = row("Claude");
+    expect(app.textContent).toContain("connected by your organisation 2d ago");
+    expect(within(app).getByRole("button", { name: "Revoke" }).title).toMatch(/organisation won't be able to connect it/);
+  });
+
+  it("says a revoked organisation connection stays revoked, and leaves an ordinary one plain", () => {
+    store.tokens = [
+      { ...APP, managedBy: "identity.example", revokedAt: when },
+      { ...APP, tokenId: "tok-own", name: "My Claude", revokedAt: when },
+    ];
+    renderAccount();
+    expect(row("Claude").textContent).toContain("revoked · your organisation can't reconnect it");
+    expect(row("My Claude").textContent).not.toContain("organisation");
+  });
+
   it("revokes a connected app by its token id", async () => {
     renderAccount();
     fireEvent.click(within(row("Claude")).getByRole("button", { name: "Revoke" }));

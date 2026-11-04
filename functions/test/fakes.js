@@ -351,10 +351,13 @@ async function withFakeAdmin({ db, sessions = {}, idTokens = {}, users = {} }, f
       },
       // The account-changing calls an address move makes (SPEC §14). They
       // edit the `users` map in place, so a test reads the result from it.
+      // An Error in the map that carries an `email` is thrown for that
+      // address, so a failing lookup can be staged too.
       getUserByEmail: async (email) => {
         const found = Object.values(users).find(
-          (u) => u && !(u instanceof Error) && String(u.email ?? "").toLowerCase() === String(email).toLowerCase(),
+          (u) => u && String(u.email ?? "").toLowerCase() === String(email).toLowerCase(),
         );
+        if (found instanceof Error) throw found;
         if (!found) throw Object.assign(new Error("no user"), { code: "auth/user-not-found" });
         return found;
       },

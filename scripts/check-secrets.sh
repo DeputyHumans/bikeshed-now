@@ -95,6 +95,11 @@ check_shape "a Firebase app id" '[0-9]{9,}:web:[0-9a-f]{8,}' '[0]{9,}:web:[0]{8,
 
 check_shape "an Analytics measurement id" 'G-[A-Z0-9]{8,}' ''
 
+# A trusted identity issuer (ADR 0026). Its URL ends in an id that names one
+# organisation, so it lives in BIKESHED_ID_JAG_ISSUERS and never in the tree.
+# Documentation writes the id as a placeholder, which this does not match.
+check_shape "an organisation's identity issuer id" 'issuers/iss_[a-z0-9]{12,}' ''
+
 # .firebaserc is the file Firebase writes unprompted on `firebase use`, and it
 # is the binding in its purest form. It is gitignored; this catches a --force.
 check_filename "a tracked .firebaserc binds this source to one project" \

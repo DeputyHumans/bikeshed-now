@@ -1,6 +1,6 @@
 # 0014 — Apps connect by signing in: OAuth 2.1 beside personal tokens
 
-**Status** Accepted · **Spec** §19, §23 · **Reverses** the "No OAuth 2.1 for the agent surface" line in `overview.md`
+**Status** Accepted, amended by [0026](0026-an-organisation-may-connect-its-people.md) · **Spec** §19, §23 · **Reverses** the "No OAuth 2.1 for the agent surface" line in `overview.md`
 
 ## Context
 

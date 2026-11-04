@@ -121,6 +121,30 @@ export function superadmins(): ReadonlySet<string> {
   );
 }
 
+/**
+ * The identity issuers whose assertions may connect an app for one of this
+ * deployment's people (ADR 0026): `BIKESHED_ID_JAG_ISSUERS`, exact https issuer
+ * URLs separated by commas or spaces. Kept byte for byte, because the `iss` of
+ * an assertion is compared that way. Deployment configuration, never
+ * committed: an issuer URL names the organisation it belongs to. Unset means
+ * none, and the grant is neither accepted nor advertised.
+ */
+export function idJagIssuers(): readonly string[] {
+  const raw = process.env.BIKESHED_ID_JAG_ISSUERS ?? "";
+  const out = new Set<string>();
+  for (const entry of raw.split(/[\s,]+/)) {
+    if (!entry) continue;
+    let url: URL;
+    try {
+      url = new URL(entry);
+    } catch {
+      continue;
+    }
+    if (url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash) out.add(entry);
+  }
+  return [...out];
+}
+
 /** True inside the Firebase emulator suite. */
 export function isEmulated(): boolean {
   return process.env.FUNCTIONS_EMULATOR === "true";

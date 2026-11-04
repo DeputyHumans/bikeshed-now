@@ -78,6 +78,8 @@ export interface TokenSummary {
   clientVerified?: boolean;
   registration?: "cimd" | "dcr";
   expiresAt?: admin.firestore.Timestamp | null;
+  /** The issuer's host, for an app an organisation connected (ADR 0026). */
+  managedBy?: string;
 }
 
 function sha256(value: string): string {
@@ -205,6 +207,7 @@ export async function listTokens(db: Db, uid: string): Promise<TokenSummary[]> {
       summary.clientVerified = t.clientVerified === true;
       summary.registration = t.registration === "cimd" ? "cimd" : "dcr";
       summary.expiresAt = (t.expiresAt as admin.firestore.Timestamp) ?? null;
+      if (typeof t.managedBy === "string") summary.managedBy = t.managedBy;
     }
     return summary;
   });

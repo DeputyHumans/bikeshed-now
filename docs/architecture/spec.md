@@ -533,7 +533,9 @@ own pending proposal, and neither destroys anything.
   connected app's access token — §19, §23.
 - **`GET /.well-known/oauth-protected-resource[/mcp]`**,
   **`GET /.well-known/oauth-authorization-server`**, **`POST /oauth/register`**,
-  **`POST /oauth/token`** — the `oauth` function — §23.
+  **`POST /oauth/token`** — the `oauth` function — §23. The token endpoint
+  takes a code, a refresh token, or, where the deployment trusts an issuer, an
+  organisation's identity assertion (§23, ADR 0026).
 - **`POST /oauth/consent`** — the `oauthConsent` function, signed-in account's
   ID token only — §23.
 - **`GET /sitemap.xml`** — public documents only.
@@ -1286,7 +1288,7 @@ functions/src/
   email/{send,notify}.ts
   email/templates/*.tsx
   mcp/{server,tools,management}.ts
-  oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token}.ts
+  oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token,assertion,managed}.ts
 ```
 
 - `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session
@@ -3503,6 +3505,7 @@ is hand-written in `functions/src/oauth/` with no dependency and no secret (ADR
   - `client_id_metadata_document_supported` and
     `authorization_response_iss_parameter_supported`
   - no `scopes_supported`
+  - only where `BIKESHED_ID_JAG_ISSUERS` names an issuer: the jwt-bearer grant in `grant_types_supported`, and `authorization_grant_profiles_supported: ["urn:ietf:params:oauth:grant-profile:id-jag"]` (see "Connected by an organisation")
 
 A refused `/mcp` request answers `401` with
 `WWW-Authenticate: Bearer realm="bikeshed", resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp"`.
@@ -3627,6 +3630,35 @@ ignored.
   revokes nothing, because a client told `invalid_grant` discards the connection.
 - **The command line** goes through the same consent and receives an ordinary personal token (channel `cli`, named `CLI on <device>` from the device it reports), with no refresh token. It calls `/publish` and `/content` as well as `/mcp`, and parallel processes would trip reuse detection. Wherever it calls, its actions read as `cli` and `via: "CLI on <device>"` (§17, ADR 0023); an app that signed in reads as `app`, under its registered name.
 
+### Connected by an organisation
+
+An organisation's issuer may connect an app for one of its people, with no consent page, if the deployment trusts that issuer (ADR 0026). This is Claude's "managed authorization": the MCP extension `io.modelcontextprotocol/enterprise-managed-authorization`, which profiles the Identity Assertion JWT Authorization Grant (ID-JAG). `BIKESHED_ID_JAG_ISSUERS` lists the trusted issuers, exact https URLs, in the functions' environment and never in the tree. Unset, none of this exists, and the metadata does not mention it.
+
+The app sends `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, `assertion=<ID-JAG>` and its `client_id` to `POST /oauth/token`.
+
+| Check | Refusal |
+|---|---|
+| `iss` is a configured issuer, byte for byte, checked before anything is fetched | `invalid_grant` |
+| header `typ` `oauth-id-jag+jwt`; `alg` ES256 only; no `crit`; a `kid` in the issuer's keys (OpenID discovery, then `jwks_uri`, cached an hour; requests waiting on one issuer share one fetch, an unknown `kid` refetches at most once a minute, and a failed fetch makes the next ten seconds fail at once); the signature verifies | `invalid_grant` |
+| `aud` is this server's issuer; `exp` not past and at most ten minutes ahead; `iat` and any `nbf` not in the future; 60 s of skew | `invalid_grant` |
+| `sub`, `jti`, `email` and `client_id` present; `client_id` equal to the request's | `invalid_grant` |
+| no `aud_tenant` (a deployment is one workspace) and no `cnf` (no bound key can be checked) | `invalid_grant` |
+| `resource`, if named, is one of this deployment's `/mcp` addresses; a `resource` parameter must be too, and agree | `invalid_grant`, `invalid_target` |
+| the client publishes a metadata document | `invalid_client` |
+| the address is already an account here, and passes the same gate as a refresh (§23 Tokens) | `access_denied` |
+| the person has not revoked this connection, and the issuer's `sub` is the one first seen | `access_denied` |
+| this `jti` has not been used, except as a retry (below) | `invalid_grant` |
+
+An unreachable issuer, an unreadable client metadata document or a failed account lookup is `500 server_error`, never `invalid_grant` or `invalid_client`.
+
+The gate is applied as at a sign-in: each assertion is a fresh sign-in by the issuer. A "sign out everywhere" ends the tokens issued before it, within their hour, and does not bar what the organisation signs afterwards.
+
+The connection is one row in `tokens/` per (issuer, person, address, client), with an id derived from the four, `kind: "oauth"`, channel `mcp`, and `managed: { issuer, subject }`. A different app, or the same person after an address move (§14), gets a row of its own. Its mirror carries `managedBy`, the issuer's host, so the account screen says the organisation connected it. There is **no refresh token**, as the draft asks: the app presents a fresh assertion instead.
+- **One access token per assertion.** Each exchange mints a token of one hour, `HMAC(nonce, assertion)`. The nonce is the row's and only the server reads it; the assertion is never stored. So reading the row yields no token, and two exchanges at once each get their own. The row keeps `liveAccess`, the hashes of the live tokens with their expiries, and drops each when it expires; there is no collection and no job for them. At most 100 are kept, and room is made only by forgetting one whose assertion has expired; otherwise the exchange is refused.
+- **A retry gets what it missed.** The same assertion presented again within 60 s, as a client that timed out does, is answered with the same token, re-derived. After that it is spent.
+- **Revoking is sticky.** Revoke on the account screen ends the row, and every later assertion for that row is `access_denied`. The person can still connect the app themselves through consent, which makes an ordinary grant.
+- **The subject is pinned.** A later assertion for the same address with a different `sub` means the issuer gave the address to someone else, and it is refused.
+
 ### The command line
 
 `bikeshed login` never asks which deployment. It takes `--origin`, then
@@ -3666,4 +3698,5 @@ byte for byte by the predeploy check.
 
 Scopes · consent remembered across requests · token introspection or
 revocation endpoints (Revoke is the account screen) · `private_key_jwt` client
-authentication · OpenID Connect · a stored client registry.
+authentication · OpenID Connect · a stored client registry · an assertion that
+creates an account or signs in to the web app · tenants · DPoP-bound assertions.

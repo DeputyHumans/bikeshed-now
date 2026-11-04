@@ -58,7 +58,11 @@ function TokenList({
                         <span className="mono">{token.clientHost}</span> ·{" "}
                       </>
                     ) : null}
-                    connected {formatRelative(token.createdAt)} ·{" "}
+                    {/* ADR 0026: an organisation connected it, so say so, and say
+                        what Revoke means here, because it is not undone by
+                        the organisation trying again. */}
+                    {token.managedBy ? "connected by your organisation" : "connected"}{" "}
+                    {formatRelative(token.createdAt)} ·{" "}
                   </>
                 ) : (
                   <>
@@ -66,7 +70,11 @@ function TokenList({
                   </>
                 )}
                 {token.revokedAt ? (
-                  "revoked"
+                  token.managedBy ? (
+                    "revoked · your organisation can't reconnect it"
+                  ) : (
+                    "revoked"
+                  )
                 ) : token.lastUsedAt ? (
                   `last used ${formatRelative(token.lastUsedAt)}`
                 ) : (
@@ -80,6 +88,11 @@ function TokenList({
               <button
                 type="button"
                 className="btn btn-sm btn-danger"
+                title={
+                  token.managedBy
+                    ? "Your organisation won't be able to connect it for you again. You can still connect it yourself."
+                    : undefined
+                }
                 onClick={() => onRevoke(token.tokenId)}
               >
                 Revoke

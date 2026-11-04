@@ -181,6 +181,12 @@ interface GrantRecord {
   resource?: string;
   accessHash?: string;
   accessExpiresAt?: Timestamp;
+  /**
+   * Managed connections only (managed.ts): one entry per access token an
+   * identity assertion minted, by hash, each valid until its own expiry.
+   * Ordinary grants never have it.
+   */
+  liveAccess?: Array<{ h?: unknown; exp?: unknown }>;
   refreshHash?: string;
   refreshExpiresAt?: Timestamp;
   prevRefreshHash?: string | null;
@@ -214,15 +220,19 @@ export async function verifyAccessToken(
   if (!snap.exists) return null;
   const g = snap.data() as GrantRecord;
   if (g.kind !== "oauth" || g.revokedAt != null) return null;
-  if (!sameHash(g.accessHash, secret)) return null;
-  if (millis(g.accessExpiresAt) <= Date.now()) return null;
+  const now = Date.now();
+  const current = sameHash(g.accessHash, secret) && millis(g.accessExpiresAt) > now;
+  const managed =
+    Array.isArray(g.liveAccess) &&
+    g.liveAccess.some((e) => typeof e?.exp === "number" && e.exp > now && sameHash(e.h, secret));
+  if (!current && !managed) return null;
   if (typeof g.resource !== "string" || !allowedResources.includes(g.resource)) return null;
 
-  const now = FieldValue.serverTimestamp();
+  const stamp = FieldValue.serverTimestamp();
   void db
     .batch()
-    .set(snap.ref, { lastUsedAt: now }, { merge: true })
-    .set(db.collection("users").doc(g.uid).collection("tokens").doc(tokenId), { lastUsedAt: now }, { merge: true })
+    .set(snap.ref, { lastUsedAt: stamp }, { merge: true })
+    .set(db.collection("users").doc(g.uid).collection("tokens").doc(tokenId), { lastUsedAt: stamp }, { merge: true })
     .commit()
     .catch(() => {
       /* touch is best-effort */

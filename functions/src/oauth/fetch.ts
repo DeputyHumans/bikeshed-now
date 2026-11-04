@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The one outbound fetch: a client's metadata document, guarded against SSRF (SPEC §23).
+// The one outbound fetch: a client's metadata document or a trusted issuer's keys, guarded against SSRF (SPEC §23).
 
 import { lookup as dnsLookup, type LookupAddress } from "dns";
 import { request } from "https";
@@ -21,8 +21,11 @@ import { isIP } from "net";
  *   - no redirect is followed, the body is capped, and the whole exchange is
  *     bounded in time
  *
- * It is also only ever reached from the consent endpoint, behind a signed-in
- * account, never from an anonymous one.
+ * It is reached from the consent endpoint, behind a signed-in account, and
+ * from the token endpoint for an identity assertion (ADR 0026). There nothing
+ * is fetched until the assertion names an issuer from this deployment's own
+ * configuration, and the client document only once that issuer's signature
+ * has verified, so an anonymous caller cannot choose what is fetched.
  */
 
 export const METADATA_TIMEOUT_MS = 5000;

@@ -133,8 +133,7 @@ a written argument in a pull request, not a dependency.
 - **No theming engine.** One palette, swapped by editing twelve tokens.
 - **No i18n.** No second locale is in sight, and retrofitting is mechanical.
 - **No multi-tenancy.** One deployment is one workspace; folders already group.
-- **No SSO or SCIM.** This is a self-hosted tool for small teams. If you need
-  directory sync, you need a different product, and the README says so.
+- **No SSO or SCIM.** This is a self-hosted tool for small teams. If you need directory sync, you need a different product, and the README says so. One narrow exception: an operator may trust an organisation's issuer, such as a Claude workspace's, to connect an app for people who already have accounts here, and each person can turn that off for good ([ADR 0026](adr/0026-an-organisation-may-connect-its-people.md)). It never creates an account and never signs anyone in to the web app.
 - **No search index.** The workspace filter is client-side over a set that fits
   in memory.
 - **No mobile app.** The web app is responsive to 400px and touch-parity-tested, in Chrome and in WebKit, whose sandboxed frames deliver no events (SPEC §6).

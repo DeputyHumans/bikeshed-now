@@ -77,6 +77,8 @@ where it will send the person back to, and what it will be able to do, and asks
 them to approve. An app that supports MCP authorization finds that page by
 itself from the `401` that `/mcp` answers.
 
+Claude can also be connected with no page at all. If the person's organisation uses Claude's managed authorization and this deployment trusts that organisation, Claude connects them by itself, provided they already have an account here under the same address. Their account screen lists the connection as made by their organisation. If they revoke it there, their organisation can't reconnect it.
+
 ### From a terminal
 
 `bikeshed login --origin https://<deployment>` prints an address, opens the

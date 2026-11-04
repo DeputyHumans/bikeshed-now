@@ -421,7 +421,32 @@ fetches it. That is SSRF by design.
   NAT64 and 6to4 addresses are judged by what they carry.
 - **The response:** no redirects are followed, the timeout is 5 s and the body
   is capped at 16 KB.
-- **Where it runs:** only from `/oauth/consent`, behind a signed-in account.
+- **Where it runs:** from `/oauth/consent`, behind a signed-in account, and
+  from the token endpoint for an identity assertion. There the issuer's
+  documents are fetched only for an issuer in the deployment's own
+  configuration, and the client's only after that issuer's signature has
+  verified, so an anonymous caller chooses nothing that is fetched. An unknown
+  `kid` refetches the keys at most once a minute per instance.
+
+### An organisation's assertion is stolen, forged or replayed
+
+Where the deployment trusts an issuer (ADR 0026), a signed assertion connects an app for the person it names, with no consent page and no client secret: Claude authenticates as nobody.
+
+**Mitigation.**
+- **Only configured issuers**, compared byte for byte, and only ES256 keys from their own published set. `alg` is fixed, so `none` and an HMAC keyed with the public key are refused.
+- **Short and single.** An assertion expiring more than ten minutes ahead is refused, and each `jti` is spent once; within 60 s a retry gets back the token it already earned, and nothing new.
+- **The store is not the key.** A token is `HMAC(row nonce, assertion)` and only its hash is kept, so a copy of `tokens/` yields no live token.
+- **Addressed to us.** `aud` must be this server, `client_id` must match the request, and a named `resource` must be ours.
+- **It connects an account; it never makes one**, and the account passes the same gate as any refresh.
+- **A reassigned address is refused.** The issuer's `sub` is pinned at the first exchange.
+- **The person can decline for good.** Revoke on the account screen is sticky for that issuer.
+
+**Residual, accepted.**
+- A leaked assertion is a bearer credential for up to ten minutes, once. Draft -06 of the ID-JAG specification would require a bound key or client authentication; Claude offers neither yet.
+- The organisation decides, not the person. A member of a trusting organisation is connected until they revoke it.
+- A trusted issuer can connect any account here whose address it asserts, the operator's own included. That is an app's reach, not the account's: no agent connection can trust scripts or delete forever.
+- Anyone can make the server fetch a trusted issuer's keys by naming an unknown `kid`. Shared fetches, at most one a minute per instance, and a ten-second back-off after a failure bound it.
+- Someone removed from the organisation keeps up to an hour of access, until the access token already issued expires.
 
 ### A refresh token or code is stolen and replayed
 

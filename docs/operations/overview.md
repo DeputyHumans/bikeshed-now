@@ -240,6 +240,20 @@ Membership is recomputed by the same code the server uses, including the parent
 folder's members, and all four membership fields are written together
 ([ADR 0006](../architecture/adr/0006-denormalized-members.md)).
 
+### Letting an organisation connect its people's apps
+
+Claude's admin settings can connect a whole workspace to bikeshed without each person signing in ("managed authorization", identity source "Claude-issued"). Claude asks the operator to trust the workspace's issuer; this is how ([ADR 0026](../architecture/adr/0026-an-organisation-may-connect-its-people.md), SPEC §23 "Connected by an organisation").
+
+1. **Trust the issuer.** Add `BIKESHED_ID_JAG_ISSUERS=<issuer URL>` to the functions' environment: the deployer's `functions/.env` and the `PRODUCTION_FUNCTIONS_ENV` secret that `deploy.yml` writes it from. Copy the URL exactly as Claude shows it (`https://identity.anthropic.com/issuers/iss_…`); it is compared byte for byte. Several issuers are separated by commas or spaces. Never commit one: the id names the organisation, and `check:secrets` refuses its shape.
+2. **Deploy the functions.** The authorization-server metadata then lists the jwt-bearer grant and `authorization_grant_profiles_supported`. Check it: `curl -s https://<host>/.well-known/oauth-authorization-server`. It is cached for up to five minutes.
+3. **In Claude, leave Tenant ID empty**, then Continue and Test connection. A deployment is one workspace, and an assertion that names a tenant is refused.
+
+What each member needs: an account here whose verified address is the address on their Claude account, created by signing in once. An assertion never creates an account. The connection appears on their account screen as connected by their organisation. If they revoke it, it stays revoked for that issuer, and they can still connect Claude themselves.
+
+The function log says what happened without naming anyone: `id-jag accepted:` with the assertion's lifetime, or `id-jag refused:` with the reason and the claim names. An assertion that expires more than ten minutes ahead is refused; if Claude's are longer, that log line shows by how much.
+
+**To stop it,** remove the issuer from the environment and deploy. The grant is refused at once, and access tokens already issued expire within the hour. In Claude, switch the connector back to browser sign-in.
+
 ### The guides at `/docs` and `/docs/developers`
 
 Every deployment redirects (`302`) `/docs` to `/d/docs` and `/docs/developers`

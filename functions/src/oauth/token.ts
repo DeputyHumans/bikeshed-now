@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// POST /oauth/token: spend an authorization code or a refresh token (SPEC §23).
+// POST /oauth/token: spend an authorization code, a refresh token or an identity assertion (SPEC §23).
 
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import * as admin from "firebase-admin";
@@ -16,7 +16,9 @@ import {
   replayCodePair,
   type CodeRecord,
 } from "./grants";
-import { canonicalResource } from "./metadata";
+import type { AssertionDeps } from "./assertion";
+import { exchangeAssertion } from "./managed";
+import { canonicalResource, grantTypesSupported, JWT_BEARER } from "./metadata";
 
 type Fields = Map<string, string>;
 
@@ -203,7 +205,7 @@ async function exchangeCode(db: admin.firestore.Firestore, fields: Fields, clien
   });
 }
 
-export async function handleToken(req: Request, res: Response): Promise<void> {
+export async function handleToken(req: Request, res: Response, deps: AssertionDeps = {}): Promise<void> {
   if (rejectMethod(req, res, ["POST"])) return;
   // RFC 6749 §5.1. Cache-Control is already `private, no-store`, set on entry.
   res.setHeader("Pragma", "no-cache");
@@ -258,7 +260,16 @@ export async function handleToken(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    error(res, 400, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+    // An identity assertion (ADR 0026), and only where an issuer is trusted:
+    // without one, the grant is as unknown here as it is in the metadata.
+    const supported = grantTypesSupported();
+    if (grantType === JWT_BEARER && supported.includes(JWT_BEARER)) {
+      const result = await exchangeAssertion(req, fields, clientId, deps);
+      res.status(result.status).json(result.body);
+      return;
+    }
+
+    error(res, 400, "unsupported_grant_type", `grant_type must be one of: ${supported.join(", ")}`);
   } catch (err) {
     // Never `invalid_grant` for a failure of ours: a client told that throws
     // the connection away.
