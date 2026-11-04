@@ -8,7 +8,7 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { Timestamp } = require("firebase-admin/firestore");
 
-const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
+const { fakeFirestore, fakeToken, withFakeAdmin, invoke } = require("./fakes.js");
 const {
   RUN_ANCESTORS,
   SCRIPT_LOCK,
@@ -308,6 +308,33 @@ test("only a superadmin who owns a document may trust it for everyone; any owner
     assert.notEqual(r.status, 200);
     assert.equal(w.store.get("docs/page").trusted, false);
     assert.notEqual((await caller(w).trust(STRANGER, "GET", "page")).status, 200);
+  });
+});
+
+test("a token never lifts the sandbox for everyone, even a superadmin owner's; it may restore it", async () => {
+  await withAdmins(OWNER.emailLower, async () => {
+    for (const channel of ["cli", "mcp", "api"]) {
+      const token = fakeToken({ uid: OWNER.uid, email: OWNER.emailLower, channel });
+      const w = world({ [token.path]: token.record });
+      const users = { [OWNER.uid]: { uid: OWNER.uid, email: OWNER.emailLower, emailVerified: true, disabled: false } };
+      const call = (method, body) => withStorage(() => withFakeAdmin({ db: w.db, sessions: SESSIONS, users }, () =>
+        invoke(trustDoc, method === "GET"
+          ? { method, query: { docId: "page" }, headers: { authorization: `Bearer ${token.bearer}` } }
+          : { method, body: { docId: "page", ...body }, headers: { authorization: `Bearer ${token.bearer}` } })));
+      const asked = await call("GET");
+      assert.deepEqual([asked.status, asked.body], [200, { trusted: false, canTrustForEveryone: false }], channel);
+      const lift = await call("POST", { trusted: true });
+      assert.equal(lift.status, 403, channel);
+      assert.match(lift.body.error, /in the browser/, channel);
+      assert.equal(w.store.get("docs/page").trusted, false, `${channel}: nothing lifted`);
+      // Taking a power away stays open to a token.
+      w.store.set("docs/page", { ...w.store.get("docs/page"), trusted: true });
+      assert.equal((await call("POST", { trusted: false })).status, 200, channel);
+      assert.equal(w.store.get("docs/page").trusted, false, channel);
+    }
+    // The same superadmin owner in the browser still may.
+    const w = world();
+    assert.equal((await caller(w).trust(OWNER, "POST", "page", { trusted: true })).status, 200);
   });
 });
 

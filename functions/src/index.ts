@@ -994,7 +994,11 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
     res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
     return;
   }
-  const mayLift = canTrustForEveryone(data, caller.emailLower, superadmins());
+  // Only the browser's session lifts the sandbox for everyone. A token is a
+  // credential an agent may hold, acting on text it was given, and lifting the
+  // sandbox lets the document's author act as every reader: the decision is
+  // as final as deleting forever, which refuses every token too.
+  const mayLift = canTrustForEveryone(data, caller.emailLower, superadmins()) && caller.channel === "web";
 
   if (req.method === "GET") {
     res.status(200).json({ trusted: globallyTrusted(data), canTrustForEveryone: mayLift });
@@ -1008,6 +1012,10 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const trusted = body?.trusted !== false;
+  if (trusted && caller.channel !== "web") {
+    res.status(403).json({ error: TRUST_FROM_BROWSER_ONLY });
+    return;
+  }
   if (trusted && !mayLift) {
     res.status(403).json({ error: TRUST_FOR_EVERYONE_REFUSED });
     return;
@@ -1022,6 +1030,10 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
   await syncPublicProjection(db(), docId);
   res.status(200).json({ trusted });
 });
+
+/** What a token is told when it tries to lift the sandbox: restoring it is still allowed. */
+const TRUST_FROM_BROWSER_ONLY =
+  "Running a document's code for everyone is decided in the browser, by one of this deployment's administrators. A token, an agent's included, can sandbox a document again but never lift it.";
 
 /** What an owner who is not a superadmin is told when they try to trust for everyone. */
 const TRUST_FOR_EVERYONE_REFUSED =

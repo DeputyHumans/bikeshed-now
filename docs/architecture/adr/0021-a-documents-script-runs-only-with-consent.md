@@ -1,6 +1,6 @@
 # 0021 — A document's script runs only with its reader's consent
 
-**Status** Accepted · Amended in 0.32.0 (the lock names harmless types; trust is for the current version and never carries) · **Spec** §2, §6c · **Amends** [0002](0002-two-scope-trust.md)
+**Status** Accepted · Amended in 0.32.0 (the lock names harmless types; trust is for the current version and never carries; only the browser's session lifts the sandbox) · **Spec** §2, §6c · **Amends** [0002](0002-two-scope-trust.md)
 
 ## Context
 

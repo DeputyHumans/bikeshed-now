@@ -510,7 +510,7 @@ own pending proposal, and neither destroys anything.
   owner-only, private and `trusted: false`. `lineage` answers where a document
   came from, as far as the caller may see, and its forks for its owner. Both
   answer per caller, so the handler sets `noStore` first.
-- **`POST /trust`** — owner-only global trust (§6c).
+- **`POST /trust`** — global trust (§6c): lifting the sandbox takes a superadmin owner in the browser's session, and a token is refused (`403`) whoever holds it; any owner, by any credential, may restore the sandbox.
 - **`POST /marking`** — owner-only export marking (§20).
 - **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }`
   (§17). `{ folderId, visibility, expiresAt? }` sets a folder's own level and
@@ -1050,7 +1050,7 @@ exfiltrate the token.
 
 **Two trust scopes, split by who bears the risk.** Effective trust for a reader is `meta.trusted === true || personalTrust(uid)`. An absent flag is untrusted.
 
-- **GLOBAL** (`docs.trusted`, `POST /trust`) — un-sandboxes for EVERY reader, which lets the document's author act as each of them. So it is a **superadmin's**, on a document they own: `BIKESHED_SUPERADMINS`, deployment configuration, never committed ([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). Any owner may restore the sandbox. `GET /trust?docId=` tells an owner whether they may lift it; the dialog offers it only then.
+- **GLOBAL** (`docs.trusted`, `POST /trust`) — un-sandboxes for EVERY reader, which lets the document's author act as each of them. So it is a **superadmin's**, on a document they own: `BIKESHED_SUPERADMINS`, deployment configuration, never committed ([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). It is decided in the browser: a personal access token or a connected app is refused even when its person is a superadmin owner, because the hand on a token may be an agent acting on text it was given, and the decision lets the author act as every reader. Any owner may restore the sandbox, by any credential. `GET /trust?docId=` tells an owner whether they may lift it, false for a token; the dialog offers it only then.
 - **PERSONAL** (`docs/{docId}/trust/{uid}`) — un-sandboxes only in the granting
   user's own browser. The sole session exposed to that bundle's JS is their own,
   so **any reader may grant it to themselves**. Client-written under an own-uid
