@@ -458,7 +458,7 @@ Where the deployment trusts an issuer (ADR 0026), a signed assertion connects an
 - **Addressed to us.** `aud` must be this server, `client_id` must match the request, and a named `resource` must be ours.
 - **It connects an account; it never makes one**, and the account passes the same gate as any refresh.
 - **A reassigned address is refused.** The issuer's `sub` is pinned at the first exchange.
-- **The person can decline for good.** Revoke on the account screen is sticky for that issuer.
+- **The person can decline for good.** Revoke on the account screen is sticky for that issuer, whichever app a later assertion names, and the issuer's `sub` is pinned across apps. Until 0.32.0 both held for one app only, so naming another `client_id` undid them.
 
 **Residual, accepted.**
 - A leaked assertion is a bearer credential for up to ten minutes, once. Draft -06 of the ID-JAG specification would require a bound key or client authentication; Claude offers neither yet.

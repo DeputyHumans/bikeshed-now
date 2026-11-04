@@ -198,7 +198,7 @@ describe("the access token list", () => {
     renderAccount();
     const app = row("Claude");
     expect(app.textContent).toContain("connected by your organisation 2d ago");
-    expect(within(app).getByRole("button", { name: "Revoke" }).title).toMatch(/organisation won't be able to connect it/);
+    expect(within(app).getByRole("button", { name: "Revoke" }).title).toMatch(/organisation won't be able to connect this or any other app/);
   });
 
   it("says a revoked organisation connection stays revoked, and leaves an ordinary one plain", () => {
@@ -207,7 +207,7 @@ describe("the access token list", () => {
       { ...APP, tokenId: "tok-own", name: "My Claude", revokedAt: when },
     ];
     renderAccount();
-    expect(row("Claude").textContent).toContain("revoked · your organisation can't reconnect it");
+    expect(row("Claude").textContent).toContain("revoked · your organisation can't connect apps for you again");
     expect(row("My Claude").textContent).not.toContain("organisation");
   });
 

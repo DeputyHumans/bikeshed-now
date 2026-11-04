@@ -354,6 +354,23 @@ test("each app gets its own connection, and revoking one leaves the other", asyn
   assert.equal(otherRow.name, "Other", "each row credits its own app");
 });
 
+test("revoking holds for every app the issuer names, and the pinned sub too", async () => {
+  // The row is keyed by the app, so until 0.32.0 the organisation could undo
+  // the person's Revoke, or connect a reassigned address, by naming another
+  // client_id: a fresh row, neither revoked nor pinned.
+  const w = world();
+  assert.equal((await w.exchange(assertion())).status, 200);
+  const elsewhere = await w.exchange(assertion({ sub: "idp-someone-else", client_id: OTHER_ID }), { client_id: OTHER_ID });
+  assert.deepEqual([elsewhere.status, elsewhere.body.error], [400, "access_denied"], "a different sub through another app");
+  assert.match(elsewhere.body.error_description, /different account at the issuer/);
+
+  assert.equal((await w.revoke(w.store.get(ROW).tokenId)).status, 200);
+  const other = await w.exchange(assertion({ client_id: OTHER_ID }), { client_id: OTHER_ID });
+  assert.deepEqual([other.status, other.body.error], [400, "access_denied"], "another app after a Revoke");
+  assert.match(other.body.error_description, /turned off/);
+  assert.equal(w.tokenRows().length, 1, "no row is made for it");
+});
+
 test("every check on the assertion refuses with invalid_grant and writes nothing", async () => {
   const now = Math.floor(Date.now() / 1000);
   const good = assertion();

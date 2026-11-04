@@ -71,7 +71,7 @@ function TokenList({
                 )}
                 {token.revokedAt ? (
                   token.managedBy ? (
-                    "revoked · your organisation can't reconnect it"
+                    "revoked · your organisation can't connect apps for you again"
                   ) : (
                     "revoked"
                   )
@@ -90,7 +90,7 @@ function TokenList({
                 className="btn btn-sm btn-danger"
                 title={
                   token.managedBy
-                    ? "Your organisation won't be able to connect it for you again. You can still connect it yourself."
+                    ? "Your organisation won't be able to connect this or any other app for you again. You can still connect apps yourself."
                     : undefined
                 }
                 onClick={() => onRevoke(token.tokenId)}

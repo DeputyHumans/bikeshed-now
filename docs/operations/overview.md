@@ -278,7 +278,7 @@ With either variable unset, or before the deploy, only the first two grants appe
 
 **3. In Claude, leave Tenant ID empty**, then Continue and Test connection. A deployment is one workspace, and an assertion that names a tenant is refused.
 
-What each member needs: an account here whose verified address is the address on their Claude account, created by signing in once. An assertion never creates an account. The connection appears on their account screen as "connected by your organisation". If they revoke it, it stays revoked for that app, and they can still connect Claude themselves.
+What each member needs: an account here whose verified address is the address on their Claude account, created by signing in once. An assertion never creates an account. The connection appears on their account screen as "connected by your organisation". If they revoke it, the organisation cannot connect them again through any app, and they can still connect Claude themselves.
 
 **Reading the log.** The `oauth` function logs every accepted assertion, and every assertion whose claims fail once its signature has verified, without naming anyone:
 

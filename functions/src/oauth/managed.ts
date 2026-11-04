@@ -34,12 +34,15 @@ import { allowedResources, canonicalResource, issuer, resourceFor } from "./meta
  *   retry        the same assertion presented again within REPLAY_GRACE_MS is
  *                answered with the same token, re-derived, as a timed-out
  *                code exchange is. After that it is spent
- *   sticky       a revoked row refuses every later assertion: the person said
- *                no, and the organisation does not get to say yes again. They
- *                can still connect the app themselves, through consent
+ *   sticky       a revoked row refuses every later assertion from that issuer
+ *                for that person and address, whichever app it names: the
+ *                person said no, and the organisation does not get to say yes
+ *                again, not even by naming another client. They can still
+ *                connect an app themselves, through consent
  *   pinned sub   the issuer's id for the person is fixed at the first
- *                exchange. A different one later means the address now
- *                belongs to someone else there, and that is refused
+ *                exchange. A different one later, through any app, means the
+ *                address now belongs to someone else there, and that is
+ *                refused
  */
 
 /** Live tokens kept per row: well over an hour's worth of ordinary use. */
@@ -183,10 +186,30 @@ export async function exchangeAssertion(
   const ref = db.collection("tokens").doc(tokenId);
   const mirrorRef = db.collection("users").doc(uid).collection("tokens").doc(tokenId);
   const jtiHash = sha256(`${a.issuer}\n${a.jti}`);
+  // Every connection this issuer made for this person at this address, any
+  // app's. The address is in the scope on purpose: an account move (SPEC §14)
+  // revokes the rows under the old address, and the new one starts fresh
+  // rather than inheriting that as the person's own "no".
+  const siblings = db.collection("tokens")
+    .where("uid", "==", uid)
+    .where("managed.issuer", "==", a.issuer)
+    .where("email", "==", a.email);
 
   const result = await db.runTransaction(async (tx): Promise<AssertionGrantResult & { retried?: boolean }> => {
     const snap = await tx.get(ref);
     const row = snap.exists ? (snap.data() as ManagedRow) : null;
+    // Until 0.32.0 the veto and the pin were this row's alone, and the row is
+    // keyed by the app: an assertion naming another client_id got a fresh row,
+    // neither revoked nor pinned (ADR 0026).
+    for (const other of (await tx.get(siblings)).docs.map((d) => d.data() as ManagedRow)) {
+      if (other.kind !== "oauth") continue;
+      if (other.revokedAt != null) {
+        return fail(400, "access_denied", "automatic connection was turned off for this account; connect by signing in instead");
+      }
+      if (typeof other.managed?.subject === "string" && other.managed.subject !== a.subject) {
+        return fail(400, "access_denied", "this address belongs to a different account at the issuer now");
+      }
+    }
     const now = Date.now();
     if (row) {
       if (row.kind !== "oauth" || row.uid !== uid || row.managed?.issuer !== a.issuer || typeof row.nonce !== "string") {

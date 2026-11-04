@@ -3643,7 +3643,7 @@ The app sends `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, `asserti
 | `resource`, if named, is one of this deployment's `/mcp` addresses; a `resource` parameter must be too, and agree | `invalid_grant`, `invalid_target` |
 | the client publishes a metadata document | `invalid_client` |
 | the address is already an account here, and passes the same gate as a refresh (§23 Tokens) | `access_denied` |
-| the person has not revoked this connection, and the issuer's `sub` is the one first seen | `access_denied` |
+| the person has revoked none of the connections this issuer made for them at this address, whichever app each names, and the issuer's `sub` is the one first seen on any of them | `access_denied` |
 | this `jti` has not been used, except as a retry (below) | `invalid_grant` |
 
 An unreachable issuer, an unreadable client metadata document or a failed account lookup is `500 server_error`, never `invalid_grant` or `invalid_client`.
@@ -3684,8 +3684,8 @@ The gate is applied as at a sign-in: each assertion is a fresh sign-in by the is
 The connection is one row in `tokens/` per (issuer, person, address, client), with an id derived from the four, `kind: "oauth"`, channel `mcp`, and `managed: { issuer, subject }`. A different app, or the same person after an address move (§14), gets a row of its own. Its mirror carries `managedBy`, the issuer's host, so the account screen says the organisation connected it. There is **no refresh token**, as the draft asks: the app presents a fresh assertion instead.
 - **One access token per assertion.** Each exchange mints a token of one hour, `HMAC(nonce, assertion)`. The nonce is the row's and only the server reads it; the assertion is never stored. So reading the row yields no token, and two exchanges at once each get their own. The row keeps `liveAccess`, the hashes of the live tokens with their expiries, and drops each when it expires; there is no collection and no job for them. At most 100 are kept, and room is made only by forgetting one whose assertion has expired; otherwise the exchange is refused.
 - **A retry gets what it missed.** The same assertion presented again within 60 s, as a client that timed out does, is answered with the same token, re-derived. After that it is spent.
-- **Revoking is sticky.** Revoke on the account screen ends the row, and every later assertion for that row is `access_denied`. The person can still connect the app themselves through consent, which makes an ordinary grant.
-- **The subject is pinned.** A later assertion for the same address with a different `sub` means the issuer gave the address to someone else, and it is refused.
+- **Revoking is sticky, for every app.** Revoke on the account screen ends the row, and every later assertion from that issuer for that person at that address is `access_denied`, whichever app it names. The person can still connect apps themselves through consent, which makes an ordinary grant. Until 0.32.0 the veto was the row's alone, and the row is keyed by the app, so naming another `client_id` undid it. The address is in the scope on purpose: an account move revokes the old address's rows, and the new address starts fresh.
+- **The subject is pinned.** A later assertion for the same address with a different `sub`, through any app, means the issuer gave the address to someone else, and it is refused.
 
 ### The command line
 
