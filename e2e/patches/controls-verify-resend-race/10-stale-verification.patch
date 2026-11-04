@@ -4,8 +4,8 @@
    const ref = db().collection("verifications").doc(uid);
 +  const e2eStaleVerification = (await ref.get()).data();
 
-@@ -2472,3 +2473,3 @@
-     const reserved = await db().runTransaction(async (tx) => {
+@@ -2395,3 +2396,3 @@
+     const reserved = await db().runTransaction(async (tx): Promise<"ok" | "account" | "address"> => {
 -      const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
 +      const existing = e2eStaleVerification as { sentAt?: number; reservationId?: string } | undefined;
-       if (existing?.reservationId === reservationId) return true;
+       const target = (await tx.get(targetRef)).data() as { sentAt?: unknown } | undefined;

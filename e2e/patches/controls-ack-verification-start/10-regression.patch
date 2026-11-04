@@ -1,7 +1,7 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2473,3 +2473,3 @@
-       const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
--      if (existing?.reservationId === reservationId) return true;
-+      if (reservationId === "never" && existing?.reservationId === reservationId) return true;
+@@ -2397,3 +2397,3 @@
+       const target = (await tx.get(targetRef)).data() as { sentAt?: unknown } | undefined;
+-      if (existing?.reservationId === reservationId) return "ok";
++      if (reservationId === "never" && existing?.reservationId === reservationId) return "ok";
        const at = Date.now();

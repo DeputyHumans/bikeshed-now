@@ -5,10 +5,10 @@
 -  const result = await db().runTransaction(async (tx) => {
 +  const result = await e2eAckTransaction(db(), docId, "reading-beat", async (tx) => {
      const sessionSnap = await tx.get(sessionRef);
-@@ -2471,3 +2471,3 @@
-     const reservationId = randomBytes(16).toString("hex");
--    const reserved = await db().runTransaction(async (tx) => {
-+    const reserved = await e2eAckTransaction(db(), uid, "verification-start", async (tx) => {
+@@ -2394,3 +2394,3 @@
+     const targetRef = db().collection("verifyTargets").doc(createHash("sha256").update(email).digest("hex"));
+-    const reserved = await db().runTransaction(async (tx): Promise<"ok" | "account" | "address"> => {
++    const reserved = await e2eAckTransaction(db(), uid, "verification-start", async (tx): Promise<"ok" | "account" | "address"> => {
        const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
 @@ -2515,3 +2515,3 @@
    let checkedIdentity: string | undefined;
