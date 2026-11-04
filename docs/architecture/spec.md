@@ -500,10 +500,7 @@ own pending proposal, and neither destroys anything.
   direct ones.
 - **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document
   deletion is deliberately unsupported (`400`). Renaming a document takes
-  `canEdit`; **moving it takes `isDocEditor`**, because filing a document into a
-  folder makes that folder's members its members, and open editing would
-  otherwise let any account file someone's document into its own folder and
-  become a member.
+  `canEdit`; **moving it is its owner's alone** (`canManageSharing`, `403` with a reason otherwise), because filing a document into a folder makes that folder's members its members and lets its link and public level reach it: whoever moves a document decides who may read it, as sharing does. Until 0.32.0 any editor could, so an editor could file the owner's private document into a folder of their own, then share or publish that folder, and became an approver of it besides. **Moving a folder** to a new parent is likewise its owner's (`canManageFolder`): the new parent's readers reach the whole subtree. Renaming a folder takes `canEditFolder`.
 - **`POST /fork` (`forkDoc`)** — `{ op: "create" | "lineage", docId, k?, ... }`
   (§21). `create` is `canRead`-gated on the source (a link grant or `k` counts;
   `404` otherwise) and takes `versionId?`, `folderId?`, `title?`; the fork is
@@ -2739,7 +2736,7 @@ reassess the request; never silently redirect a historical request to it.
 | `set_document_visibility` | owner-only sparse patch of visibility, publicEdit and expiresAt; null clears expiry, omissions stay unchanged |
 | `set_folder_visibility` | owner-only sparse patch of a folder's visibility and expiresAt, which open everything beneath it to read (§17 "A folder's reach"); recomputes the subtree; no open editing |
 | `rename_folder` | rename a folder the caller can edit |
-| `move_folder` | move a folder the caller can edit into a writable parent; omit parent for root; reject cycles and recompute access |
+| `move_folder` | move a folder the caller owns into a writable parent; omit parent for root; reject cycles and recompute access |
 | `delete_folder` | owner-only; move the folder to the Trash with everything beneath it, other people's documents included (§4 "The Trash"); deletes nothing |
 | `trash_document` | owner-only; move a document to the Trash, its owner's alone and read-only until restored; deletes nothing |
 | `restore_from_trash` | owner-only; bring a document or folder (`kind`) back with every grant, into its folder while that is there and not in the Trash, else the root; a folder brings back its batch |
@@ -2760,7 +2757,7 @@ reassess the request; never silently redirect a historical request to it.
 | `list_folders` | every folder the caller can see, each with its full path and how many can read it (`readers`, `shared`) |
 | `get_folder` | who can read one folder: everyone by email (the first 25, then a count), its editors, its teams, each named only to its members (§13), and `throughFolders`; with `k`, for a non-member, one level of what a folder's link opens, read-only (§17) |
 | `create_folder` | create one, optionally inside another |
-| `move_document` | file a document into a folder, or back to the workspace root, saying who can now read it (`access`) |
+| `move_document` | file a document the caller owns into a folder, or back to the workspace root, saying who can now read it (`access`) |
 | `rename_document` | change a document's title and slug; its docId, the address, never changes (§4) |
 | `get_comments` | **unresolved feedback, each with its anchored quote**, each comment with its `channel` and, when not from the browser, `via` (§17), oldest thread first, at most 50 with `truncated` when there were more; `awaitingReply` marks a thread a person spoke last in on the current version; `threads` fetches only the named ids; `version` names an earlier version, whose threads any reader of the document may read |
 | `get_changes` | what happened since a cursor, in recorded order: comments, threads, suggestions, versions, and changes to the document's title, folder, visibility, expiry, trust and sharing; `since` is required; with `needsReply` and the document's `state` (ADR 0016) |
@@ -2915,7 +2912,7 @@ retain the existing hidden-path and team naming policy. Removing a direct grant
 does not override inheritance. Newly effective readers receive invitations;
 repeating a grant or changing only its role does not send another invitation.
 
-Folder rename/move require edit rights, and moving requires destination rights.
+Renaming a folder requires edit rights on it. Moving a folder or a document requires being its owner, because moving changes who can read it, and edit rights on the destination.
 Deleting a folder is owner-only and moves it to the Trash with everything beneath it, returning `{id, batch, folders, documents}`: how many went. Folder moves and the Trash send no invitations. Nothing is deleted permanently through this surface, and team administration and script trust remain outside it. HTTP and MCP call the same implementation.
 
 **An agent proposes, and decides with its person's role** (ADR 0015). `suggest_edit` takes the passage as a

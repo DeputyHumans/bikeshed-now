@@ -297,7 +297,7 @@ describe("approving", () => {
       "Create folders and file documents in them",
       "Manage sharing on documents and folders you own, sending invitations to new readers",
       "Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own",
-      "Rename and move folders you can edit",
+      "Rename folders you can edit, and move documents and folders you own",
       "Move documents and folders you own to the Trash, and restore them",
     ]);
     expect(items(".connect-list-not li")).toEqual([

@@ -465,8 +465,12 @@ export function DocList() {
         },
       },
       {
+        // Moving changes who can read it, so it is the owner's, as sharing
+        // is (SPEC §13).
         id: "move",
         label: "Move…",
+        disabled: !isOwner,
+        reason: `Only ${doc.ownerEmail} can move this: moving it changes who can read it.`,
         onSelect: () =>
           setMoving({
             kind: "doc",
@@ -529,6 +533,8 @@ export function DocList() {
       {
         id: "move",
         label: "Move…",
+        disabled: !isOwner,
+        reason: `Only ${folder.ownerEmail} can move this folder: moving it changes who can read everything in it.`,
         onSelect: () =>
           setMoving({
             kind: "folder",

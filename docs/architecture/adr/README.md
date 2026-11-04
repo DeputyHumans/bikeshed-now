@@ -27,7 +27,7 @@ actually available at the time.
 | [0014](0014-oauth-for-the-agent-surface.md) | Apps connect by signing in: OAuth 2.1 beside personal tokens | Amended by 0026 |
 | [0015](0015-agents-decide-as-approvers.md) | An agent decides with its owner's role | Accepted |
 | [0016](0016-a-change-log-an-agent-pulls.md) | A change log an agent pulls, one per document | Amended by 0023 |
-| [0017](0017-agent-management-with-owner-permissions.md) | Agents manage access with their person's permissions | Amended by 0024 |
+| [0017](0017-agent-management-with-owner-permissions.md) | Agents manage access with their person's permissions | Amended by 0024; amended in 0.32.0 |
 | [0018](0018-keep-the-document-open-path-warm.md) | Keep the document-open path warm | Accepted |
 | [0019](0019-folder-links-reach-their-subtree.md) | A folder's link reaches everything beneath it, to read | Accepted |
 | [0020](0020-an-account-follows-its-google-address.md) | An account follows the address Google renames it to | Accepted |

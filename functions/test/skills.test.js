@@ -306,8 +306,8 @@ const CONSENT_CLAIMS = {
   set_folder_access: "manage sharing",
   set_document_visibility: "change visibility",
   set_folder_visibility: "change visibility",
-  rename_folder: "rename and move folders",
-  move_folder: "rename and move folders",
+  rename_folder: "rename folders",
+  move_folder: "move documents and folders you own",
   delete_folder: "to the trash",
   trash_document: "to the trash",
   restore_from_trash: "to the trash",
@@ -334,7 +334,7 @@ const CONSENT_CLAIMS = {
   resolve_thread: "resolve threads",
   reopen_thread: "resolve threads",
   create_folder: "create folders",
-  move_document: "file documents",
+  move_document: "move documents and folders you own",
 };
 
 function consentLists() {

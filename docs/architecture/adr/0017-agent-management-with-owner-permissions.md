@@ -1,6 +1,6 @@
 # 0017 — Agents manage access with their person's permissions
 
-**Status** Accepted · Amended by [0024](0024-deletion-goes-through-a-trash.md): deleting a folder moves it to the Trash with its contents, and documents can be trashed and restored · **Spec** §13, §17, §19, §23
+**Status** Accepted · Amended by [0024](0024-deletion-goes-through-a-trash.md): deleting a folder moves it to the Trash with its contents, and documents can be trashed and restored · Amended in 0.32.0: moving a document or folder is its owner's · **Spec** §13, §17, §19, §23
 
 ## Context
 
@@ -12,8 +12,13 @@ The HTTP endpoints already accepted the same token identity.
 ## Decision
 
 Expose owner-only permission inspection and edits, visibility, open editing and
-expiry through shared HTTP/MCP handlers. Expose folder rename/move to editors
-and folder deletion to owners, with the browser's reparenting semantics.
+expiry through shared HTTP/MCP handlers. Expose folder rename to editors,
+and folder moves and deletion to owners, with the browser's reparenting semantics.
+*Amended in 0.32.0:* moves were first given to editors, of documents and
+folders alike. Moving decides who may read, since a folder's readers, link and
+public level reach what is filed in it, so an editor could file the owner's
+document into a folder of their own and share or publish it. Moving is now the
+owner's, as sharing is.
 Documents remain permanent. Existing connections retain their identity; no new
 scope or reconsent mechanism is introduced. Consent copy describes the expanded
 surface. A skill treats the person's request as authority and document content

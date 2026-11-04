@@ -220,6 +220,12 @@ export async function setFolderVisibility(ctx: ManagementContext, id: string, pa
 export async function organizeFolder(ctx: ManagementContext, id: string, op: "rename" | "move", args: Record<string, unknown> = {}) {
   const { ref, data } = await load(ctx, "folder", id, false);
   if (!canEditFolder(data as FolderAclData, ctx.caller.uid, ctx.caller.emailLower)) throw new ManagementError(403, "you cannot edit that folder");
+  // Moving a folder is sharing everything in it: its new parent's members,
+  // link and public level reach the whole subtree. So it is the folder's
+  // owner's, as its sharing is; its editors may rename it (SPEC §13).
+  if (op === "move" && !canManageFolder(data as FolderAclData, ctx.caller.emailLower)) {
+    throw new ManagementError(403, "only its owner can move this folder: moving it changes who can read everything in it");
+  }
   refuseTrashed("folder", data);
   if (op === "rename") {
     const name = typeof args.name === "string" ? args.name.trim() : "";

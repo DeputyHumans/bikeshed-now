@@ -617,10 +617,12 @@ test("open editing lets a stranger edit, never move: moving makes the mover a me
   // Filing a document into a folder unions that folder's members into the
   // document's. With open editing as the gate, any account could file someone's
   // document into its own folder and read its member list and statistics.
+  // Moving is the owner's alone now, so an open editor is refused like any
+  // editor (SPEC §13).
   const db = unlistedDb({ doc: { visibility: "public", linkToken: undefined, publicEdit: true } });
   await assert.rejects(
     toolByName("move_document").run({ db, caller: STRANGER }, { id: "memo", folder: "mine" }),
-    { message: "you cannot move that document" },
+    { message: "only its owner can move that document: moving it changes who can read it" },
   );
 });
 

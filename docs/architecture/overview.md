@@ -148,8 +148,9 @@ a written argument in a pull request, not a dependency.
   who has never heard of OAuth. This line used to say "no OAuth"; ADR 0014
   records why that changed and what it cost.
 - **Agent management uses the person's role.** Owners can manage document and
-  folder grants, visibility and expiry. Folder editors can rename and move;
-  owners can move documents and folders to the Trash and restore them, and no
+  folder grants, visibility and expiry. Folder editors can rename; only
+  owners can move documents and folders, because moving changes who can read
+  them; owners can move documents and folders to the Trash and restore them, and no
   agent can delete anything forever: only a person can, in the browser, with
   a code emailed to them. Shared HTTP/MCP handlers enforce these
   gates ([ADR 0017](adr/0017-agent-management-with-owner-permissions.md), [ADR 0024](adr/0024-deletion-goes-through-a-trash.md)).

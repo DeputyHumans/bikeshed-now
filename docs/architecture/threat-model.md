@@ -208,6 +208,14 @@ subfolder's documents answer to a rotated key until the cascade reaches them.
 A title under a public folder stays in `public/` after the folder's date passes,
 as a document's own does after its own date.
 
+### An editor shares a document by filing it
+
+Sharing is the owner's: `setAccess` and the share dialog refuse anyone else. But filing is sharing (SPEC §13): a document filed in a folder is readable by that folder's members, and its link and public level reach it. Until 0.32.0 any editor could move a document, and any folder editor could move a folder, so an editor could file the owner's private document into a folder of their own, share that folder with anyone or make it public, and became an approver of the document besides, since a folder's owner is an approver of what is in it.
+
+**Mitigation.** Moving a document is its owner's, and moving a folder is the folder's owner's, in `POST /organize`, `move_document` and `move_folder` alike, and the menus say so. Editors keep renaming, and filing their own documents into folders they may edit.
+
+**Residual, accepted.** A document filed by its owner into somebody else's folder is shared on that folder's terms, which its owner can change later: that is "filing is sharing" as the owner chose it (see "A folder's link is used to write" below).
+
 ### A client forges provenance
 
 An automation could otherwise claim to be a human, or a human could claim to be

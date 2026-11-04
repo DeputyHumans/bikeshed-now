@@ -155,6 +155,9 @@ function row(text) {
  * the one action that lifts the date (§17) — so O-exp gets 200 and E-exp gets the
  * 403 any member gets; c10 is an edit path that checks expiry, 409.
  *
+ * c14 is the owner's alone since 0.32.0: moving a document changes who can
+ * read it, so an editor or approver gets the 403 sharing gives them (SPEC §13).
+ *
  * E-exp×c15 is pinned as the source answers it, 403: refusal() decides by
  * canRead, which ignores expiry. §1.4b read literally ("403 only to a caller
  * who may READ") would say 404 to an editor who may no longer read, but §17
@@ -166,8 +169,8 @@ const MATRIX = Object.freeze({
   O: row("     200 200 404 200 200 200 200 200 200 200 200 200  200  200  200  200"),
   V: row("     200 200 404 200 200 403 403 403 403 403 403 403  403  403  403  403"),
   S: row("     200 200 404 200 200 403 403 403 403 403 403 403  403  403  403  403"),
-  E: row("     200 200 404 200 200 200 200 200 200 200 200 403  403  403  403  200"),
-  A: row("     200 200 404 200 200 200 200 200 200 200 200 403  403  403  403  200"),
+  E: row("     200 200 404 200 200 200 200 200 200 200 403 403  403  403  403  200"),
+  A: row("     200 200 404 200 200 200 200 200 200 200 403 403  403  403  403  200"),
   X: row("     404 404 404 404 404 404 404 404 404 404 404 404  404  404  404  404"),
   AN: row("    404 404 404 404 401 401 401 401 401 401 401 401  401  401  401  401"),
   LK: row("    200 200 200 200 401 401 401 401 401 401 401 401  401  401  401  401"),
@@ -764,7 +767,7 @@ const CANNOT_EDIT = "you cannot edit that document";
 const CANNOT_EDIT_BUT_SUGGEST = "you cannot edit that document, but you can suggest an edit to it with suggest_edit; its owner or an approver accepts or rejects it";
 const CANNOT_COMMIT = "you cannot publish that document's draft";
 const CANNOT_RENAME = "you cannot rename that document";
-const CANNOT_MOVE = "you cannot move that document";
+const CANNOT_MOVE = "only its owner can move that document: moving it changes who can read it";
 const CANNOT_SUGGEST = "you cannot suggest edits to that document";
 const NOT_APPROVER = "only the owner or an approver can accept or reject a suggestion";
 const absentMsg = (id) => `no document with id "${id}"`;
@@ -805,7 +808,7 @@ scenario("A2.mcp-roles a viewer, suggester, editor, stranger, grant holder and o
     ["update_document", CANNOT_EDIT_BUT_SUGGEST], ["commit_draft", CANNOT_COMMIT], ["rename_document", CANNOT_RENAME], ["move_document", CANNOT_MOVE],
     ["accept_suggestion", NOT_APPROVER], ["reject_suggestion", NOT_APPROVER],
   ], bad, log);
-  await probeTools(eM, "editor", d.id, [["accept_suggestion", NOT_APPROVER], ["reject_suggestion", NOT_APPROVER]], bad, log);
+  await probeTools(eM, "editor", d.id, [["accept_suggestion", NOT_APPROVER], ["reject_suggestion", NOT_APPROVER], ["move_document", CANNOT_MOVE]], bad, log);
 
   ctx.step("the stranger gets, from every tool, exactly what an absent id gets");
   const strangerTools = ["get_document", "fork_document", "get_lineage", "update_document", "commit_draft", "rename_document", "move_document",

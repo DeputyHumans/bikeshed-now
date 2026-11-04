@@ -1332,8 +1332,8 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "move_document",
     description:
-      "Move a document into a folder. OMIT `folder` to move it out to the workspace root. " +
-      "Moving it changes who can read it, and the result says who can now (`access`).",
+      "Move a document you own into a folder. OMIT `folder` to move it out to the workspace root. " +
+      "Moving it changes who can read it, so only its owner may, and the result says who can now (`access`).",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -1348,12 +1348,13 @@ export const TOOLS: ToolDefinition[] = [
     },
     async run(ctx, args) {
       const { ref, data } = await loadDoc(ctx, str(args, "id"));
-      // Moving a document changes who inherits access to it: the destination
-      // folder's members become its members. So it takes the REAL editor set,
-      // not open editing — otherwise any account could file someone's
-      // open-editing document into its own folder and become a member.
-      if (!isDocEditor(data, ctx.caller.uid, ctx.caller.emailLower)) {
-        throw new Error("you cannot move that document");
+      // Moving a document changes who can read it: the destination folder's
+      // members become its members, and its link and public level reach it.
+      // So it is the owner's, as sharing is: an editor who could file the
+      // owner's document into their own folder could then share or publish
+      // that folder (SPEC §13, §19).
+      if (!canManageSharing(data, ctx.caller.emailLower)) {
+        throw new Error("only its owner can move that document: moving it changes who can read it");
       }
       refuseIfFrozen(data);
 

@@ -205,6 +205,15 @@ describe("a document's way to the Trash", () => {
     const item = screen.getByRole("menuitem", { name: "Move to Trash" }) as HTMLButtonElement;
     expect([item.disabled, item.title]).toEqual([true, "Only ana@example.com can move this to the Trash."]);
   });
+
+  it("Move… is the owner's too, because moving a document changes who can read it", () => {
+    mount();
+    act(() => listeners.folders!([]));
+    act(() => listeners.docs!([docMeta()]));
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    const item = screen.getByRole("menuitem", { name: "Move…" }) as HTMLButtonElement;
+    expect([item.disabled, item.title]).toEqual([true, "Only ana@example.com can move this: moving it changes who can read it."]);
+  });
 });
 
 describe("forking from the workspace", () => {
@@ -435,6 +444,9 @@ describe("the open folder's own actions", () => {
     const share = screen.getByRole("menuitem", { name: "Share…" }) as HTMLButtonElement;
     expect(share.disabled).toBe(true);
     expect(share.title).toBe("Only dana@example.com can change sharing.");
+    // Moving it is sharing everything in it with its new parent's readers.
+    const move = screen.getByRole("menuitem", { name: "Move…" }) as HTMLButtonElement;
+    expect([move.disabled, move.title]).toEqual([true, "Only dana@example.com can move this folder: moving it changes who can read everything in it."]);
   });
 
   it("goes up a level when the folder being looked at goes to the Trash, rather than stay on one only its owner can see", () => {

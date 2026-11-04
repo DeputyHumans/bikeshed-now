@@ -118,8 +118,9 @@ bikeshed move-folder folder-id root
 
 Over MCP: `rename_folder` takes `id` and `name`; `move_folder` takes `id`
 and an optional `parent` (omit for root).
-Rename and move require edit rights, and moving also requires edit rights on
-the destination. Cycles are refused. Moves recompute inherited access throughout
+Renaming requires edit rights. Moving a folder, or a document, requires being
+its owner, because moving changes who can read it, and edit rights on the
+destination. Cycles are refused. Moves recompute inherited access throughout
 the subtree and send no invitations.
 
 ## The Trash

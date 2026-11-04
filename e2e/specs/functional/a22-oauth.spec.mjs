@@ -359,7 +359,7 @@ scenario("A22.2 connect: DCR gives a bsdcr_ id; /connect opened signed out strip
       "Accept or reject suggested edits where you can, and save them as a new version", "Create folders and file documents in them",
       "Manage sharing on documents and folders you own, sending invitations to new readers",
       "Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own",
-      "Rename and move folders you can edit", "Move documents and folders you own to the Trash, and restore them",
+      "Rename folders you can edit, and move documents and folders you own", "Move documents and folders you own to the Trash, and restore them",
     ], "consent discloses every allowed capability");
     assert.deepEqual(await card.locator(".connect-list-not li").allTextContents(), [
       "Delete anything permanently, or manage teams", "Trust document scripts or act with permissions you do not have",

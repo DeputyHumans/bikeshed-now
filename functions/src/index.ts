@@ -1031,6 +1031,10 @@ export const trustDoc = onRequest(PLAIN, async (req, res) => {
   res.status(200).json({ trusted });
 });
 
+/** Why only an owner may move a document or folder: it changes who can read it. */
+const MOVE_IS_SHARING =
+  "Only its owner can move this: moving it into or out of a folder changes who can read it.";
+
 /** What a token is told when it tries to lift the sandbox: restoring it is still allowed. */
 const TRUST_FROM_BROWSER_ONLY =
   "Running a document's code for everyone is decided in the browser, by one of this deployment's administrators. A token, an agent's included, can sandbox a document again but never lift it.";
@@ -1862,7 +1866,7 @@ export const organize = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const { uid, emailLower } = caller;
+  const { emailLower } = caller;
 
   if (kind === "doc") {
     const ref = db().collection("docs").doc(id);
@@ -1902,13 +1906,14 @@ export const organize = onRequest(PLAIN, async (req, res) => {
       return;
     }
 
-    // Moving is NOT editing. Filing a document into a folder makes that folder's
-    // members the document's members, so open editing — which lets any account
-    // edit — would let any account move someone's document into its own folder
-    // and become a member: member list, reading statistics, link token. Only
-    // the real editor set may move (SPEC §19).
-    if (!isDocEditor(data, uid, emailLower)) {
-      res.status(403).end();
+    // Moving is SHARING, not editing. Filing a document into a folder makes
+    // that folder's members its members, and its link and public level reach
+    // it, so whoever may move a document decides who may read it. That is the
+    // owner's alone, as setAccess is: an editor who could file the owner's
+    // private document into their own folder could then share or publish that
+    // folder, and became an approver of it besides (SPEC §13, §19).
+    if (!canManageSharing(data, emailLower)) {
+      res.status(403).json({ error: MOVE_IS_SHARING });
       return;
     }
     const target = await resolveFolderTarget(db(), body?.targetFolderId, caller);

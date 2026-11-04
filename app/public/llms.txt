@@ -155,7 +155,7 @@ somebody might commit.
 | `list_folders` | Every folder you can see, each with its full path and how many people can read it |
 | `get_folder` | Who can read one folder, by email, the teams it is shared with, and any link or public level that opens it further (`throughFolders`). With `k`, a folder shared with you by link lists what it holds |
 | `create_folder` | Create one, optionally inside another |
-| `move_document` | File a document into a folder, or back out to the root; says who can read it now |
+| `move_document` | File a document you own into a folder, or back out to the root; says who can read it now |
 | `rename_document` | Change a document's title; its address stays |
 | `get_comments` | Unresolved feedback, oldest first, each with its anchored quote and whether a person awaits a reply; `version` reads an earlier version's |
 | `get_changes` | What happened since a cursor: comments, threads, suggestions, versions, and changes to the document itself. `since` is required |

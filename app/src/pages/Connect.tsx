@@ -222,7 +222,7 @@ function Ready({
             <li>Create folders and file documents in them</li>
             <li>Manage sharing on documents and folders you own, sending invitations to new readers</li>
             <li>Change visibility, open editing and expiry on documents you own, and visibility and expiry on folders you own</li>
-            <li>Rename and move folders you can edit</li>
+            <li>Rename folders you can edit, and move documents and folders you own</li>
             <li>Move documents and folders you own to the Trash, and restore them</li>
           </ul>
         </div>

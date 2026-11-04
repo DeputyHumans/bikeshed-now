@@ -23,6 +23,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - **Trust never carries into a new version, the owner's own commit included.** The owner's commit in the app kept both trust scopes, but a draft is shared: an editor, or any account on a public document open to editing, could put a `<script>` in it through `/draft` or the live merge, and the owner's commit then ran it in every trusting reader's session. Every new version now withdraws both scopes. A trusted interactive document has to be trusted again after each edit (SPEC §6c).
 - **A token can no longer lift a document's sandbox for everyone.** `POST /trust` accepted a superadmin's personal access token, so an agent acting on text it was given could run a document's code for every reader. Lifting it now takes the browser's session, as deleting forever does; a token may still put the sandbox back (SPEC §2, §6c).
 - **Verification codes are limited per address, not only per account.** Each account could ask for a new code every minute, each with five fresh guesses, so enough throwaway accounts could guess their way into an address that had documents shared with it before its owner signed up. An address is now sent at most five codes a day, whoever asks (SPEC §14).
+- **Only a document's owner can move it, and only a folder's owner can move the folder.** Moving into a folder shares a document with that folder's readers, and its link and public level reach it, but any editor could move a document and any folder editor could move a folder. So an editor could file the owner's private document into a folder of their own, share or publish that folder, and became an approver of the document besides. `POST /organize`, `move_document` and `move_folder` now take the owner, and the workspace menus disable Move for anyone else, saying why (SPEC §13, ADR 0017).
+
+### Breaking
+
+- **Editors can no longer move documents or folders they do not own**, through the browser, the CLI or an agent. They can still rename them. An agent's `move_document` or `move_folder` on someone else's item now fails with "only its owner can move…".
 
 ## 0.31.1 — 2026-11-03
 

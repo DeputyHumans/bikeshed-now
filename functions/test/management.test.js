@@ -108,16 +108,46 @@ test("owners recover expired documents and invalid patches cannot change setting
   assert.deepEqual({ read: read.expiresAt, errors, recovered: recovered.expiresAt }, { read: 1, errors: [400, 400, 400, 400, 400, 400], recovered: null });
 });
 
-test("folder editors rename and move, cycles and read-only destinations are refused", async () => {
-  const w = world({ "folders/readonly": owned({ editors: [], editorMembers: [owner] }) });
+test("folder editors rename; only the owner moves, and cycles and read-only destinations are refused", async () => {
+  // Moving a folder shares everything in it with its new parent's readers,
+  // so an editor who could move someone's folder under their own could then
+  // share or publish what is inside (SPEC §13).
+  const w = world({
+    "folders/readonly": owned({ editors: [], editorMembers: [owner] }),
+    "folders/editors-own": { ownerUid: "u-editor", ownerEmail: editor, ...emptyGrants(), ...computeMembership(editor, emptyGrants(), null, new Map()), name: "Mine", parentId: null },
+  });
   await recomputeSubtree(w.db, "parent");
   const renamed = await w.run("rename_folder", { id: "child", name: "  Reviews  " }, editor);
   const codes = [];
-  for (const [args, email] of [[{ id: "child", parent: "grandchild" }, editor], [{ id: "child", parent: "readonly" }, editor], [{ id: "child" }, viewer]]) {
+  for (const [args, email] of [
+    [{ id: "child", parent: "editors-own" }, editor],
+    [{ id: "child" }, editor],
+    [{ id: "child" }, viewer],
+    [{ id: "child", parent: "grandchild" }, owner],
+  ]) {
     try { await w.run("move_folder", args, email); codes.push("allowed"); } catch (e) { codes.push(e.status); }
   }
-  const moved = await w.run("move_folder", { id: "child" }, editor);
-  assert.deepEqual({ name: renamed.name, codes, parent: moved.parent, descendants: w.store.get("folders/grandchild").ancestors, mail: invitations.length }, { name: "Reviews", codes: [400, 403, 403], parent: null, descendants: ["child"], mail: 0 });
+  assert.equal(w.store.get("folders/child").parentId, "parent", "no refused move changed anything");
+  const moved = await w.run("move_folder", { id: "child" }, owner);
+  assert.deepEqual({ name: renamed.name, codes, parent: moved.parent, descendants: w.store.get("folders/grandchild").ancestors, mail: invitations.length }, { name: "Reviews", codes: [403, 403, 403, 400], parent: null, descendants: ["child"], mail: 0 });
+});
+
+test("only a document's owner moves it: an editor cannot file it into their own folder", async () => {
+  const w = world({
+    "folders/editors-own": { ownerUid: "u-editor", ownerEmail: editor, ...emptyGrants(), ...computeMembership(editor, emptyGrants(), null, new Map()), name: "Mine", parentId: null, visibility: "public" },
+  });
+  await assert.rejects(w.run("move_document", { id: "doc", folder: "editors-own" }, editor), /only its owner can move/);
+  await assert.rejects(w.run("move_document", { id: "doc" }, editor), /only its owner can move/);
+  assert.equal(w.store.get("docs/doc").folderId, "child", "the document stays where its owner filed it");
+  const moved = await w.run("move_document", { id: "doc" }, owner);
+  assert.equal(w.store.get("docs/doc").folderId ?? null, null, `the owner may: ${JSON.stringify(moved)}`);
+
+  // And through HTTP, which the browser uses.
+  const sessions = { editor: { uid: "u-editor", email: editor, email_verified: true } };
+  const r = await withFakeAdmin({ db: w.db, sessions }, () => invoke(http.organize, { headers: { cookie: "__session=editor" }, body: { kind: "doc", id: "doc", op: "move", targetFolderId: "editors-own" } }));
+  assert.equal(r.status, 403);
+  assert.match(r.body.error, /Only its owner can move this/);
+  assert.equal(w.store.get("docs/doc").folderId ?? null, null);
 });
 
 test("HTTP preserves full-form settings and access response contracts through shared handlers", async () => {
