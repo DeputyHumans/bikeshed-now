@@ -555,8 +555,8 @@ test("the domains are read as an operator writes them", () => {
   const { idJagDomains } = require("../lib/config.js");
   const saved = process.env.BIKESHED_ID_JAG_DOMAINS;
   try {
-    process.env.BIKESHED_ID_JAG_DOMAINS = "dassui.ai,deputyhumans.com";
-    assert.deepEqual(idJagDomains(), ["dassui.ai", "deputyhumans.com"]);
+    process.env.BIKESHED_ID_JAG_DOMAINS = "example.net,sub.example.org";
+    assert.deepEqual(idJagDomains(), ["example.net", "sub.example.org"]);
     process.env.BIKESHED_ID_JAG_DOMAINS = " @Example.COM, ,example.org  example.com localhost a@b.c";
     assert.deepEqual(idJagDomains(), ["example.com", "example.org"]);
   } finally {
