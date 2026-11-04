@@ -1449,8 +1449,9 @@ scenario("A17.5 marking is the owner's alone: POST /marking is 200 for the owner
   }, { timeout: 60_000, message: "users/{uid}.defaultMarking is the suggested marking" });
 
   ctx.step("the workspace's Upload dialog starts with Stamp exports checked, and the uploaded document carries the default");
-  await o.goto("/");
-  await o.waitShown(workspaceCard(o, docId), { what: `the workspace's card of ${docId}`, path: "/", timeout: PAGE_MS });
+  // Everything, where the cards are: "/" is Recent, in rows (SPEC §13).
+  await o.goto("/everything");
+  await o.waitShown(workspaceCard(o, docId), { what: `the workspace's card of ${docId}`, path: "/everything", timeout: PAGE_MS });
   // The dialog seeds its box once, at mount, from the account record the
   // workspace listens to, and nothing on the page says when that record has
   // arrived (an early open stays unchecked: X-a17-export-6, A17.5c). So the
@@ -1647,7 +1648,7 @@ scenario("A17.5c an Upload dialog opened before the workspace has the account re
   let records = [];
   let opened = null;
   try {
-    await o.goto("/");
+    await o.goto("/everything");
     await o.page.locator(".workspace-toolbar").getByRole("button", { name: "Upload", exact: true }).click();
     await dlg.waitFor({ state: "visible", timeout: 10_000 });
     held = gate.heldAt.length;

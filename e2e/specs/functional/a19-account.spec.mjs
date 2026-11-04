@@ -203,7 +203,8 @@ const readConsent = (u) => u.page.evaluate((k) => localStorage.getItem(k), CONSE
 
 /** Upload a document through the workspace's Upload dialog; returns {docId, boxChecked}. */
 async function uploadThroughDialog(u, ownerEmail, { name, title, anchor }) {
-  await u.goto("/");
+  // Everything, where the cards are: "/" is Recent, in rows (SPEC §13).
+  await u.goto("/everything");
   // The dialog seeds its box from the account record when it MOUNTS, so open
   // it at a person's pace: once the workspace lists a document of this owner
   // (the same Firestore stream carries the account record).

@@ -663,7 +663,7 @@ async function settledUrl(u, { timeout = 20_000, calls = null } = {}) {
   const sample = async () => {
     const url = u.page.url();
     const rendered = await u.page
-      .evaluate(() => !!document.querySelector(".app-shell main, .app-shell .landing, .app-shell .viewer-body, .app-shell .doc-grid, .app-shell .empty-state") && !document.querySelector("#auth-password") && !document.querySelector(".app-shell .spinner"))
+      .evaluate(() => !!document.querySelector(".app-shell main, .app-shell .landing, .app-shell .viewer-body, .app-shell .doc-grid, .app-shell .doc-table, .app-shell .empty-state") && !document.querySelector("#auth-password") && !document.querySelector(".app-shell .spinner"))
       .catch(() => false);
     return { url, rendered };
   };
@@ -747,7 +747,8 @@ scenario("A1.7 next= is honoured only as a path on this origin: https://evil.exa
 
 /**
  * Init script: from the first document on, every time an `.empty-state` panel,
- * a loading skeleton or a real document card is inserted at `/`. React mounts a render's subtree
+ * a loading skeleton or a real document card or row is inserted at `/`, which
+ * is Recent, in rows unless this browser chose cards (SPEC §13). React mounts a render's subtree
  * in one insertion, so an added node that is or holds the selector is one
  * render showing it.
  */
@@ -764,9 +765,10 @@ function workspaceObserver() {
       seen.states.push({ t: Date.now(), waiting: !!el.querySelector(".spinner"), text: el.textContent.trim().slice(0, 120) });
       if (!el.querySelector(".spinner")) seen.empty.push({ t: Date.now(), text: el.textContent.trim().slice(0, 120) });
     }
-    // The loading skeletons are `.doc-card`s too; a real card has a title link.
+    // The loading skeletons are `.doc-card`s and `.doc-row`s too; a real one
+    // has a title link.
     if (hit(".skeleton")) seen.skeletons += 1;
-    if (hit(".doc-card-title")) seen.cards.push({ t: Date.now(), titles: Array.from(document.querySelectorAll(".doc-card .doc-card-title"), (e) => e.textContent.trim()) });
+    if (hit(".doc-card-title, .doc-row-title")) seen.cards.push({ t: Date.now(), titles: Array.from(document.querySelectorAll(".doc-card .doc-card-title, .doc-row .doc-row-title"), (e) => e.textContent.trim()) });
   };
   new MutationObserver((ms) => {
     for (const m of ms) for (const n of m.addedNodes) scan(n);
@@ -819,9 +821,9 @@ scenario("A1.8 a document shared before sign-up is listed on the workspace's fir
   const done = await confirmCodeUi(u, codeOf(codes.messages[0].Subject));
   assert.deepEqual({ complete: done.complete.body, session: done.session.body }, { complete: { verified: true, email: invitee }, session: { status: "ok" } }, "verified, then signed in");
 
-  ctx.step("the workspace at / lists the shared document, and its empty state was never rendered");
+  ctx.step("Recent, at /, lists the shared document, and its empty state was never rendered");
   await u.poll(() => new URL(u.page.url()).pathname === "/", { timeout: ANSWER_MS, what: "landing on /" });
-  await u.page.locator(".doc-card .doc-card-title", { hasText: title }).waitFor({ state: "visible", timeout: ANSWER_MS });
+  await u.page.locator(".doc-card .doc-card-title, .doc-row .doc-row-title", { hasText: title }).waitFor({ state: "visible", timeout: ANSWER_MS });
   const seen = await u.page.evaluate(() => window.__a01Seen);
   precondition(seen, "the workspace observer was not installed");
   ctx.ev.json("workspace-renders", seen);
@@ -909,7 +911,7 @@ async function slowWorkspaceInitialListen(ctx, ownerOnly) {
   holds.set(ctx, hold);
   try {
     await u.signInUi(account.email, account.password, { timeout: ANSWER_MS });
-    await u.page.locator(".doc-card .doc-card-title", { hasText: title }).waitFor({ state: "visible", timeout: ANSWER_MS });
+    await u.page.locator(".doc-card .doc-card-title, .doc-row .doc-row-title", { hasText: title }).waitFor({ state: "visible", timeout: ANSWER_MS });
   } finally {
     await hold.restore();
   }
@@ -923,8 +925,8 @@ async function slowWorkspaceInitialListen(ctx, ownerOnly) {
   if (!offline) ctx.inconclusive(`holding the Listen channel ${LISTEN_HOLD_MS} ms did not take the page's Firestore client offline: the path under test never ran`);
   ctx.step(`${held.length} Listen POST(s) held (${JSON.stringify(held.map((h) => h.heldMs))} ms); the SDK went offline ${offline.t - held[0].t} ms after the first; empty states at ${JSON.stringify(seen.empty.map((e) => e.t - offline.t))} ms and the first card at ${seen.cards[0] ? seen.cards[0].t - offline.t : null} ms from then`);
   await ctx.oracle(() => assert.deepEqual(seen.empty, [], ownerOnly
-    ? "the workspace told its owner \"Nothing here yet\" from its offline cache before listing their existing document"
-    : "the workspace told the invitee \"Nothing here yet\" from its offline cache before listing the document shared with them"));
+    ? "the workspace told its owner it was empty from its offline cache before listing their existing document"
+    : "the workspace told the invitee it was empty from its offline cache before listing the document shared with them"));
 }
 
 scenario("A1.8b a document shared before sign-in is listed even when the backend takes over 10 s to answer the workspace's first listen: the empty state never appears", {

@@ -36,6 +36,12 @@
  *          reload; an expired document gets its cover from its owner's
  *          workspace only, and stays a placeholder for its editor
  *
+ *   A14.9  Recent, at /, merges the reader's own reads with new versions,
+ *          newest first, says why each is there, marks a version published
+ *          after their read, and filters, keeping its filters over a reload;
+ *          Shared with me lists every document someone else owns, one in a
+ *          folder the reader cannot open included; the rail marks each page
+ *
  *   A14.7/8 new versions from card actions and document-frame drops; 7b/8b
  *          exercise pending, accepted, expired, revoked and active-editor
  *          refusals, preserving the selected file, draft and published bytes
@@ -360,9 +366,15 @@ async function uploadOk(u, ownerEmail, opts) {
   return { docId, json: r.json };
 }
 
-/** Back to the workspace root (or a folder), with its cards drawn. */
+/**
+ * The workspace's top, Everything. "/" is Recent (SPEC §13), so every sign-in
+ * here asks to land on Everything, the page this spec is about.
+ */
+const EVERYTHING = "/everything";
+
+/** Back to Everything (or a folder), with its cards drawn. */
 async function gotoWorkspace(u, folderId = null) {
-  await u.goto(folderId ? `/folder/${folderId}` : "/");
+  await u.goto(folderId ? `/folder/${folderId}` : EVERYTHING);
   await u.page.locator(".workspace-toolbar").waitFor({ timeout: PAGE_LOAD_MS });
   await u.page.locator(".skeleton").first().waitFor({ state: "detached", timeout: PAGE_LOAD_MS });
 }
@@ -417,7 +429,7 @@ scenario("A14.1 the workspace lists Recently updated first (by the current versi
 
   ctx.step("the owner signs in; the sort control reads Recently updated, and the cards are Charlie, Bravo, Alpha (updatedAt desc), distinct from title and creation order");
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(O.account.email, O.account.password);
+  await u.signInUi(O.account.email, O.account.password, { next: EVERYTHING });
   await waitDocCards(u.page, Object.values(ids));
   const sort = u.page.locator("#workspace-sort");
   assert.deepEqual(
@@ -564,7 +576,7 @@ scenario("A14.2 a folder made with the Folder button, and one made inside it, de
 
   ctx.step("the owner signs in and makes a folder with the toolbar's Folder button");
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(O.account.email, O.account.password);
+  await u.signInUi(O.account.email, O.account.password, { next: EVERYTHING });
   await waitDocCards(u.page, [rootDoc.docId]);
   const outerId = await newFolderUi(u, outer);
   await u.page.locator(`a.doc-card-title[href="/folder/${outerId}"]`).waitFor({ timeout: 90_000 });
@@ -599,7 +611,7 @@ scenario("A14.2 a folder made with the Folder button, and one made inside it, de
     if (b.current !== inner) throw new Error(`breadcrumb ${JSON.stringify(b)}`);
     return b;
   }, { timeout: 90_000, message: "the breadcrumb names the inner folder after the reload" });
-  assert.deepEqual(afterReload, { crumbs: ["Everything", outer, inner], current: inner, links: ["/", `/folder/${outerId}`] }, "the breadcrumb after the reload");
+  assert.deepEqual(afterReload, { crumbs: ["Everything", outer, inner], current: inner, links: [EVERYTHING, `/folder/${outerId}`] }, "the breadcrumb after the reload");
   const railAfter = await rail(u.page);
   assert.equal(railAfter.current, inner, "the rail marks the inner folder current");
   assert.ok(railAfter.names.includes(outer) && railAfter.names.includes(inner), `the rail is open down to the inner folder: ${JSON.stringify(railAfter.names)}`);
@@ -609,10 +621,10 @@ scenario("A14.2 a folder made with the Folder button, and one made inside it, de
   await u.goto(`/folder/${outerId}`);
   await waitDocCards(u.page, [filed.docId], { what: "the outer folder, deep-linked" });
   assert.deepEqual(await folderOrder(u.page), [innerId]);
-  assert.deepEqual(await breadcrumb(u.page), { crumbs: ["Everything", outer], current: outer, links: ["/"] });
+  assert.deepEqual(await breadcrumb(u.page), { crumbs: ["Everything", outer], current: outer, links: [EVERYTHING] });
 
   ctx.step("and the root shows the root's document and the outer folder, not what is filed");
-  await u.goto("/");
+  await u.goto(EVERYTHING);
   await waitDocCards(u.page, [rootDoc.docId], { what: "the root" });
   assert.deepEqual(await folderOrder(u.page), [outerId]);
   noPageErrors([u]);
@@ -705,7 +717,7 @@ scenario("A14.3 upload dialog: only the listed types, an invalid id is a 400 tha
   ctx.step("the dialog: its file input accepts exactly the listed types, and choosing a .txt is refused with the hint and leaves Upload disabled");
   const uEmail = U.account.email;
   const u = await ctx.users.user({ name: "uploader" });
-  await u.signInUi(uEmail, U.account.password);
+  await u.signInUi(uEmail, U.account.password, { next: EVERYTHING });
   await u.page.locator(".workspace-toolbar").waitFor({ timeout: PAGE_LOAD_MS });
   const watch = watchRequests(u.page);
   await u.page.locator(".workspace-toolbar").getByRole("button", { name: "Upload", exact: true }).click();
@@ -782,7 +794,7 @@ scenario("A14.3b unchecking an account-default export stamp publishes an explici
   await writeUser(target, account.uid, { uid: account.uid, email: account.email, defaultMarking: marking });
   await openSession(target, account, { timeoutMs: REQUEST_MS, cutoffError: true });
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(account.email, account.password);
+  await u.signInUi(account.email, account.password, { next: EVERYTHING });
   await u.page.getByRole("button", { name: "Upload", exact: true }).click();
   const dlg = u.page.getByRole("dialog", { name: "Upload a document" });
   await dlg.locator("#upload-marking").waitFor();
@@ -825,7 +837,7 @@ scenario("A14.4 drag and drop behaves as the dialog: the same types, one upload 
 
   ctx.step("the owner signs in and turns on Stamp new documents by default on the Account page");
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(email, O.account.password);
+  await u.signInUi(email, O.account.password, { next: EVERYTHING });
   const marking = await defaultMarkingOn(u, O.account.uid);
   await gotoWorkspace(u);
   await waitDocCards(u.page, [seed.docId]);
@@ -930,7 +942,7 @@ scenario("A14.4b a dropped file is titled, and so addressed, as the dialog title
   const mdTitle = `Release notes ${tag}`;
 
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(email, O.account.password);
+  await u.signInUi(email, O.account.password, { next: EVERYTHING });
   await u.page.locator(".empty-state h2", { hasText: "Nothing here yet" }).waitFor({ timeout: PAGE_LOAD_MS });
 
   ctx.step(`drop q3-${tag}.html (<title>${htmlTitle}</title>) and notes-${tag}.md (# ${mdTitle}) on the workspace`);
@@ -968,7 +980,7 @@ scenario("A14.5 actions menus: Rename keeps the docId; Move to Trash is the owne
 
   ctx.step("the owner signs in; Rename… prompts with the current title; the new title shows on the same card");
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(email, O.account.password);
+  await u.signInUi(email, O.account.password, { next: EVERYTHING });
   await waitDocCards(u.page, [docId]);
   const renamed = `Renamed doc ${tag}`;
   let menu = await openActions(u.page, docCard(u.page, docId), title);
@@ -1128,7 +1140,7 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
 
   ctx.step("the owner moves the document into the shared folder from its menu");
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(email, O.account.password);
+  await u.signInUi(email, O.account.password, { next: EVERYTHING });
   await waitDocCards(u.page, [docId]);
   assert.equal(await moveUi(u, docCard(u.page, docId), title, fName), 200, "POST /organize move in");
   const inside = await readDoc(target, `docs/${docId}`);
@@ -1148,7 +1160,7 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
 
   ctx.step("the reader's workspace shows the folder, whose Move to Trash is disabled with its reason; their POST /organize trash, and the older delete, are 403");
   const v = await ctx.users.user({ name: "viewer" });
-  await v.signInUi(vEmail, V.account.password);
+  await v.signInUi(vEmail, V.account.password, { next: EVERYTHING });
   await v.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
   const vMenu = await openActions(v.page, folderCard(v.page, F), fName);
   const vTrash = vMenu.getByRole("menuitem", { name: TRASH_LABEL });
@@ -1256,7 +1268,7 @@ scenario("A14.6 cover backfill: one cover POST per card that lacks one, none for
   ctx.step("the editor's workspace: their backfill covers the control document, and sends nothing for the expired one, whose card stays a placeholder");
   const e = await ctx.users.user({ name: "editor" });
   const eWatch = watchRequests(e.page);
-  await e.signInUi(E.account.email, E.account.password);
+  await e.signInUi(E.account.email, E.account.password, { next: EVERYTHING });
   await waitDocCards(e.page, [docs.expired, docs.control], { what: "the editor's workspace" });
   await coverStored(docs.control, "the editor's backfill stored the control's cover");
   await sleep(BACKFILL_SETTLE_MS);
@@ -1269,7 +1281,7 @@ scenario("A14.6 cover backfill: one cover POST per card that lacks one, none for
   ctx.step("the owner's workspace: exactly one cover POST for each card without one (the expired document's included), none for the trusted scripted deck, the covered control or the filed document");
   const o = await ctx.users.user({ name: "owner" });
   const oWatch = watchRequests(o.page);
-  await o.signInUi(email, O.account.password);
+  await o.signInUi(email, O.account.password, { next: EVERYTHING });
   const rootIds = [docs.plain1, docs.plain2, docs.deckUntrusted, docs.deckTrusted, docs.expired, docs.control];
   await waitDocCards(o.page, rootIds, { what: "the owner's workspace" });
   const owed = ["plain1", "plain2", "deckUntrusted", "expired"];
@@ -1355,7 +1367,7 @@ scenario("A14.7 Upload a new version from the workspace preserves the address, e
   const title = `Revision ${tagFor()}`;
   const doc = await publish(O.http, { body: pageHtml({ title, heading: "Original" }), filename: "index.html", title, name: "a14-7" });
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(O.account.email, O.account.password);
+  await u.signInUi(O.account.email, O.account.password, { next: EVERYTHING });
   await waitDocCards(u.page, [doc.docId]);
   const next = file("revision.html", pageHtml({ title: "Authored next title", heading: "Revised body" }), "text/html");
 
@@ -1411,7 +1423,7 @@ scenario("A14.8 dropping a file onto an open document offers a confirmed revisio
   const title = `Drop revision ${tagFor()}`;
   const doc = await publish(O.http, { body: pageHtml({ title, heading: "Original drop target" }), filename: "index.html", title, name: "a14-8" });
   const u = await ctx.users.user({ name: "owner" });
-  await u.signInUi(O.account.email, O.account.password);
+  await u.signInUi(O.account.email, O.account.password, { next: EVERYTHING });
   await u.goto(`/d/${doc.docId}`);
   await u.page.locator("iframe.doc-frame").waitFor({ state: "attached", timeout: PAGE_LOAD_MS });
   const frame = await u.frame();
@@ -1503,8 +1515,8 @@ async function revisionRefusals(ctx, entrance) {
   const { owner: O, editor: E } = await sessions(["owner", "editor"]);
   const u = await ctx.users.user({ name: `revision-${entrance}-owner` });
   const e = await ctx.users.user({ name: `revision-${entrance}-editor` });
-  await u.signInUi(O.account.email, O.account.password);
-  await e.signInUi(E.account.email, E.account.password);
+  await u.signInUi(O.account.email, O.account.password, { next: EVERYTHING });
+  await e.signInUi(E.account.email, E.account.password, { next: EVERYTHING });
   const next = file("replacement.html", pageHtml({ heading: "Replacement that must not publish" }), "text/html");
 
   for (const reason of ["pending", "accepted", "expired", "revoked", "editing"]) {
@@ -1572,7 +1584,7 @@ async function revisionRefusals(ctx, entrance) {
     assert.deepEqual(await revisionRefusalState(doc.docId), before, `${entrance} ${reason}: a refused revision changes no head, version, draft or stored bytes`);
     await dlg.getByRole("button", { name: "Cancel", exact: true }).click();
     await dlg.waitFor({ state: "detached" });
-    if (reason === "editing") await e.goto("/");
+    if (reason === "editing") await e.goto(EVERYTHING);
   }
   noPageErrors([u, e]);
 }
@@ -1584,3 +1596,87 @@ scenario("A14.7b workspace revision refusals preserve bytes and explain pending 
 scenario("A14.8b dropped revision refusals preserve bytes and explain pending suggestions, accepted drafts, expiry, revoked editing and active editors", {
   tiers: ["local"], effects: ["email:POST /access", "email:POST /suggestion"], needs: ["rtdb-rules"], timeoutMs: 720_000, inconclusiveOnCaseTimeout: true,
 }, async (ctx) => revisionRefusals(ctx, "drop"));
+
+// --- A14.9 ----------------------------------------------------------------------
+
+scenario("A14.9 Recent, at /, lists what the reader read and what got a new version, newest first, says why, marks a version published after their read, and keeps its filters over a reload; Shared with me lists every document someone else owns, one in a folder the reader cannot open included; the rail marks each page", { tiers: BOTH, effects: ["email:POST /access"], timeoutMs: 420_000, inconclusiveOnCaseTimeout: true }, async (ctx) => {
+  const { owner: O, viewer: V } = await sessions(["owner", "viewer"]);
+  const tag = tagFor();
+  const titles = { R: `Read ${tag}`, C: `Changed ${tag}`, H: `In a private folder ${tag}` };
+
+  ctx.step("the owner publishes two documents at the top and one in a folder of their own, and shares each document, never the folder, with the viewer");
+  const folderId = await createFolderAs(O, `Private ${tag}`);
+  const ids = {};
+  for (const k of ["R", "C", "H"]) {
+    const up = await publish(O.http, { body: pageHtml({ title: titles[k], heading: titles[k] }), filename: "index.html", title: titles[k], name: `a14-9-${k}`, ...(k === "H" ? { folderId } : {}) });
+    ids[k] = up.docId;
+    await share(target, { owner: O, doc: up.docId, account: V.account, role: "viewer" });
+  }
+
+  ctx.step("the viewer reads Read, then Changed, each a counted read with its own row; then the owner publishes a second version of Changed");
+  for (const k of ["R", "C"]) {
+    const rec = await readDoc(target, `docs/${ids[k]}`);
+    const r = await V.http.postJson("/view", { docId: ids[k], versionId: rec.currentVersion, sessionId: `a14-9-${rand4()}-${rand4()}-${Date.now()}`, ms: 0 });
+    assert.equal(r.status, 200, `a counted read of ${k}`);
+    await eventually(async () => Boolean((await readDoc(target, `docs/${ids[k]}/viewers/${V.account.uid}`))?.lastViewedAt), { timeout: PAGE_LOAD_MS, message: `the viewer's own read row for ${k}` });
+    await sleep(1_100);
+  }
+  const v2 = await updateUpload(O.http, ids.C, { body: pageHtml({ title: titles.C, heading: `${titles.C} (second version)` }), baseVersion: "v1", expect: 200 });
+  assert.equal(v2.json?.versionId, "v2", `the update minted v2: ${JSON.stringify(v2.json)}`);
+  await eventually(async () => (await readDoc(target, `docs/${ids.C}`))?.latest?.version === "v2", { timeout: PAGE_LOAD_MS, message: "Changed's summary names v2" });
+
+  ctx.step("the viewer signs in and lands on Recent, in rows: Changed by its new version, marked; Read by their read; the folder's document by its version, newest first");
+  const u = await ctx.users.user({ name: "viewer" });
+  await u.signInUi(V.account.email, V.account.password);
+  await u.page.getByRole("heading", { level: 1, name: "Recent" }).waitFor({ timeout: PAGE_LOAD_MS });
+  const rowsOf = () => u.page.$$eval('[role="table"] [role="rowgroup"]:not(.doc-table-head) [role="row"]', (rows) =>
+    rows.map((r) => ({
+      id: decodeURIComponent((r.querySelector("a.doc-row-title")?.getAttribute("href") ?? "").slice(3)),
+      why: r.querySelector('[data-col="why"]')?.textContent?.trim() ?? "",
+      where: r.querySelector('[data-col="location"]')?.textContent?.trim() ?? "",
+    })));
+  const ours = async () => (await rowsOf()).filter((r) => Object.values(ids).includes(r.id));
+  const order = async (want, message) => {
+    await eventually(async () => JSON.stringify((await ours()).map((r) => r.id)) === JSON.stringify(want), { timeout: PAGE_LOAD_MS, message });
+  };
+  await order([ids.C, ids.R, ids.H], "Recent: the newest event first");
+  const [changed, read, hidden] = await ours();
+  assert.ok(changed.why.startsWith("New version") && changed.why.includes(O.account.email) && changed.why.endsWith("New since you read it"), `Changed says who published it and that it is new since the read: ${changed.why}`);
+  assert.ok(read.why.startsWith("You read it") && !read.why.includes("New since"), `Read says the reader read it: ${read.why}`);
+  assert.ok(hidden.why.startsWith("New version") && !hidden.why.includes("New since"), `the folder's document is there by its version, not marked: ${hidden.why}`);
+  assert.equal(hidden.where, "A folder you can't open", "the folder the viewer was not given is not named");
+
+  ctx.step("Opened by me leaves the two the viewer read, New since I read leaves Changed, and a reload keeps both");
+  const filter = (name) => u.page.getByRole("group", { name: "Show only" }).getByRole("button", { name, exact: true });
+  await filter("Opened by me").click();
+  await order([ids.C, ids.R], "Opened by me");
+  await filter("New since I read").click();
+  await order([ids.C], "Opened by me and New since I read");
+  await u.page.reload();
+  await u.page.getByRole("heading", { level: 1, name: "Recent" }).waitFor({ timeout: PAGE_LOAD_MS });
+  await order([ids.C], "the filters survive a reload");
+  assert.deepEqual([await filter("Opened by me").getAttribute("aria-pressed"), await filter("New since I read").getAttribute("aria-pressed")], ["true", "true"]);
+  await filter("Opened by me").click();
+  await filter("New since I read").click();
+  await order([ids.C, ids.R, ids.H], "both filters off again");
+
+  ctx.step("the rail marks Recent alone; Everything, at /everything, holds the two at the top and not the one in the folder the viewer cannot open");
+  const rail = u.page.getByRole("navigation", { name: "Folders" });
+  assert.deepEqual(await rail.locator('[aria-current="page"]').allTextContents(), ["Recent"], "the rail on Recent");
+  await rail.getByRole("button", { name: "Everything", exact: true }).click();
+  await u.page.waitForURL((url) => url.pathname === EVERYTHING, { timeout: PAGE_LOAD_MS });
+  await waitDocCards(u.page, [ids.R, ids.C], { what: "Everything" });
+  assert.deepEqual(await rail.locator('[aria-current="page"]').allTextContents(), ["Everything"], "the rail on Everything");
+
+  ctx.step("Shared with me, at /shared, lists all three in rows, each saying where it is filed");
+  await rail.getByRole("button", { name: "Shared with me", exact: true }).click();
+  await u.page.waitForURL((url) => url.pathname === "/shared", { timeout: PAGE_LOAD_MS });
+  await eventually(async () => (await ours()).length === 3, { timeout: PAGE_LOAD_MS, message: "Shared with me lists the three" });
+  assert.deepEqual(
+    Object.fromEntries((await ours()).map((r) => [r.id, r.where])),
+    { [ids.R]: "Everything", [ids.C]: "Everything", [ids.H]: "A folder you can't open" },
+    "where each is filed, by no name for the folder the viewer was not given",
+  );
+  assert.deepEqual(await rail.locator('[aria-current="page"]').allTextContents(), ["Shared with me"], "the rail on Shared with me");
+  noPageErrors([u]);
+});
