@@ -20,9 +20,11 @@ import { canManageSharing, type DocAclData } from "./acl";
  * Everything else is locked, a type nobody thought of included.
  *
  * This was once the other way round: a list of the scriptable types, five of
- * them. Browsers render ANY `+xml` type as an XML document, and an element in
- * the XHTML namespace runs there, so `.atom`, `.rss`, `.rdf`, `.xslt` and some
- * hundred more were served unlocked on this origin, as whoever opened them.
+ * them. But which other types a browser renders as an XML document, where an
+ * element in the XHTML namespace runs, is the browser's choice: WebKit, which
+ * is Safari and every browser on iOS, renders `.atom` and `.rss` that way, so
+ * those ran unlocked on this origin, as whoever opened them, and about a
+ * hundred more `+xml` types were one browser change from doing the same.
  * A list of the dangerous types has to be complete to be safe; a list of the
  * harmless ones only has to be right. A lock on a subresource (a script, a
  * stylesheet, a picture) is ignored, so locking too much costs nothing.

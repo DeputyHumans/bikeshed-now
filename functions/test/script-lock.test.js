@@ -48,10 +48,11 @@ test("every scriptable type is locked unless the run variant was asked for and g
 
 test("every type a file can be served as that a browser renders as HTML or XML is locked", () => {
   // The server types a file by its extension through mime-types, so its table
-  // is exactly what can reach a browser. Browsers render ANY +xml type as an
-  // XML document, where an element in the XHTML namespace runs: a list of five
-  // scriptable types once left .atom, .rss, .rdf, .xslt and a hundred more
-  // running on this origin.
+  // is exactly what can reach a browser. Which of these a browser renders as
+  // an XML document, where an element in the XHTML namespace runs, is its own
+  // choice: a list of five scriptable types once left .atom and .rss running
+  // on this origin in WebKit (Safari, every browser on iOS), and a hundred
+  // more +xml types one browser change from it.
   const { types } = require("mime-types");
   const documentLike = Object.entries(types).filter(([, type]) => /html|xml/.test(type));
   assert.ok(documentLike.length > 100, "the table is the whole table");
