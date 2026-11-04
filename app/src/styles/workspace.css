@@ -347,7 +347,6 @@
   color: var(--color-accent-strong);
   font-weight: 620;
 }
-.recent-filter[aria-pressed="true"]::before { content: "✓ "; }
 .recent-filter:disabled { opacity: 0.5; cursor: not-allowed; }
 .recent-note { font-size: var(--fs-caption); color: var(--color-ink-muted); }
 

@@ -214,7 +214,7 @@ export function DocRow({
         ) : null}
         <ExpiryChip expiresAt={doc.expiresAt} onOpen={onShare} />
       </span>
-      {location !== undefined ? <span role="cell" data-col="location">{location}</span> : null}
+      {location !== undefined ? <span role="cell" data-col="location" title={location}>{location}</span> : null}
       {reason !== undefined ? (
         <span role="cell" data-col="why">{reason}</span>
       ) : (
@@ -272,7 +272,7 @@ export function FolderRow({
           <ExpiryChip expiresAt={folder.expiresAt ?? null} onOpen={onShare} of="folder" />
         ) : null}
       </span>
-      {location !== undefined ? <span role="cell" data-col="location">{location}</span> : null}
+      {location !== undefined ? <span role="cell" data-col="location" title={location}>{location}</span> : null}
       <span role="cell" data-col="owner">{owner}</span>
       <span role="cell" data-col="people" aria-colspan={2}>{people}</span>
       <span role="cell" data-col="summary">{people}</span>

@@ -803,6 +803,10 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                   title={unavailable ? "Your reading history isn't available just now" : undefined}
                   onClick={() => setFilters({ ...filters, [f.key]: !filters[f.key] })}
                 >
+                  {/* An icon, never CSS content: generated text joins the
+                      accessible name, and the button would be called
+                      "✓ New since I read" while it is on. aria-pressed says it. */}
+                  {filters[f.key] && !unavailable ? <Icon name="check" size={12} /> : null}
                   {f.label}
                 </button>
               );
