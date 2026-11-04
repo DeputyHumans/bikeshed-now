@@ -14,7 +14,7 @@
  *          plan 3.1 says "every response carries nosniff", SPEC §2 names it
  *          only for /content (spec.md:227) and /d (spec.md:278), and the
  *          product sends none on /download, /unlock or GET /access. Pinned
- *          as a known defect so the gap stays visible until Pavel decides
+ *          as a known defect so the gap stays visible until the maintainer decides
  *   A3.2   POST /unlock: no or wrong key is one empty 404; a key holder gets the
  *          reader projection without publishedAt; a signed-in key holder gets a
  *          linkGrants/{uid} record naming the token (SPEC §2 /unlock)
