@@ -52,7 +52,7 @@ jobs:
     name: deploy production
     needs: ci
     if: github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       id-token: write
@@ -191,7 +191,7 @@ jobs:
     name: report production outcome
     needs: [ci, production]
     if: always() && github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       id-token: write

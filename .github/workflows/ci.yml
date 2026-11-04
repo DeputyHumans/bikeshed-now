@@ -37,7 +37,7 @@ env:
 jobs:
   build:
     name: typecheck, build, test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
@@ -134,7 +134,7 @@ jobs:
 
   rules:
     name: security rules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
@@ -161,7 +161,7 @@ jobs:
 
   guards:
     name: secrets, headers, content, licences
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:

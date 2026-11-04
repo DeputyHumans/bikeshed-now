@@ -30,6 +30,10 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - The sort called "Recently read" is now "Last read by anyone", which is what it always sorted by.
 - **A signed-in person can list their own reading across documents.** The security rules let a verified account list its own per-person read rows (`docs/{docId}/viewers/{uid}`), newest first, from a new collection-group index, and nobody else's. Getting a single row stays the document's editors' alone. Nothing new is written: the rows are the ones every read already keeps. A row outlives access to its document and says only what its reader saw. `tools/viewers-collection.test.mjs` pins the rule's one assumption, that `viewers` names one collection (ADR 0027, SPEC §5 "Your own reading").
 
+### Fixed
+
+- Pin CI, deployment and operations jobs to `ubuntu-26.04` so GitHub Actions no longer emits the `ubuntu-latest` migration warning (SPEC §12).
+
 ## 0.32.0 — 2026-11-03
 
 ### Security
