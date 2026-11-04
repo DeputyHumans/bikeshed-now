@@ -148,6 +148,9 @@ so many words; it tells the caller nothing that comparing ids did not.
 returned by a filing write list a folder's readers by email. That is what the
 rules already let any member read off the folder record. A team is named only
 to its members, and a team the caller is not in is never sized (SPEC §13).
+Nor granted: until 0.32.0 an owner could grant a team they were not in by its
+id, which emailed every member an invitation and answered with the roster.
+Now only somebody in a team may add it (SPEC §18).
 
 ### A public document leaks its private fields
 

@@ -29,6 +29,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **A `.zip` may hold at most 2,000 files.** The only limit was 25 MB of bytes, so one upload of tiny files could cost millions of Storage writes. The count is checked before anything is decompressed (`docs/development/authoring-bundles.md`).
 
+- **Only somebody in a team can share with it.** Granting a team by its id worked for anyone, and it emails every member an invitation and answers with the roster, so a stranger who learned a team's id could read who is in it and mail them all under a title of their choosing. Adding a team now takes being in it; a team already granted can still change role or be removed (SPEC §18).
+
 ### Breaking
 
 - **Editors can no longer move documents or folders they do not own**, through the browser, the CLI or an agent. They can still rename them. An agent's `move_document` or `move_folder` on someone else's item now fails with "only its owner can move…".

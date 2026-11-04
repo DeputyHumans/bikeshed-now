@@ -2615,7 +2615,12 @@ how `docs` and `folders` already behave.
 
 `POST /team` (create / rename / delete), `POST /team-members` (add / remove,
 admin-gated). `/access` and `/folder-access` accept `team:{id}` entries with no
-signature change. Member and administrator deltas read, authorize and write the
+signature change, and add one only for a caller who is in that team (`403`
+otherwise, in the same words for a team that does not exist). Granting
+expands a team to its people, invites each and answers with the effective
+members, so until 0.32.0 a stranger who knew a team's id could read its roster
+and mail everyone in it. A team already granted on the record may still change
+role or be removed by the owner, in it or not: that reaches nobody new. Member and administrator deltas read, authorize and write the
 team in one transaction. Removing a member also removes their administrator
 grant; the owner remains a member and can always manage the team. A native retry
 acknowledges its already committed result, including an administrator removing

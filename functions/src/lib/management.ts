@@ -6,8 +6,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomBytes } from "crypto";
 import type { Principal } from "./auth";
 import type { Actor } from "./actor";
-import { canManageSharing, canManageFolder, canRead, canReadFolder, canEditFolder, visibilityOf, expiryMs, isTrashed, opensEditingToAnyAccount, TRASHED_WRITE, type DocAclData, type FolderAclData } from "./acl";
-import { applyAccessDelta, grantsOf, invalidPrincipals, parseAccessDelta, parseExpiry, type Role } from "./access";
+import { canManageSharing, canManageFolder, canRead, canReadFolder, canEditFolder, isTeamMember, visibilityOf, expiryMs, isTrashed, opensEditingToAnyAccount, TRASHED_WRITE, type DocAclData, type FolderAclData } from "./acl";
+import { applyAccessDelta, grantsOf, invalidPrincipals, normalizePrincipal, parseAccessDelta, parseExpiry, teamIdOf, type Role } from "./access";
 import { filedIn, inheritedGrants, inheritedReach, folderAudience } from "./audience";
 import { membershipOf, persistFolderMembership, persistDocMembership, recomputeSubtree, resolveFolderTarget, slugify, wouldCycle, type Membership } from "./folders";
 import { addEvent, eventActor } from "./events";
@@ -81,6 +81,28 @@ function roleOf(email: string, m: Membership): Role {
   return m.approverMembers.includes(email) ? "approver" : m.editorMembers.includes(email) ? "editor" : m.suggesterMembers.includes(email) ? "suggester" : "viewer";
 }
 
+/**
+ * A team is granted only by somebody in it (SPEC §18). Granting expands it to
+ * its people, emails each of them an invitation, and answers with the
+ * effective members, so a stranger who knew a team's id could otherwise read
+ * its roster and mail everybody in it under a title of their choosing. A team
+ * already granted here may change role or be removed by the owner whether or
+ * not they are still in it: that reaches nobody new. A team that does not
+ * exist is refused in the same words as one the caller is not in.
+ */
+async function refuseStrangersTeams(ctx: ManagementContext, data: DocumentData, principals: string[]) {
+  const granted = new Set(Object.values(grantsOf(data)).flat());
+  for (const raw of principals) {
+    const principal = normalizePrincipal(raw);
+    const teamId = teamIdOf(principal);
+    if (teamId === null || granted.has(principal)) continue;
+    const team = (await ctx.db.collection("teams").doc(teamId).get()).data();
+    if (!isTeamMember(team, ctx.caller.emailLower)) {
+      throw new ManagementError(403, `you can share with a team only if you are in it: ${principal}`);
+    }
+  }
+}
+
 export async function setAccess(ctx: ManagementContext, kind: ResourceKind, id: string, body: unknown) {
   const { ref, data } = await load(ctx, kind, id);
   const parsed = parseAccessDelta(body);
@@ -88,6 +110,7 @@ export async function setAccess(ctx: ManagementContext, kind: ResourceKind, id: 
   const { delta } = parsed;
   const invalid = invalidPrincipals(delta);
   if (invalid.length) bad(`not a valid recipient: ${invalid.join(", ")}`);
+  await refuseStrangersTeams(ctx, data, delta.add.map((a) => a.principal));
   let before = membershipOf(data);
   let next = grantsOf(data);
   let changed = false;

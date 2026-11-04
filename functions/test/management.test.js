@@ -76,13 +76,39 @@ test("direct roles replace, inherited access remains, owners survive and invitat
 });
 
 test("folder team grants cascade and revocation updates descendants and mirrors", async () => {
-  const w = world({ "docs/nested": owned({ title: "Nested", currentVersion: "v1", folderId: "grandchild", visibility: "public", publicEdit: true }) });
+  // The owner is in the team: a team is granted only by somebody in it.
+  const w = world({
+    "docs/nested": owned({ title: "Nested", currentVersion: "v1", folderId: "grandchild", visibility: "public", publicEdit: true }),
+    "teams/design": { name: "Design", members: ["designer@example.com", owner] },
+  });
   const added = await w.run("set_folder_access", { id: "parent", add: [{ principal: "team:design", role: "editor" }] });
   const nestedBefore = w.store.get("docs/nested").editorMembers.includes("designer@example.com");
   const removed = await w.run("set_folder_access", { id: "parent", remove: ["team:design"] });
   assert.deepEqual({ team: added.direct.editors.includes("team:design"), nestedBefore, after: removed.effective.members.includes("designer@example.com"), nestedAfter: w.store.get("docs/nested").members.includes("designer@example.com"), mirror: mirrors.filter(m => m[0] === "nested").at(-1)?.[1]?.includes("designer@example.com"), openEdit: mirrors.filter(m => m[0] === "nested").at(-1)?.[3], public: w.store.get("public/nested")?.title, invited: invitations.flatMap(i => i[1].map(t => t.email)) }, {
     team: true, nestedBefore: true, after: false, nestedAfter: false, mirror: false, openEdit: true, public: "Nested", invited: ["designer@example.com"],
   });
+});
+
+test("a team is granted only by somebody in it, and an existing grant still changes role", async () => {
+  // Granting expands a team to its people, emails each an invitation and
+  // answers with the effective members: a stranger who knew a team's id could
+  // otherwise read its roster and mail everyone in it (SPEC §18).
+  const w = world({ "teams/secret": { name: "Secret", members: ["s1@example.com", "s2@example.com"] } });
+  for (const id of ["secret", "no-such-team"]) {
+    await assert.rejects(
+      w.run("set_document_access", { id: "doc", add: [{ principal: `team:${id}`, role: "viewer" }] }),
+      (e) => e.status === 403 && /only if you are in it/.test(e.message),
+      id,
+    );
+  }
+  assert.deepEqual({ members: w.store.get("docs/doc").members.includes("s1@example.com"), mail: invitations.length }, { members: false, mail: 0 });
+
+  // Granted before the owner left it: the owner may still change or remove it.
+  w.store.set("docs/doc", { ...w.store.get("docs/doc"), viewers: [viewer, "team:secret"] });
+  const promoted = await w.run("set_document_access", { id: "doc", add: [{ principal: "team:secret", role: "editor" }] });
+  assert.ok(promoted.direct.editors.includes("team:secret"));
+  const removed = await w.run("set_document_access", { id: "doc", remove: ["team:secret"] });
+  assert.ok(!removed.direct.editors.includes("team:secret") && !removed.direct.viewers.includes("team:secret"));
 });
 
 test("sparse visibility preserves expiry and unlisted key, clears expiry and disables private editing", async () => {
