@@ -25,6 +25,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - **Verification codes are limited per address, not only per account.** Each account could ask for a new code every minute, each with five fresh guesses, so enough throwaway accounts could guess their way into an address that had documents shared with it before its owner signed up. An address is now sent at most five codes a day, whoever asks (SPEC §14).
 - **Only a document's owner can move it, and only a folder's owner can move the folder.** Moving into a folder shares a document with that folder's readers, and its link and public level reach it, but any editor could move a document and any folder editor could move a folder. So an editor could file the owner's private document into a folder of their own, share or publish that folder, and became an approver of the document besides. `POST /organize`, `move_document` and `move_folder` now take the owner, and the workspace menus disable Move for anyone else, saying why (SPEC §13, ADR 0017).
 
+- **Exchanging an authorization code requires `client_id` and `redirect_uri`.** `/oauth/token` compared them only when they were sent; PKCE still bound the code to its verifier, but the code should also name the app and address it was issued for, as OAuth requires. Both are now required and a missing one is `invalid_request`. The command line has always sent both (SPEC §23).
+
 ### Breaking
 
 - **Editors can no longer move documents or folders they do not own**, through the browser, the CLI or an agent. They can still rename them. An agent's `move_document` or `move_folder` on someone else's item now fails with "only its owner can move…".

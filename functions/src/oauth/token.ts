@@ -125,6 +125,12 @@ async function exchangeCode(db: admin.firestore.Firestore, fields: Fields, clien
     return { kind: "error", status: 400, code: "invalid_target", description: "resource is not a valid URI" };
   }
   const redirectUri = fields.get("redirect_uri");
+  // Both are required at the exchange (RFC 6749 §4.1.3). PKCE binds the code
+  // to the verifier; these bind it to the app and the address it was issued
+  // for, so a code that reaches the wrong hands with its verifier still names
+  // the client it belongs to.
+  if (clientId === undefined) return { kind: "error", status: 400, code: "invalid_request", description: "client_id is required" };
+  if (redirectUri === undefined) return { kind: "error", status: 400, code: "invalid_request", description: "redirect_uri is required" };
   const ref = db.collection("oauthCodes").doc(createHash("sha256").update(code, "utf8").digest("hex"));
 
   // Plaintext remains local to this request. An independent HTTP replay must
@@ -139,8 +145,8 @@ async function exchangeCode(db: admin.firestore.Firestore, fields: Fields, clien
     }
     const stored = snap.data() as StoredCode;
     const mismatch = (description: string): Exchange => ({ kind: "error", status: 400, code: "invalid_grant", description });
-    if (clientId !== undefined && clientId !== stored.clientId) return mismatch("the code was issued to another client");
-    if (redirectUri !== undefined && redirectUri !== stored.redirectUri) return mismatch("redirect_uri does not match the authorization request");
+    if (clientId !== stored.clientId) return mismatch("the code was issued to another client");
+    if (redirectUri !== stored.redirectUri) return mismatch("redirect_uri does not match the authorization request");
     if (resource && resource !== stored.resource) {
       return { kind: "error", status: 400, code: "invalid_target", description: "resource does not match the authorization request" };
     }

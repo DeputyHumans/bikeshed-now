@@ -237,7 +237,7 @@ test("a code exchanged twice inside the window gives one grant and the same pair
   const clientId = await w.register();
   const { verifier, challenge } = pkce();
   const code = await approve(w, authorizeParams(clientId, challenge));
-  const fields = { grant_type: "authorization_code", code, code_verifier: verifier, client_id: clientId };
+  const fields = { grant_type: "authorization_code", code, code_verifier: verifier, client_id: clientId, redirect_uri: REDIRECT };
 
   const a = await w.token(fields);
   t.mock.timers.tick(5000);
@@ -340,7 +340,7 @@ test("a code from a registered app cannot be redeemed as the command line", asyn
   const clientId = await w.register();
   const { verifier, challenge } = pkce();
   const code = await approve(w, authorizeParams(clientId, challenge));
-  const r = await w.token({ grant_type: "authorization_code", code, code_verifier: verifier, client_id: "bikeshed-cli" });
+  const r = await w.token({ grant_type: "authorization_code", code, code_verifier: verifier, client_id: "bikeshed-cli", redirect_uri: REDIRECT });
   assert.equal(r.body.error, "invalid_grant");
 });
 
@@ -546,9 +546,15 @@ test("every check runs before a code is spent", async (t) => {
   const clientId = await w.register();
   const { verifier, challenge } = pkce();
   const code = await approve(w, authorizeParams(clientId, challenge));
-  const base = { grant_type: "authorization_code", code, code_verifier: verifier, client_id: clientId };
+  const base = { grant_type: "authorization_code", code, code_verifier: verifier, client_id: clientId, redirect_uri: REDIRECT };
+  const { client_id: _c, ...noClient } = base;
+  const { redirect_uri: _r, ...noRedirect } = base;
 
   for (const [fields, error] of [
+    // Both are required at the exchange (RFC 6749 §4.1.3), not only checked
+    // when sent: PKCE binds the code to its verifier, these to its app.
+    [noClient, "invalid_request"],
+    [noRedirect, "invalid_request"],
     [{ ...base, code_verifier: pkce().verifier }, "invalid_grant"],
     [{ ...base, client_id: "bsdcr_someone-else" }, "invalid_grant"],
     [{ ...base, redirect_uri: "https://app.example/other" }, "invalid_grant"],
@@ -569,7 +575,7 @@ test("an authorization code lasts two minutes", async (t) => {
   const { verifier, challenge } = pkce();
   const code = await approve(w, authorizeParams(clientId, challenge));
   t.mock.timers.tick(2 * 60 * 1000 + 1);
-  const r = await w.token({ grant_type: "authorization_code", code, code_verifier: verifier, client_id: clientId });
+  const r = await w.token({ grant_type: "authorization_code", code, code_verifier: verifier, client_id: clientId, redirect_uri: REDIRECT });
   assert.equal(r.body.error, "invalid_grant");
 });
 

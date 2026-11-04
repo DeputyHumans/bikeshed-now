@@ -3593,8 +3593,11 @@ A grant never has a `hash` field, so it cannot pass as a personal token, and
 ignored.
 
 - **Code exchange:**
-  - Every check runs before the code is spent: client, `redirect_uri` when
-    sent, `resource` when sent, and PKCE. A wrong verifier costs nothing.
+  - Every check runs before the code is spent: `client_id` and `redirect_uri`,
+    both required (RFC 6749 §4.1.3) and compared exactly, `resource` when
+    sent, and PKCE. A missing one is `invalid_request`. A wrong verifier costs
+    nothing. Until 0.32.0 the client and `redirect_uri` were compared only when
+    sent.
   - The code is spent in the transaction that mints the grant.
   - A native transaction retry of that same request is not an independent
     code replay. It acknowledges its own unchanged grant even after the

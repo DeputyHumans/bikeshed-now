@@ -19,7 +19,7 @@ function world(registration = "builtin") {
     redirectUri: "http://127.0.0.1:32100/callback", codeChallenge: createHash("sha256").update(verifier).digest("base64url"),
     resource: "https://bikeshed.example/mcp", expiresAt: Timestamp.fromMillis(Date.now() + 60_000), usedAt: null, tokenId: null, nonce: null,
   } });
-  const exchange = () => withFakeAdmin({ db, users: { owner: { uid: "owner", email: "owner@example.com", emailVerified: true, disabled: false, tokensValidAfterTime: new Date(0).toUTCString() } } }, () => invoke(handleToken, { headers: { "content-type": "application/x-www-form-urlencoded" }, rawBody: Buffer.from(new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, code, code_verifier: verifier }).toString()) }));
+  const exchange = () => withFakeAdmin({ db, users: { owner: { uid: "owner", email: "owner@example.com", emailVerified: true, disabled: false, tokensValidAfterTime: new Date(0).toUTCString() } } }, () => invoke(handleToken, { headers: { "content-type": "application/x-www-form-urlencoded" }, rawBody: Buffer.from(new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, redirect_uri: "http://127.0.0.1:32100/callback", code, code_verifier: verifier }).toString()) }));
   return { db, store, id, exchange };
 }
 test("the CLI's first exchange survives native commit ACK loss without revoking its new token", async () => {
