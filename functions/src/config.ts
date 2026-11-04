@@ -152,6 +152,27 @@ export function idJagIssuers(): readonly string[] {
   return [...out];
 }
 
+/**
+ * The address domains a trusted issuer may vouch for (ADR 0026):
+ * `BIKESHED_ID_JAG_DOMAINS`, e.g. `example.com,example.org`, separated by
+ * commas or spaces, a leading `@` and case ignored. An assertion's address must
+ * be at one of them exactly; a subdomain is not its parent.
+ *
+ * REQUIRED with issuers: unset means none, and the grant is then neither
+ * accepted nor advertised. An issuer the deployment trusts could otherwise
+ * connect any account here by asserting its address, an administrator's
+ * included, and a leaked signing key would reach every account at once.
+ */
+export function idJagDomains(): readonly string[] {
+  const raw = process.env.BIKESHED_ID_JAG_DOMAINS ?? "";
+  const out = new Set<string>();
+  for (const entry of raw.split(/[\s,]+/)) {
+    const domain = entry.replace(/^@/, "").toLowerCase();
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)) out.add(domain);
+  }
+  return [...out];
+}
+
 /** True inside the Firebase emulator suite. */
 export function isEmulated(): boolean {
   return process.env.FUNCTIONS_EMULATOR === "true";

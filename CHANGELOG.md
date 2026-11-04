@@ -35,8 +35,11 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **The command line's saved sign-in is created readable only by you.** `~/.config/bikeshed/config.json` holds a personal access token, and it was written with the default permissions and narrowed afterwards, which left a moment in which another account on the machine could read it. It is now created owner-only, in a folder only you can open (bikeshed-now 0.21.1).
 
+- **An organisation's issuer is trusted only for the address domains listed beside it.** A trusted issuer (0.31.0) could connect any account here by asserting its address, an administrator's included, so one leaked signing key reached every account. `BIKESHED_ID_JAG_DOMAINS` now lists the domains it may vouch for, an assertion's address must be at one of them exactly, and an `email_verified` the issuer sends must be true. The variable is required: issuers without domains leave the grant off and unadvertised (ADR 0026, SPEC §23, `docs/operations/overview.md`).
+
 ### Breaking
 
+- **A deployment that trusts an organisation's issuer must also set `BIKESHED_ID_JAG_DOMAINS`**, or the managed connection is off after this release.
 - **Editors can no longer move documents or folders they do not own**, through the browser, the CLI or an agent. They can still rename them. An agent's `move_document` or `move_folder` on someone else's item now fails with "only its owner can move…".
 
 ## 0.31.1 — 2026-11-03

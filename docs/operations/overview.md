@@ -244,11 +244,12 @@ folder's members, and all four membership fields are written together
 
 Claude's admin settings can connect a whole workspace to bikeshed without each person signing in ("managed authorization", identity source "Claude-issued"). Claude asks the operator to trust the workspace's issuer; this is how ([ADR 0026](../architecture/adr/0026-an-organisation-may-connect-its-people.md), SPEC §23 "Connected by an organisation").
 
-**1. Trust the issuer.** Claude's dialog shows the issuer URL under "Configure bikeshed's authorization server to trust your organization's issuer". Add it to the deployer's `functions/.env`, copied exactly: it is compared byte for byte, and a trailing slash is a different issuer. Several issuers are separated by commas or spaces.
+**1. Trust the issuer, for the domains it may vouch for.** Claude's dialog shows the issuer URL under "Configure bikeshed's authorization server to trust your organization's issuer". Add it to the deployer's `functions/.env`, copied exactly: it is compared byte for byte, and a trailing slash is a different issuer. Several issuers are separated by commas or spaces. Beside it, list the address domains its assertions may carry in `BIKESHED_ID_JAG_DOMAINS`, the domains of the workspace members' Claude addresses: an address must be at one of them exactly, and a subdomain is not its parent. **Both are required.** An issuer with no domains is not trusted at all: since 0.32.0 the grant is then neither accepted nor advertised, because an issuer trusted for every domain could connect any account here, an administrator's included.
 
 ```
 # Claude-issued managed authorization for <workspace> (ADR 0026), set <date>.
 BIKESHED_ID_JAG_ISSUERS=https://identity.anthropic.com/issuers/iss_<workspace id>
+BIKESHED_ID_JAG_DOMAINS=example.com,example.org
 ```
 
 Then put the same file into the secret `deploy.yml` writes it from. The secret is the whole file, so setting it replaces every line: first make sure the local file is what production runs, for instance by comparing it with the deployed function's environment (`gcloud run services describe oauth --region us-central1 --format=json`, the `env` of its container).
@@ -273,7 +274,7 @@ curl -s https://<host>/.well-known/oauth-authorization-server \
 }
 ```
 
-With the variable unset, or before the deploy, only the first two grants appear, the profile is `null`, and a jwt-bearer request answers `unsupported_grant_type`.
+With either variable unset, or before the deploy, only the first two grants appear, the profile is `null`, and a jwt-bearer request answers `unsupported_grant_type`.
 
 **3. In Claude, leave Tenant ID empty**, then Continue and Test connection. A deployment is one workspace, and an assertion that names a tenant is refused.
 
@@ -292,7 +293,9 @@ id-jag refused: assertion expires too far ahead { claims: 'aud client_id email e
 
 | Error, and its description | Cause | Fix |
 |---|---|---|
-| `unsupported_grant_type` | the variable is not in the deployed environment | set it, deploy, check the metadata |
+| `unsupported_grant_type` | `BIKESHED_ID_JAG_ISSUERS` or `BIKESHED_ID_JAG_DOMAINS` is not in the deployed environment | set both, deploy, check the metadata |
+| `invalid_grant`: "this deployment does not let the issuer connect addresses at that domain" | the member's Claude address is at a domain not in `BIKESHED_ID_JAG_DOMAINS` | add the domain, if the workspace should connect it |
+| `invalid_grant`: "the issuer has not verified the assertion's email address" | Claude says the member's address is unverified there | the member verifies it in Claude |
 | `invalid_grant`: "this deployment does not trust the assertion's issuer" | the configured URL differs from Claude's | copy it again from the dialog |
 | `invalid_grant`: "leave the tenant ID empty" | a Tenant ID was entered in Claude | clear it |
 | `invalid_grant`: "assertion expires too far ahead" | Claude's assertions outlive ten minutes | raise `MAX_AHEAD_MS` to what the log shows, as a release |
@@ -302,7 +305,7 @@ id-jag refused: assertion expires too far ahead { claims: 'aud client_id email e
 | `access_denied`: "belongs to a different account at the issuer now" | the address was given to someone else in the Claude workspace | delete or move the old account here first |
 | `500 server_error` | the issuer's keys, Claude's metadata or Auth could not be reached | transient; Claude tries again |
 
-**To stop it,** remove the issuer from `functions/.env` and the secret, and deploy. The grant is refused at once, and access tokens already issued expire within the hour. In Claude, switch the connector back to browser sign-in.
+**To stop it,** remove the issuer (or its domains) from `functions/.env` and the secret, and deploy. The grant is refused at once, and access tokens already issued expire within the hour. In Claude, switch the connector back to browser sign-in.
 
 ### The guides at `/docs` and `/docs/developers`
 

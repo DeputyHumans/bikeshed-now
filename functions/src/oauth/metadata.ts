@@ -2,7 +2,7 @@
 // Discovery: the protected-resource and authorization-server metadata (SPEC §23).
 
 import type { Request } from "firebase-functions/v2/https";
-import { idJagIssuers, isEmulated, projectId, publicOrigin } from "../config";
+import { idJagDomains, idJagIssuers, isEmulated, projectId, publicOrigin } from "../config";
 
 /** The RFC 7523 grant an identity assertion is presented with (ADR 0026). */
 export const JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer";
@@ -17,7 +17,9 @@ export const ID_JAG_TYP = "oauth-id-jag+jwt";
  */
 export function grantTypesSupported(): string[] {
   const grants = ["authorization_code", "refresh_token"];
-  if (idJagIssuers().length > 0) grants.push(JWT_BEARER);
+  // An issuer is trusted only for the domains listed beside it: issuers with
+  // no domains leave the grant off, so it fails closed (ADR 0026).
+  if (idJagIssuers().length > 0 && idJagDomains().length > 0) grants.push(JWT_BEARER);
   return grants;
 }
 

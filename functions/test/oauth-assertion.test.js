@@ -16,6 +16,7 @@ const ISSUER = "https://idp.example/issuers/test-org";
 process.env.BIKESHED_PUBLIC_ORIGIN = "https://bikeshed.example";
 process.env.GCLOUD_PROJECT = "demo-bikeshed";
 process.env.BIKESHED_ID_JAG_ISSUERS = ISSUER;
+process.env.BIKESHED_ID_JAG_DOMAINS = "example.com new.example";
 delete process.env.FUNCTIONS_EMULATOR;
 
 const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
@@ -481,5 +482,67 @@ test("the grant is advertised and accepted only where an issuer is configured", 
     assert.equal((await w.metadata()).body.authorization_grant_profiles_supported, undefined, "only https issuers count");
   } finally {
     process.env.BIKESHED_ID_JAG_ISSUERS = saved;
+  }
+});
+
+test("an issuer with no domains listed is not trusted at all: the grant is off and unadvertised", async () => {
+  const w = world();
+  const saved = process.env.BIKESHED_ID_JAG_DOMAINS;
+  try {
+    for (const none of ["", "  ,  ", "not a domain"]) {
+      process.env.BIKESHED_ID_JAG_DOMAINS = none;
+      const off = await w.metadata();
+      assert.deepEqual(off.body.grant_types_supported, ["authorization_code", "refresh_token"], JSON.stringify(none));
+      assert.equal(off.body.authorization_grant_profiles_supported, undefined);
+      const r = await w.exchange(assertion());
+      assert.deepEqual([r.status, r.body.error], [400, "unsupported_grant_type"], JSON.stringify(none));
+    }
+    assert.deepEqual(w.site.fetched, [], "nothing is fetched for a grant that is off");
+  } finally {
+    process.env.BIKESHED_ID_JAG_DOMAINS = saved;
+  }
+});
+
+test("an issuer connects only addresses at the listed domains, exactly", async () => {
+  // A trusted issuer could otherwise connect any account here, an
+  // administrator's included, by asserting its address.
+  const w = world({
+    users: {
+      "u-ana": { ...ANA_USER },
+      "u-root": { uid: "u-root", email: "root@elsewhere.org", emailVerified: true, disabled: false, tokensValidAfterTime: new Date(0).toUTCString() },
+      "u-sub": { uid: "u-sub", email: "ana@sub.example.com", emailVerified: true, disabled: false, tokensValidAfterTime: new Date(0).toUTCString() },
+    },
+  });
+  for (const email of ["root@elsewhere.org", "ana@sub.example.com", "ana@example.com.evil.org"]) {
+    const r = await w.exchange(assertion({ email }));
+    assert.deepEqual([r.status, r.body.error], [400, "invalid_grant"], email);
+    assert.match(r.body.error_description, /at that domain/, email);
+  }
+  assert.equal([...w.store.keys()].filter((k) => k.startsWith("tokens/")).length, 0, "nothing written");
+  assert.equal((await w.exchange(assertion())).status, 200, "the listed domain, in any case");
+});
+
+test("an address the issuer says it has not verified is refused; silence is not", async () => {
+  const w = world();
+  for (const email_verified of [false, "false", 0, null]) {
+    const r = await w.exchange(assertion({ email_verified }));
+    assert.deepEqual([r.status, r.body.error], [400, "invalid_grant"], JSON.stringify(email_verified));
+    assert.match(r.body.error_description, /not verified/);
+  }
+  for (const email_verified of [true, "true", undefined]) {
+    assert.equal((await w.exchange(assertion({ email_verified }))).status, 200, JSON.stringify(email_verified));
+  }
+});
+
+test("the domains are read as an operator writes them", () => {
+  const { idJagDomains } = require("../lib/config.js");
+  const saved = process.env.BIKESHED_ID_JAG_DOMAINS;
+  try {
+    process.env.BIKESHED_ID_JAG_DOMAINS = "dassui.ai,deputyhumans.com";
+    assert.deepEqual(idJagDomains(), ["dassui.ai", "deputyhumans.com"]);
+    process.env.BIKESHED_ID_JAG_DOMAINS = " @Example.COM, ,example.org  example.com localhost a@b.c";
+    assert.deepEqual(idJagDomains(), ["example.com", "example.org"]);
+  } finally {
+    process.env.BIKESHED_ID_JAG_DOMAINS = saved;
   }
 });

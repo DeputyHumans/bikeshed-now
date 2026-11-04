@@ -452,6 +452,7 @@ Where the deployment trusts an issuer (ADR 0026), a signed assertion connects an
 
 **Mitigation.**
 - **Only configured issuers**, compared byte for byte, and only ES256 keys from their own published set. `alg` is fixed, so `none` and an HMAC keyed with the public key are refused.
+- **Only listed domains.** An issuer vouches only for addresses at `BIKESHED_ID_JAG_DOMAINS`, exactly, and without that list the grant is off. Until 0.32.0 a trusted issuer could connect any account here by asserting its address, so one leaked signing key reached every account, an administrator's included. An `email_verified` the issuer sends must be true.
 - **Short and single.** An assertion expiring more than ten minutes ahead is refused, and each `jti` is spent once; within 60 s a retry gets back the token it already earned, and nothing new.
 - **The store is not the key.** A token is `HMAC(row nonce, assertion)` and only its hash is kept, so a copy of `tokens/` yields no live token.
 - **Addressed to us.** `aud` must be this server, `client_id` must match the request, and a named `resource` must be ours.
@@ -462,7 +463,7 @@ Where the deployment trusts an issuer (ADR 0026), a signed assertion connects an
 **Residual, accepted.**
 - A leaked assertion is a bearer credential for up to ten minutes, once. Draft -06 of the ID-JAG specification would require a bound key or client authentication; Claude offers neither yet.
 - The organisation decides, not the person. A member of a trusting organisation is connected until they revoke it.
-- A trusted issuer can connect any account here whose address it asserts, the operator's own included. That is an app's reach, not the account's: no agent connection can trust scripts or delete forever.
+- A trusted issuer can connect any account at its listed domains, the operator's own included if it is at one. That is an app's reach, not the account's: no agent connection can trust scripts or delete forever.
 - Anyone can make the server fetch a trusted issuer's keys by naming an unknown `kid`. Shared fetches, at most one a minute per instance, and a ten-second back-off after a failure bound it.
 - Someone removed from the organisation keeps up to an hour of access, until the access token already issued expires.
 

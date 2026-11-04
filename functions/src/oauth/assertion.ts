@@ -2,7 +2,7 @@
 // An identity assertion from a trusted issuer (ID-JAG): its signature and its claims (SPEC §23).
 
 import { createPublicKey, verify, type KeyObject } from "crypto";
-import { idJagIssuers } from "../config";
+import { idJagDomains, idJagIssuers } from "../config";
 import { checkMetadataUrl, fetchClientMetadata } from "./fetch";
 import { canonicalResource, ID_JAG_TYP } from "./metadata";
 
@@ -23,6 +23,8 @@ import { canonicalResource, ID_JAG_TYP } from "./metadata";
  *   times    not expired, not issued in the future, and expiring no more than
  *            ten minutes ahead: a short window is what limits a leaked one
  *   client   the client_id the request names, if it names one
+ *   email    an address at one of BIKESHED_ID_JAG_DOMAINS, and not one the
+ *            issuer itself says is unverified
  *   tenant   none: a deployment is one workspace, so an assertion addressed
  *            to a tenant was set up for something else
  *   cnf      none: a proof-of-possession key this server cannot check is
@@ -246,6 +248,17 @@ export async function checkAssertion(
   }
   const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
   if (!email || email.length > 320 || !email.includes("@")) return refuseSigned("assertion carries no email address");
+  // The issuer's own word that it has not verified the address is taken; its
+  // silence is not a refusal, since the address must already be a verified
+  // account here (managed.ts). `"false"` is a string, so compare exactly.
+  if (claims.email_verified !== undefined && claims.email_verified !== true && claims.email_verified !== "true") {
+    return refuseSigned("the issuer has not verified the assertion's email address");
+  }
+  // The issuer vouches only for the domains this deployment lists for it.
+  const domain = email.slice(email.lastIndexOf("@") + 1);
+  if (!idJagDomains().includes(domain)) {
+    return refuseSigned("this deployment does not let the issuer connect addresses at that domain");
+  }
   if (claims.aud_tenant !== undefined && claims.aud_tenant !== null && claims.aud_tenant !== "") {
     return refuseSigned("this deployment has no tenants; leave the tenant ID empty");
   }

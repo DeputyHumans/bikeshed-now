@@ -3498,7 +3498,7 @@ is hand-written in `functions/src/oauth/` with no dependency and no secret (ADR
   - `client_id_metadata_document_supported` and
     `authorization_response_iss_parameter_supported`
   - no `scopes_supported`
-  - only where `BIKESHED_ID_JAG_ISSUERS` names an issuer: the jwt-bearer grant in `grant_types_supported`, and `authorization_grant_profiles_supported: ["urn:ietf:params:oauth:grant-profile:id-jag"]` (see "Connected by an organisation")
+  - only where `BIKESHED_ID_JAG_ISSUERS` names an issuer and `BIKESHED_ID_JAG_DOMAINS` a domain: the jwt-bearer grant in `grant_types_supported`, and `authorization_grant_profiles_supported: ["urn:ietf:params:oauth:grant-profile:id-jag"]` (see "Connected by an organisation")
 
 A refused `/mcp` request answers `401` with
 `WWW-Authenticate: Bearer realm="bikeshed", resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp"`.
@@ -3628,7 +3628,7 @@ ignored.
 
 ### Connected by an organisation
 
-An organisation's issuer may connect an app for one of its people, with no consent page, if the deployment trusts that issuer (ADR 0026). This is Claude's "managed authorization": the MCP extension `io.modelcontextprotocol/enterprise-managed-authorization`, which profiles the Identity Assertion JWT Authorization Grant (ID-JAG). `BIKESHED_ID_JAG_ISSUERS` lists the trusted issuers, exact https URLs, in the functions' environment and never in the tree. Unset, none of this exists, and the metadata does not mention it.
+An organisation's issuer may connect an app for one of its people, with no consent page, if the deployment trusts that issuer (ADR 0026). This is Claude's "managed authorization": the MCP extension `io.modelcontextprotocol/enterprise-managed-authorization`, which profiles the Identity Assertion JWT Authorization Grant (ID-JAG). `BIKESHED_ID_JAG_ISSUERS` lists the trusted issuers, exact https URLs, and `BIKESHED_ID_JAG_DOMAINS` the address domains they may vouch for, both in the functions' environment and never in the tree. Unless both are set, none of this exists, and the metadata does not mention it. The domains are required because an issuer trusted for every domain could connect any account here, an administrator's included, and one leaked signing key would reach every account; until 0.32.0 there was no such list.
 
 The app sends `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, `assertion=<ID-JAG>` and its `client_id` to `POST /oauth/token`.
 
@@ -3638,6 +3638,7 @@ The app sends `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, `asserti
 | header `typ` `oauth-id-jag+jwt`; `alg` ES256 only; no `crit`; a `kid` in the issuer's keys (OpenID discovery, then `jwks_uri`, cached an hour; requests waiting on one issuer share one fetch, an unknown `kid` refetches at most once a minute, and a failed fetch makes the next ten seconds fail at once); the signature verifies | `invalid_grant` |
 | `aud` is this server's issuer; `exp` not past and at most ten minutes ahead; `iat` and any `nbf` not in the future; 60 s of skew | `invalid_grant` |
 | `sub`, `jti`, `email` and `client_id` present; `client_id` equal to the request's | `invalid_grant` |
+| `email` at one of `BIKESHED_ID_JAG_DOMAINS` exactly (a subdomain is not its parent); `email_verified`, if the issuer sends it, true | `invalid_grant` |
 | no `aud_tenant` (a deployment is one workspace) and no `cnf` (no bound key can be checked) | `invalid_grant` |
 | `resource`, if named, is one of this deployment's `/mcp` addresses; a `resource` parameter must be too, and agree | `invalid_grant`, `invalid_target` |
 | the client publishes a metadata document | `invalid_client` |

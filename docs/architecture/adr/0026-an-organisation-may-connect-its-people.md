@@ -1,6 +1,6 @@
 # 0026 — An organisation's issuer may connect its people's apps, if the deployment trusts it
 
-**Status** Accepted · **Spec** §2, §23 · **Amends** [0014](0014-oauth-for-the-agent-surface.md) · **Narrows** overview.md's "No SSO or SCIM"
+**Status** Accepted · Amended in 0.32.0 (issuers are trusted for listed domains only; the veto and the pinned `sub` hold across apps) · **Spec** §2, §23 · **Amends** [0014](0014-oauth-for-the-agent-surface.md) · **Narrows** overview.md's "No SSO or SCIM"
 
 ## Context
 
@@ -10,7 +10,7 @@ Bikeshed had no way to say yes. Its token endpoint took a code or a refresh toke
 
 ## Decision
 
-1. **The operator trusts issuers by configuration.** `BIKESHED_ID_JAG_ISSUERS` lists exact https issuer URLs. It is deployment configuration, never committed, because an issuer URL names the organisation. Unset, the grant is neither accepted nor advertised. There is no admin screen: the configuration is the admin surface, as everywhere else here.
+1. **The operator trusts issuers by configuration, for listed domains.** `BIKESHED_ID_JAG_ISSUERS` lists exact https issuer URLs, and `BIKESHED_ID_JAG_DOMAINS` the address domains they may vouch for; an assertion's address must be at one of them exactly, and an `email_verified` the issuer sends must be true. Both are deployment configuration, never committed, because an issuer URL names the organisation. Unless both are set, the grant is neither accepted nor advertised. *Amended in 0.32.0:* there were no domains at first, so a trusted issuer could connect any account here by asserting its address, an administrator's included, and one leaked signing key reached every account. There is no admin screen: the configuration is the admin surface, as everywhere else here.
 2. **An assertion is checked before anything in it is used.** `iss` must be configured, compared byte for byte, before any fetch. The header must be `typ` `oauth-id-jag+jwt`, `alg` ES256 only, with a `kid` from the issuer's published keys. The signature must verify. `aud` must be this server's issuer. It must not be expired, must not be issued in the future, and must expire no more than ten minutes ahead. `client_id` must match the request's, and that client must publish a metadata document. No `aud_tenant` and no `cnf` are accepted. Each `jti` is used once.
 3. **It connects an account; it never makes one.** The address it carries must already be an account here, and it passes the same gate as every sign-in: verified, enabled, allowed, not signed out everywhere since. Creating accounts from assertions would be the second account system ADR 0014 refused.
 4. **One connection per person, address and app, and the person can end it for good.** It is a row in `tokens/` like any connected app, listed and revoked from the account screen. Each assertion gets its own access token of an hour, `HMAC(row nonce, assertion)`, and there is no refresh token. Only hashes are stored, so the store alone yields no token. Revoking it is sticky: later assertions for that row are refused, and the person can still connect the app themselves through consent. The issuer's `sub` is fixed at the first exchange, so a reassigned address is refused rather than inherited.
@@ -23,7 +23,7 @@ Bikeshed had no way to say yes. Its token endpoint took a code or a refresh toke
 - **Removal lags by up to an hour.** When the organisation removes someone, its issuer stops signing for them, but the access token already issued lasts until it expires. The same is true of an ordinary connection's access token.
 - **"No SSO" is no longer absolute.** One deployment can now let one outside party vouch for its people's addresses, for connecting apps only. Signing in to the web app is unchanged.
 - **Every exchange writes the row.** One token per assertion keeps concurrent exchanges independent and keeps tokens underivable from the store, at the price of a Firestore write per exchange and a list of up to 100 live hashes per row. A retry of the same assertion within 60 s is answered with the same token and writes nothing.
-- **A trusted issuer can connect any account whose address it asserts**, the operator's own included. An agent connection cannot do what only a person can (trusting scripts, deleting forever), so that is the reach of an app, not of the account.
+- **A trusted issuer can connect any account at its listed domains**, the operator's own included if it is at one of them. An agent connection cannot do what only a person can (trusting scripts, deleting forever), so that is the reach of an app, not of the account.
 
 ## What would change this
 
