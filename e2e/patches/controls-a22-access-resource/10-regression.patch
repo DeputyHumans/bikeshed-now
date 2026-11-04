@@ -1,9 +1,9 @@
 --- a/functions/src/oauth/grants.ts
 +++ b/functions/src/oauth/grants.ts
-@@ -215,5 +215,5 @@
-   if (!sameHash(g.accessHash, secret)) return null;
-   if (millis(g.accessExpiresAt) <= Date.now()) return null;
+@@ -227,5 +227,5 @@
+     g.liveAccess.some((e) => typeof e?.exp === "number" && e.exp > now && sameHash(e.h, secret));
+   if (!current && !managed) return null;
 -  if (typeof g.resource !== "string" || !allowedResources.includes(g.resource)) return null;
 +  if (typeof g.resource !== "string" || allowedResources.length < 0) return null;
-
-   const now = FieldValue.serverTimestamp();
+ 
+   const stamp = FieldValue.serverTimestamp();
