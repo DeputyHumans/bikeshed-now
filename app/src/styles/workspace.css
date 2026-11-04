@@ -123,7 +123,11 @@
 .workspace-head .breadcrumb { margin-bottom: 0; min-width: 0; }
 .workspace-title { margin: 0; font-size: var(--fs-h3); }
 .workspace-head-actions { display: flex; align-items: center; gap: var(--s-1); }
-.workspace-search { flex: 1; min-width: 180px; max-width: 320px; }
+/* A basis, not a min-width: on a touch screen base.css gives every input
+   `min-width: var(--tap) !important`, which an earlier layer's important wins,
+   so a min-width here let the search shrink to one letter beside the other
+   controls. A basis that will not shrink makes the toolbar wrap instead. */
+.workspace-search { flex: 1 0 180px; max-width: 320px; }
 
 .doc-grid {
   display: grid;
