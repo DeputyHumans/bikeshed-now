@@ -119,7 +119,9 @@ With no domain gate, any signed-in account could otherwise probe for documents.
 1. `/content/**`, `/download/**`, `/unlock` and `/view` collapse "you may not
    read this" and "this does not exist" into the same **404**. Mutation
    endpoints answer 403 only to a caller who may read the document, who already
-   knows the id, and 404 to everyone else.
+   knows the id, and 404 to everyone else. So does a destination folder: one
+   the caller cannot read is "not found", like an absent one, and only a folder
+   they can read but not edit is 403 (until 0.32.0 any existing folder was 403).
 2. Presence is gated by a **server-maintained mirror**
    (`presenceAccess/{docId}/{emailKey}`) rather than by the identity gate. RTDB
    rules cannot query Firestore, so the authorization data has to live in RTDB.

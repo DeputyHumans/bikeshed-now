@@ -36,7 +36,7 @@ import {
   teamIdOf,
   type RoleGrants,
 } from "./access";
-import { canEditFolder, isPurged, isTrashed, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
+import { canEditFolder, canReadFolder, isPurged, isTrashed, opensEditingToAnyAccount, ownReachEntry, reachOf, type DocAclData, type FolderAclData, type ReachEntry } from "./acl";
 import { safeSegment } from "./http";
 import { EMPTY_TEAM_INDEX, findGrantsForTeam, referencedTeamIds, type TeamIndex } from "./teams";
 import { syncPresenceAccess } from "./presence";
@@ -290,13 +290,14 @@ export async function resolveFolderTarget(
   }
 
   const snap = await db.collection("folders").doc(id).get();
-  // 404 rather than 403 for a folder that is not there: a caller who may not
-  // write to a folder should not learn the difference between "not yours" and
-  // "does not exist" by comparing status codes.
-  if (!snap.exists) {
+  // 404, the same answer, for a folder that is not there and for one the
+  // caller cannot read: comparing the two must not tell a stranger that an id
+  // is taken. 403 only for a folder they can read but not edit, which they
+  // already know exists (SPEC §1.4b).
+  const data = snap.exists ? (snap.data() as FolderAclData & Record<string, unknown>) : null;
+  if (!data || !canReadFolder(data, caller.uid, caller.emailLower)) {
     return { ok: false, status: 404, error: "destination folder not found" };
   }
-  const data = snap.data() as FolderAclData & Record<string, unknown>;
   if (!canEditFolder(data, caller.uid, caller.emailLower)) {
     return { ok: false, status: 403, error: "you cannot put anything in that folder" };
   }

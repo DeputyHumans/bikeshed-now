@@ -31,6 +31,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **Only somebody in a team can share with it.** Granting a team by its id worked for anyone, and it emails every member an invitation and answers with the roster, so a stranger who learned a team's id could read who is in it and mail them all under a title of their choosing. Adding a team now takes being in it; a team already granted can still change role or be removed (SPEC §18).
 
+- **A destination folder you cannot read is "not found".** Publishing, forking, creating a folder or moving into a folder of somebody else's answered 403, and an id that does not exist 404, so comparing the two confirmed that a folder id was taken. Both are now 404; 403 is kept for a folder you can read but not edit (SPEC §1.4b).
+
 ### Breaking
 
 - **Editors can no longer move documents or folders they do not own**, through the browser, the CLI or an agent. They can still rename them. An agent's `move_document` or `move_folder` on someone else's item now fails with "only its owner can move…".

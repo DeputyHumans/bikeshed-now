@@ -111,6 +111,21 @@ test("a team is granted only by somebody in it, and an existing grant still chan
   assert.ok(!removed.direct.editors.includes("team:secret") && !removed.direct.viewers.includes("team:secret"));
 });
 
+test("a folder the caller cannot read is refused as absent, one they read but cannot edit as forbidden", async () => {
+  // Comparing the two answers must not confirm that a stranger's folder id is
+  // taken (SPEC §1.4b); a reader already knows theirs exists.
+  const { resolveFolderTarget } = require("../lib/lib/folders.js");
+  const w = world();
+  const as = (email) => ({ uid: `u-${email}`, emailLower: email });
+  const stranger = await resolveFolderTarget(w.db, "child", as("stranger@example.com"));
+  const absent = await resolveFolderTarget(w.db, "no-such-folder", as("stranger@example.com"));
+  const reader = await resolveFolderTarget(w.db, "child", as(viewer));
+  assert.deepEqual(
+    [stranger, absent, reader].map((r) => [r.status, r.error]),
+    [[404, "destination folder not found"], [404, "destination folder not found"], [403, "you cannot put anything in that folder"]],
+  );
+});
+
 test("sparse visibility preserves expiry and unlisted key, clears expiry and disables private editing", async () => {
   const w = world();
   const expiry = Date.now() + 86400000;

@@ -191,7 +191,6 @@ const BAD_DOC_ID = "id may use lowercase letters, digits and hyphens between the
 const CONTENT_EMPTY = "content is empty";
 const BODY_EMPTY = "body is empty";
 const FOLDER_ABSENT = "destination folder not found";
-const FOLDER_NOT_YOURS = "you cannot put anything in that folder";
 const FOLDER_NAME = "folder name is required (up to 120 characters)";
 const TITLE_RULE = "title is required (up to 200 characters)";
 const CANNOT_EDIT = "you cannot edit that document";
@@ -563,7 +562,7 @@ scenario("A20.2.publish_document creates a private v1 at the requested id with i
     await refused(o, "publish_document", { title: "A20 nowhere", content: page("A20 nowhere"), format: "html", folder: `a20nofolder${rand4()}` }, FOLDER_ABSENT, "a folder that is not there");
   } else ctx.step("the absent-folder probe is not sent on production: the guard refuses a folder the run did not create");
   const theirs = await folder(other, `A20 theirs ${tag()}`);
-  await refused(o, "publish_document", { title: "A20 into theirs", content: page("A20 into theirs"), format: "html", folder: theirs }, FOLDER_NOT_YOURS, "somebody else's folder");
+  await refused(o, "publish_document", { title: "A20 into theirs", content: page("A20 into theirs"), format: "html", folder: theirs }, FOLDER_ABSENT, "somebody else's folder, as absent");
   assert.equal((await ok(o, "list_documents", {})).documents.length, before, "no refusal created a document");
 });
 
@@ -920,7 +919,7 @@ scenario("A20.2.create_folder creates a folder at the root or inside one the cal
   const theirs = await folder(other, `A20 theirs ${tag()}`);
   await refused(o, "create_folder", { name: "n".repeat(121) }, FOLDER_NAME, "121 characters");
   await refused(o, "create_folder", { name: "   " }, FOLDER_NAME, "a blank name");
-  await refused(o, "create_folder", { name: "Into theirs", parent: theirs }, FOLDER_NOT_YOURS, "a parent of somebody else's");
+  await refused(o, "create_folder", { name: "Into theirs", parent: theirs }, FOLDER_ABSENT, "a parent of somebody else's, as absent");
   if (target.kind === "local") await refused(o, "create_folder", { name: "Nowhere", parent: `a20nofolder${rand4()}` }, FOLDER_ABSENT, "a parent that is not there");
   else ctx.step("the absent-parent probe is not sent on production: the guard refuses a folder the run did not create");
   assert.equal((await ok(o, "list_folders", {})).folders.length, 2, "only the two folders exist");
@@ -950,7 +949,7 @@ scenario("A20.2.move_document files a document into a folder saying who can now 
   ctx.step("refused: a viewer, and a folder of somebody else's");
   await refused(v, "move_document", { id: d.id, folder: f }, CANNOT_MOVE, "viewer");
   const theirs = await folder(other, `A20 theirs ${tag()}`);
-  await refused(o, "move_document", { id: d.id, folder: theirs }, FOLDER_NOT_YOURS, "somebody else's folder");
+  await refused(o, "move_document", { id: d.id, folder: theirs }, FOLDER_ABSENT, "somebody else's folder, as absent");
   assert.equal((await readDoc(target, `docs/${d.id}`))?.folderId ?? null, null, "still at the root");
 });
 

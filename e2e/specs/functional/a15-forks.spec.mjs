@@ -655,14 +655,14 @@ scenario("A15.4 a fork into a stranger's folder is 403 and into an absent folder
   await windowOn(ctx, O, S.docId, "public", async () => {
     const wouldBe = S.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-    ctx.step("into the stranger's folder: 403 with the reason; into an absent folder: 404 with the reason");
+    ctx.step("into the stranger's folder and into an absent one: the same 404, so an id is not confirmed");
     const intoTheirs = await forkAs(R, S.docId, { folderId: theirs });
     assert.deepEqual(await listObjects(target, `docs/${wouldBe}/`), [], "a forbidden destination leaves no copied objects");
     const intoNowhere = await forkAs(R, S.docId, { folderId: nowhere });
     assert.deepEqual(await listObjects(target, `docs/${wouldBe}/`), [], "an absent destination leaves no copied objects");
     assert.deepEqual(
       { theirs: { status: intoTheirs.status, error: intoTheirs.json?.error ?? null }, nowhere: { status: intoNowhere.status, error: intoNowhere.json?.error ?? null } },
-      { theirs: { status: 403, error: FOLDER_FORBIDDEN }, nowhere: { status: 404, error: FOLDER_ABSENT } },
+      { theirs: { status: 404, error: FOLDER_ABSENT }, nowhere: { status: 404, error: FOLDER_ABSENT } },
       "the refusals, each about the request",
     );
 
