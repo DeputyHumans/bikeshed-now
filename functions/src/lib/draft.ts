@@ -11,7 +11,7 @@ import { newBundlePrefix, versionStoragePrefix } from "./storage";
 import { assertDocumentWriteAuthority, assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
 import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
-import { keepsTrust, type DocAclData } from "./acl";
+import { type DocAclData } from "./acl";
 import type { Actor } from "./actor";
 import { publishedViaOf } from "./versions";
 import { hashBundleFiles, type BundleFile } from "./hash";
@@ -558,14 +558,13 @@ export async function commitDraft(args: {
       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
       if (await anyOpenThread(tx, docRef, baseVersion, "threads")) throw new Error("OPEN");
       if (candidate.exists) throw new Error("CONFLICT");
-      // Trust carries into the new version only when its owner wrote it here.
-      // The server stores whatever HTML a draft is sent, so "in-app editing
-      // cannot add a script" was never true of anybody else's edit (SPEC §6c).
-      const keeps = keepsTrust(cur.data() as DocAclData, {
-        emailLower: args.emailLower,
-        channel: actor.channel,
-      });
-      const grants = keeps ? [] : await readTrustGrants(tx, docRef);
+      // Trust never carries into a new version, the owner's included (SPEC §6c).
+      // A draft is shared: an editor, or any account on a public document open
+      // to editing, can put a script in it through /draft or the live merge,
+      // and the owner who commits it never sees one in the sandboxed editor.
+      // Carrying trust when the OWNER committed ran that script in every
+      // trusting reader's session. A reader trusted the scripts they saw.
+      const grants = await readTrustGrants(tx, docRef);
       tx.set(vRef, {
         versionId,
         label: versionId,
@@ -601,7 +600,7 @@ export async function commitDraft(args: {
         },
         { merge: true },
       );
-      if (!keeps) withdrawTrust(tx, docRef, grants);
+      withdrawTrust(tx, docRef, grants);
       candidateMayHaveCommitted = true;
     });
   } catch (e) {

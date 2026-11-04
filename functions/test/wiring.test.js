@@ -371,11 +371,12 @@ test("every path that mints a version decides trust inside its transaction", () 
    * editing, any signed-in account could commit a <script> that then ran in
    * every reader's session, with the app's own origin.
    *
-   * The transactions cannot run without Firestore, so the shape is pinned: a
-   * token update always withdraws trust, and the in-app commit withdraws it
-   * unless keepsTrust says the owner wrote it. Both withdraw it in the same
-   * transaction that moves currentVersion, so no reader can load the new
-   * version under the old trust.
+   * The shape is pinned here, and draft-isolation.test.js runs the commit:
+   * every path withdraws trust, unconditionally, in the same transaction that
+   * moves currentVersion, so no reader can load the new version under the old
+   * trust. The in-app commit once kept trust when the owner committed, and a
+   * draft is shared: an editor's script rode into the owner's commit and ran
+   * for every trusting reader (SPEC §6c).
    */
   const { readFileSync } = require("node:fs");
   const { join } = require("node:path");
@@ -396,9 +397,9 @@ test("every path that mints a version decides trust inside its transaction", () 
 
   const commit = slice(draft, "export async function commitDraft(", "\nexport ");
   const inCommit = slice(slice(commit, "const editSessions =", "\nexport "), "runTransaction(", "\n    });\n");
-  assert.match(inCommit, /keepsTrust\(/, "the in-app commit must ask who wrote the version");
-  assert.match(inCommit, /readTrustGrants\(tx, /, "the in-app commit must read the trust grants in its transaction");
-  assert.match(inCommit, /withdrawTrust\(tx, /, "the in-app commit must be able to withdraw trust");
+  assert.doesNotMatch(inCommit, /keepsTrust\(|if \(!keeps\)/, "nobody's commit keeps trust, the owner's included");
+  assert.match(inCommit, /const grants = await readTrustGrants\(tx, docRef\);/, "the in-app commit must read the trust grants in its transaction");
+  assert.match(inCommit, /\n      withdrawTrust\(tx, docRef, grants\);/, "the in-app commit must withdraw trust, unconditionally");
 });
 
 // --- Stored thumbnails ---------------------------------------------------------

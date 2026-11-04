@@ -2,7 +2,7 @@
 +++ b/functions/src/lib/draft.ts
 @@ -13,6 +13,7 @@
  import { MAX_BUNDLE_BYTES, bucketName } from "../config";
- import { keepsTrust, type DocAclData } from "./acl";
+ import { type DocAclData } from "./acl";
  import type { Actor } from "./actor";
 +import { e2eRaceGate } from "./e2eRaceGate";
  import { publishedViaOf } from "./versions";

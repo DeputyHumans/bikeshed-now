@@ -64,3 +64,16 @@ test("a deduplicated commit cannot clear a newer draft", () => world(async w => 
   assert.equal((await commitDraft(w.args())).status, 409);
   assert.equal(w.store.get("docs/d").draft.storagePrefix, "docs/d/drafts/new");
 }));
+test("an owner's commit withdraws trust: a draft is shared, so its scripts are nobody's word", () => world(async w => {
+  // The owner commits from the browser a draft an editor wrote into. Its
+  // script is invisible in the sandboxed editor, so the owner's commit vouches
+  // for nothing; keeping trust here once ran it for every trusting reader.
+  const web = { uid: "u", email: actor.email, channel: "web" };
+  w.store.set("docs/d", { ...w.store.get("docs/d"), trusted: true, draft: { ...w.store.get("docs/d").draft, editSessions: [{ email: "editor@example.com", actor: { uid: "e", email: "editor@example.com", channel: "web" }, from: 1, to: 2 }] } });
+  w.store.set("docs/d/trust/u-reader", { uid: "u-reader", email: "reader@example.com" });
+  const result = await commitDraft({ ...w.args(), draft: w.store.get("docs/d").draft, actor: web });
+  assert.equal(result.status, 200);
+  assert.equal(w.store.get("docs/d").currentVersion, "v2");
+  assert.equal(w.store.get("docs/d").trusted, false, "global trust is withdrawn");
+  assert.equal(w.store.has("docs/d/trust/u-reader"), false, "and every reader's own");
+}));

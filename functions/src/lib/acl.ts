@@ -286,22 +286,6 @@ export function canManageSharing(
 }
 
 /**
- * Does a new version written by `author` keep the document's trust (SPEC §6c)?
- *
- * Trust is the owner vouching for scripts they have seen. Only a version the
- * owner wrote in the app is still theirs to vouch for. Anybody else's —
- * an editor's, an open editor's — and anything through a token, which is an
- * upload in all but name, is content nobody vouched for, and is sandboxed
- * until somebody does.
- */
-export function keepsTrust(
-  doc: DocAclData | undefined | null,
-  author: { emailLower: string; channel: string },
-): boolean {
-  return author.channel === "web" && canManageSharing(doc, author.emailLower);
-}
-
-/**
  * The REAL editor set: owner, direct editors, or effective editors (folder and
  * team grants, expanded server-side).
  *

@@ -1081,20 +1081,9 @@ reloads. When the selected passage still exists unchanged, the replacement
 frame restores that passage and its Comment/Suggest edit toolbar. A removed
 passage must not turn into a selection of different words.
 
-**Trust carries into a new version only when the owner wrote it in the app**
-(`keepsTrust`). Any other new version withdraws both scopes, the global flag and
-every personal grant, in the same transaction that makes it current: an edit by
-an editor or an open editor, and every update through a token, which is an
-upload in all but name (`update_document`, `POST /publish?update=`). A reader
-trusted the scripts they had seen, not whatever somebody publishes next. A
-deduplicated update mints nothing and changes nothing. Re-upload and fork
-still make FRESH `trusted: false` documents.
+**Trust never carries into a new version.** Every new version withdraws both scopes, the global flag and every personal grant, in the same transaction that makes it current: a commit in the app, the owner's included, and every update through a token, which is an upload in all but name (`update_document`, `POST /publish?update=`). A reader trusted the scripts they had seen, not whatever somebody publishes next. A deduplicated update mints nothing and changes nothing. Re-upload and fork still make FRESH `trusted: false` documents.
 
-This replaces "trust propagates across in-app edits, because platform editing
-is parent-driven and cannot introduce a new bundle". The server never held that
-line: `/draft` stores whatever HTML a `canEdit` caller sends, so on a trusted
-document with open editing any signed-in account could commit a `<script>` that
-then ran, same-origin with the app, in every reader's session.
+This replaces two earlier rules. The first, "trust propagates across in-app edits, because platform editing is parent-driven and cannot introduce a new bundle", never held: `/draft` stores whatever HTML a `canEdit` caller sends, so on a trusted document with open editing any signed-in account could commit a `<script>` that then ran, same-origin with the app, in every reader's session. The second, until 0.32.0, kept trust when the OWNER committed in the app (`keepsTrust`). But a draft is shared: an editor, or any account on a public document open to editing, can put a script in it through `/draft` or the live merge (§6b), which leaves no trace in `editSessions`, and the owner who commits it never sees a script in the sandboxed editor. So the owner's commit carried that script's trust to every trusting reader. The cost of the rule now is that a trusted interactive document has to be vouched for again after every edit, its owner's own included.
 
 **The frame's sandbox is not the only lock.** Every scriptable content response carries the same sandbox as a header (§2 "The script lock"), so the bytes opened outside the frame run nothing either. An unsandboxed frame loads the **run variant** (`/content/[~k/]!run/…`), and the server unlocks it only for global trust or this reader's own grant, which is why a grant counts in the viewer only once the server has it. **Trust is for the current version.** Either scope is granted while one version is current and withdrawn when another becomes current, so the scripts somebody vouched for are the head's: an older version never runs, at the run variant or in the viewer, trusted or not. Until 0.32.0 the run variant ignored the version, so trusting the head again also ran an older version nobody had vouched for under that grant, an editor's whose commit had withdrawn trust at the time. **A draft never runs its script**, for anyone: `/draft` is always locked and a draft-reading frame always sandboxed.
 

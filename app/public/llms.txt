@@ -659,15 +659,17 @@ guess may garble anything outside ASCII.
 
 Everything you publish through a token is sandboxed, exactly like a browser
 upload: its scripts do not run until a person trusts the document in the app. A
-raw `<script>` in Markdown is treated the same way as one in HTML. The owner can
-trust it for every reader; any reader can trust it for their own browser only.
-Once trusted, JavaScript works as it would anywhere else.
+raw `<script>` in Markdown is treated the same way as one in HTML. Only a
+person in the browser can trust it: one of the deployment's administrators for
+every reader, on a document they own, or any reader for their own browser only.
+A token cannot. Once trusted, JavaScript works as it would anywhere else.
 
-**Every update you publish sandboxes it again.** Trust covers the scripts a
-person saw, so a new version through a token withdraws it, the owner's and every
-reader's, until somebody trusts it again. An update that changes nothing keeps
-it. So when you revise a document whose scripts matter, say that it needs
-trusting again.
+**Every new version sandboxes it again.** Trust covers the scripts a person
+saw, so any new version withdraws it, the administrator's and every reader's,
+until somebody trusts it again: yours through a token, and an edit in the app,
+the owner's included. Older versions never run their scripts. An update that
+changes nothing keeps it. So when you revise a document whose scripts matter,
+say that it needs trusting again.
 
 If your document depends on its own JavaScript, say so in the text, so a reader
 seeing an empty box knows why, and tell the owner what the script does. Whether

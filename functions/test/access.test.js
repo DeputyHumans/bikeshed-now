@@ -20,7 +20,6 @@ const {
   isMember,
   isNonPrivate,
   isTeamMember,
-  keepsTrust,
   opensEditingToAnyAccount,
   readBasis,
   visibilityOf,
@@ -483,18 +482,3 @@ test("expiry is not part of canRead, and that is deliberate", () => {
   assert.equal(isExpired(expired, Date.now()), true);
 });
 
-// --- Trust across versions ---------------------------------------------------
-
-test("only the owner, editing in the app, keeps a document's trust in a new version", () => {
-  // Trust is the owner vouching for the scripts they saw. A version anybody
-  // else wrote, or one that arrived through a token, is content nobody vouched
-  // for: on a trusted document with open editing, any account could otherwise
-  // post a <script> to /draft, commit it, and run it in every reader's session.
-  const d = doc({ trusted: true, visibility: "public", publicEdit: true });
-  assert.equal(keepsTrust(d, { ...OWNER, channel: "web" }), true);
-  assert.equal(keepsTrust(d, { ...EDITOR, channel: "web" }), false, "an editor is not the owner");
-  assert.equal(keepsTrust(d, { ...STRANGER, channel: "web" }), false, "nor is open editing");
-  for (const channel of ["cli", "mcp", "api"]) {
-    assert.equal(keepsTrust(d, { ...OWNER, channel }), false, `a token update (${channel}) is an upload`);
-  }
-});

@@ -20,11 +20,11 @@
  *       un-sandboxes it for every reader
  *   5.3 a reader holding a personal grant opens the document: the frame loads
  *       ONCE, already unsandboxed (the first load waits for their answer)
- *   5.4 (local: it needs the stack's superadmin) trust carries into a new
- *       version only when the owner wrote it in the app: the owner's commit keeps `trusted` and every trust/{uid}; an
- *       editor's commit, the owner's own update_document, the owner's commit
- *       through a cli token and the owner's POST /publish?update= each
- *       withdraw both; a deduplicated update changes nothing
+ *   5.4 (local: it needs the stack's superadmin) trust never carries into a
+ *       new version: the owner's own commit in the app, an editor's commit,
+ *       the owner's update_document, the owner's commit through a cli token
+ *       and the owner's POST /publish?update= each withdraw `trusted` and
+ *       every trust/{uid}; a deduplicated update changes nothing
  *   5.5 links: an external link (with and without target=_blank), a link to
  *       the app's own page and one to another version open beside the
  *       document with no opener, and the frame stays put; a fragment scrolls
@@ -600,7 +600,7 @@ async function commitInApp(ctx, session, docId, baseVersion, html) {
   return c.json.versionId;
 }
 
-scenario("A5.4 a version by anyone but the owner in the app withdraws global and personal trust; the owner's own commit keeps both", { tiers: ["local"], timeoutMs: A54_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
+scenario("A5.4 every new version withdraws global and personal trust, the owner's own commit in the app included", { tiers: ["local"], timeoutMs: A54_MS, inconclusiveOnCaseTimeout: true, inconclusiveOnRequestStall: true, inconclusiveOnFunctionKill: true }, async (ctx) => {
   // Local only: its owner trusts for everyone at every version, which takes
   // a superadmin, and production has no e2e superadmin (ADR 0021).
   ctx.step("cast the stack's superadmin as owner, an editor and a viewer; the owner uploads the tour and shares it");
@@ -632,15 +632,15 @@ scenario("A5.4 a version by anyone but the owner in the app withdraws global and
     return { currentVersion: rec.currentVersion, trusted: rec.trusted, grants: (await trustGrants(doc.docId)).map((g) => g.id) };
   };
 
-  const grants1 = await trustBoth("v1");
+  await trustBoth("v1");
 
-  ctx.step("the owner commits an edit in the app (POST /draft, POST /commit with the owner's session): v2 keeps both scopes");
+  ctx.step("the owner commits an edit in the app (POST /draft, POST /commit with the owner's session): v2 withdraws both scopes, because a draft is shared and its scripts are nobody's word");
   const v2html = edited(doc.html, `owner edit ${tag()}`);
   const v2 = await commitInApp(ctx, owner, doc.docId, "v1", v2html);
   assert.equal(v2, "v2");
-  assert.deepEqual(await trustState(), { currentVersion: "v2", trusted: true, grants: grantIds }, "the owner's in-app commit keeps trust (keepsTrust)");
-  assert.deepEqual((await trustGrants(doc.docId)).map((g) => g.trustedAt), grants1.map((g) => g.trustedAt), "the personal grants are the same ones, not rewritten");
+  assert.deepEqual(await trustState(), { currentVersion: "v2", trusted: false, grants: [] }, "the owner's in-app commit withdraws both scopes too (SPEC §6c)");
 
+  await trustBoth("v2");
   ctx.step("the editor commits an edit in the app: v3 withdraws the global flag and every personal grant");
   const v3html = edited(v2html, `editor edit ${tag()}`);
   const v3 = await commitInApp(ctx, editor, doc.docId, "v2", v3html);

@@ -40,13 +40,7 @@ keeps the prompt meaningful when it does appear.
   else. That asymmetry is the whole point.
 - Forking a document resets `trusted` to false, because the fork has a new
   owner who has not vouched for anything.
-- A vouch covers the scripts that were vouched for. A new version anybody but
-  the owner wrote, or any update through a token, withdraws both scopes in the
-  transaction that makes it current (SPEC §6c, `keepsTrust`). Trust used to
-  carry across in-app edits on the claim that editing cannot add a script; the
-  server never enforced that, so an open editor could run code in every
-  reader's session. The cost is that a collaborator's edit to a trusted
-  interactive document has to be vouched for again.
+- A vouch covers the scripts that were vouched for. Every new version, the owner's own commit in the app included, withdraws both scopes in the transaction that makes it current, and only the current version runs (SPEC §6c). Trust used to carry across in-app edits on the claim that editing cannot add a script; the server never enforced that, so an open editor could run code in every reader's session. Until 0.32.0 it still carried when the owner committed, but a draft is shared, so an editor's script rode in on the owner's commit. The cost is that a trusted interactive document has to be vouched for again after every edit.
 - Two states to reason about instead of one. Mitigated by the dialogue naming
   the scope explicitly — "for everyone" versus "for me" — rather than offering
   a single ambiguous "Trust".

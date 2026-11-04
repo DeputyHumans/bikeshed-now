@@ -329,15 +329,17 @@ Everything you publish through a token is sandboxed, exactly like a browser
 upload: its scripts do not run until a person trusts it in the app. A raw
 `<script>` in Markdown is treated the same way as one in HTML.
 
-The owner can trust a document for every reader. Any reader can trust it for
-their own browser only. Once trusted, JavaScript works as it would anywhere
-else.
+Only a person in the browser can trust a document: one of the deployment's
+administrators for every reader, on a document they own, or any reader for
+their own browser only. A token cannot. Once trusted, JavaScript works as it
+would anywhere else.
 
-**Every update you publish sandboxes it again.** Trust covers the scripts a
-person saw, so a new version through a token withdraws it, the owner's and every
-reader's, until somebody trusts it again. An update that changes nothing keeps
-it. So when you revise a document whose scripts matter, say in your reply that
-it needs trusting again.
+**Every new version sandboxes it again.** Trust covers the scripts a person
+saw, so any new version withdraws it, the administrator's and every reader's,
+until somebody trusts it again: yours through a token, and an edit in the app,
+the owner's included. Older versions never run their scripts. An update that
+changes nothing keeps it. So when you revise a document whose scripts matter,
+say in your reply that it needs trusting again.
 
 So if your document needs its own JavaScript, say so in the text — a reader
 looking at an empty box should know why — and tell the owner what the script
@@ -347,7 +349,7 @@ place to say what is missing.
 
 ### What runs and what loads in HTML
 
-| In the document | Sandboxed (the default) | Trusted, by the owner for everyone or by a reader for themselves |
+| In the document | Sandboxed (the default) | Trusted, by an administrator for everyone or by a reader for themselves |
 |---|---|---|
 | `<script>`, inline or `src` | Does not run | Runs |
 | `onclick` and every other handler attribute | Does not run | Runs |
