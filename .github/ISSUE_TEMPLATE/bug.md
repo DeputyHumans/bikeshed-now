@@ -16,12 +16,14 @@ labels: bug
 Against the emulators if at all possible:
 
     npm run install:all && npm run build:policy
+    cp app/.env.example app/.env.local
     npm run emulators
     npm --prefix app run dev
 -->
 
 ## Environment
 
+- Version or commit:
 - Node:
 - Browser:
 - Emulators or a deployment:

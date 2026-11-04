@@ -14,6 +14,8 @@ the rules suite and the opt-in end-to-end suite.
 
 - [ ] `npm run verify`
 - [ ] `npm run test:rules:emulated` — if rules, indexes or the ACL changed
+- [ ] `CHANGELOG.md` has an entry under `## Unreleased` — if this affects anyone running or using it
+- [ ] No `Co-authored-by:` or `Generated-by:` trailers — `check:secrets` fails on them
 - [ ] Manually exercised in the emulators — if this changes the viewer or editor
 - [ ] `npm run test:e2e -- run --suite smoke`, and the area's specs — if this
       changes what `docs/development/verification.md` walks through (opt-in,

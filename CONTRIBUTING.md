@@ -16,6 +16,7 @@ prerequisite `npm install` cannot hand you.
 ```bash
 npm run install:all          # root + app + functions + cli
 npm run build:policy         # render the identity gate from config/access-policy.json
+cp app/.env.example app/.env.local   # already points at the emulators
 npm run emulators            # in one terminal — project id is demo-bikeshed
 npm --prefix app run dev     # in another — http://localhost:5173
 ```
@@ -23,8 +24,7 @@ npm --prefix app run dev     # in another — http://localhost:5173
 `demo-` prefixed project ids are emulator-only: Firebase refuses to point them at
 a real backend, so the quickstart cannot accidentally write to production.
 
-The app connects to the emulators when `VITE_USE_EMULATORS=1` is set — copy
-`app/.env.example` to `app/.env.local`, which already has it.
+The app connects to the emulators when `VITE_USE_EMULATORS=1` is set, which is what that copied file does.
 
 ## The verification table
 
@@ -38,7 +38,7 @@ and 14, the opt-in end-to-end suite, which neither `verify` nor CI runs.
 | 1 | `npm run check:policy && git diff --exit-code` | codegen reproducible and committed |
 | 2 | `npm --prefix app run typecheck && npm --prefix app run build` | exit 0, `app/dist/index.html` exists |
 | 3 | `npm --prefix functions run build && npm --prefix functions test` | 0 failing |
-| 4 | `npm --prefix app test` | green; ≥90% on `annotation/ export/ workspace/ stats.ts brand/` |
+| 4 | `npm --prefix app run coverage` | green; ≥90% on `annotation/ export/ workspace/ stats.ts brand/` |
 | 5 | `npm run test:rules:emulated` | 0 failing |
 | 6 | `node scripts/<each>.mjs --dry-run …` | exit 0; credential-free for all but `delete-version`, whose preview must read to be useful |
 | 7 | `npm run check:secrets` | `check-secrets: clean` |
@@ -56,7 +56,7 @@ worth reporting on its own.
 
 The table above proves the code is self-consistent. It does not prove the
 product works — the properties that matter most here are integration ones. For
-those, walk `docs/development/verification.md` against the emulators. It is seventeen
+those, walk `docs/development/verification.md` against the emulators. It is nineteen
 observations, it needs no cloud account, and it is where four real defects were
 found that no unit test could have caught.
 
@@ -86,7 +86,7 @@ These are the ones that actually get enforced in review.
 3. **No abstraction before the second call site.** Extract a helper when two
    places need it, not when one place might.
 4. **Duplication across runtimes is allowed, and is then tested into agreement.**
-   The ESM/CommonJS twins (`hash`, `membership`, `policy`) are duplicated on
+   The ESM/CommonJS twins (`hash`, `membership`, `policy`, `transaction-receipts`) are duplicated on
    purpose and pinned by parity tests. That is cheaper and safer than a shared
    build artifact.
 5. **New concepts must justify themselves against an existing one.** Markdown
@@ -114,6 +114,12 @@ Stage explicit paths. `git add -A` and `git add .` are not used here — they ar
 how a stray local file or a credential ends up in history.
 
 Keep commits atomic: one change, and the project builds after each one.
+
+**No attribution trailers.** `npm run check:secrets` fails on any commit carrying `Co-authored-by:`, `Generated-by:` or `Claude-Session:`, on any branch it can see, and a trailer cannot be removed without rewriting history. Editors and coding agents often add one for you, so check `git log` before you push. It is why this repository does not squash-merge: GitHub writes `Co-authored-by:` into a squash of a pull request with more than one author.
+
+**A new binary has to be declared.** `check:secrets` skips binary files when it looks for secrets, so it pins the list of them instead. Add a new image or font to `EXPECTED_BINARIES` in `scripts/check-secrets.sh`, once you have looked at the file.
+
+**Add a `CHANGELOG.md` entry** under `## Unreleased` when a change affects anyone running or using this. Stop there: version numbers, tags and releases are the maintainer's, because pushing `main` deploys production.
 
 ## Security rules
 

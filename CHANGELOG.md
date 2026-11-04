@@ -31,6 +31,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **Every GitHub Action is pinned to a commit.** CI, deployment and operations name each action by full SHA with its version in a comment, so a moved tag cannot change what runs with the production credential. `upload-artifact` moves to v7 in the same change. The rules job installs the Firebase CLI at the version deployment already pins, 15.25.1, instead of whatever is newest.
 
+- **`CONTRIBUTING.md` states what CI enforces.** The attribution-trailer rule, the binary allowlist and the changelog entry were only in the agent instructions, so a contributor learned them from a red check. The quickstart blocks also gain the step that points the app at the emulators, and the app row of the verification table now runs the coverage it claims to measure.
+
 ### Fixed
 
 - **Patched dependencies in the functions.** `node-forge`, `@grpc/grpc-js`, `body-parser` and `qs` move to fixed versions in the lockfile, with no change to `package.json`.

@@ -17,6 +17,7 @@ what is still walked by hand.
 
 ```bash
 npm run install:all && npm run build:policy
+cp app/.env.example app/.env.local
 npm run emulators                                  # terminal 1
 npm --prefix app run dev                           # terminal 2
 
