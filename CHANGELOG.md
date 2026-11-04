@@ -14,6 +14,12 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the
 rendered bytes are part of the content hash, so every Markdown document's next
 save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Security
+
+- **A document's XML files no longer run script on this origin.** The script lock (SPEC §2, ADR 0021) named five types to lock, and a browser renders every other `+xml` type as XML, where an element in the XHTML namespace runs. So a bundle's `.atom`, `.rss`, `.rdf`, `.xslt` or any of about a hundred more, opened by its `/content/…` address, ran as whoever opened the link, with that person's session: any account could upload one to a public document and send the link. Every content and draft response is now locked unless its type is on a short list of types that are never a scripted document (pictures, sound, video, fonts, CSS, JavaScript, JSON, text, PDF), so a type nobody listed is locked too.
+
 ## 0.31.1 — 2026-11-03
 
 ### Changed

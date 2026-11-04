@@ -31,7 +31,7 @@ actually available at the time.
 | [0018](0018-keep-the-document-open-path-warm.md) | Keep the document-open path warm | Accepted |
 | [0019](0019-folder-links-reach-their-subtree.md) | A folder's link reaches everything beneath it, to read | Accepted |
 | [0020](0020-an-account-follows-its-google-address.md) | An account follows the address Google renames it to | Accepted |
-| [0021](0021-a-documents-script-runs-only-with-consent.md) | A document's script runs only with its reader's consent | Accepted |
+| [0021](0021-a-documents-script-runs-only-with-consent.md) | A document's script runs only with its reader's consent | Amended in 0.32.0 |
 | [0023](0023-attribution-names-the-credential.md) | Attribution names the credential, not the endpoint | Accepted |
 | [0024](0024-deletion-goes-through-a-trash.md) | Deletion goes through a Trash | Accepted, amended by 0025 |
 | [0025](0025-the-trash-empties-on-one-daily-job.md) | The Trash empties on one daily job, or sooner with an emailed code | Accepted |

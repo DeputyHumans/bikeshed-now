@@ -15,14 +15,38 @@ import { canManageSharing, type DocAclData } from "./acl";
  * and a server that agrees.
  */
 
-/** The response types a browser renders as a document that can run script. */
-const SCRIPTABLE = new Set([
-  "text/html",
-  "application/xhtml+xml",
-  "image/svg+xml",
-  "application/xml",
-  "text/xml",
+/**
+ * The response types a browser never renders as a document that runs script.
+ * Everything else is locked, a type nobody thought of included.
+ *
+ * This was once the other way round: a list of the scriptable types, five of
+ * them. Browsers render ANY `+xml` type as an XML document, and an element in
+ * the XHTML namespace runs there, so `.atom`, `.rss`, `.rdf`, `.xslt` and some
+ * hundred more were served unlocked on this origin, as whoever opened them.
+ * A list of the dangerous types has to be complete to be safe; a list of the
+ * harmless ones only has to be right. A lock on a subresource (a script, a
+ * stylesheet, a picture) is ignored, so locking too much costs nothing.
+ */
+const INERT = new Set([
+  "text/css",
+  "text/javascript",
+  "application/javascript",
+  "application/x-javascript",
+  "application/ecmascript",
+  "text/ecmascript",
+  "application/json",
+  "text/json",
+  "text/plain",
+  "text/csv",
+  "text/markdown",
+  "application/pdf",
+  "application/octet-stream",
+  "application/zip",
+  "application/wasm",
 ]);
+
+/** Pictures, sound, video and type: never a document, except a picture that is XML. */
+const INERT_FAMILY = /^(image|audio|video|font)\//;
 
 /**
  * The lock: rendered, readable by the app on `contentDocument`, and inert.
@@ -46,10 +70,17 @@ export const RUN_ANCESTORS = "frame-ancestors 'self'";
  */
 export const RUN_SEGMENT = "!run";
 
-/** True for a type a browser would render as a scripted document. Parameters and case are ignored. */
+/**
+ * True unless the type is one a browser never renders as a scripted document.
+ * Parameters and case are ignored. An XML type is scriptable whatever its
+ * family (`image/svg+xml`); a JSON one is shown as text.
+ */
 export function isScriptable(contentType: string): boolean {
   const base = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
-  return SCRIPTABLE.has(base);
+  if (base.endsWith("+xml") || base.endsWith("/xml")) return true;
+  if (base.endsWith("+json")) return false;
+  if (INERT_FAMILY.test(base)) return false;
+  return !INERT.has(base);
 }
 
 /**

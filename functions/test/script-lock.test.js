@@ -46,6 +46,28 @@ test("every scriptable type is locked unless the run variant was asked for and g
   assert.equal(SCRIPT_LOCK, "sandbox allow-same-origin");
 });
 
+test("every type a file can be served as that a browser renders as HTML or XML is locked", () => {
+  // The server types a file by its extension through mime-types, so its table
+  // is exactly what can reach a browser. Browsers render ANY +xml type as an
+  // XML document, where an element in the XHTML namespace runs: a list of five
+  // scriptable types once left .atom, .rss, .rdf, .xslt and a hundred more
+  // running on this origin.
+  const { types } = require("mime-types");
+  const documentLike = Object.entries(types).filter(([, type]) => /html|xml/.test(type));
+  assert.ok(documentLike.length > 100, "the table is the whole table");
+  for (const [ext, type] of documentLike) {
+    assert.equal(isScriptable(type), true, `.${ext} is served as ${type}`);
+  }
+  // A type nobody listed is locked, not trusted.
+  for (const type of ["application/x-unheard-of", "text/x-something", "", "multipart/x-mixed-replace"]) {
+    assert.equal(isScriptable(type), true, JSON.stringify(type));
+  }
+  // What is shown as text, played or drawn stays as it was.
+  for (const type of ["image/jpeg", "image/webp", "audio/mpeg", "video/mp4", "font/woff2", "application/manifest+json", "text/javascript"]) {
+    assert.equal(isScriptable(type), false, type);
+  }
+});
+
 test("only trusted: true is trust for everyone", () => {
   assert.equal(globallyTrusted({ trusted: true }), true);
   for (const doc of [{}, { trusted: false }, { trusted: "true" }, { trusted: 1 }, null, undefined]) {
@@ -172,6 +194,10 @@ test("a scripted document opened by its plain address renders locked, trusted or
     // An SVG is a document too; a picture of the same type is not, so nothing else is.
     assert.equal((await c.head(null, `/content/${docId}/v1/logo.svg`)).headers["content-security-policy"], SCRIPT_LOCK);
     assert.equal((await c.head(null, `/content/${docId}/v1/photo.png`)).headers["content-security-policy"], undefined);
+    // So is a feed, or any XML a bundle carries: rendered as XML, it runs.
+    for (const name of ["feed.atom", "feed.rss", "data.rdf", "page.xslt", "f.mathml"]) {
+      assert.equal((await c.head(null, `/content/${docId}/v1/${name}`)).headers["content-security-policy"], SCRIPT_LOCK, name);
+    }
   }
   // Locking changes nothing about caching: the plain URL's answer is the same
   // for everyone, so it stays as cacheable as it was.
