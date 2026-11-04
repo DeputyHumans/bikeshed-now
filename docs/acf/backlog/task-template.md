@@ -1,4 +1,4 @@
-<!-- acf-whip-artifact: content/backlog/task-template.md v3.6.0 -->
+<!-- acf-whip-artifact: content/backlog/task-template.md v3.7.0 -->
 # Task Template
 
 ## Use this exact format for every task file
@@ -12,14 +12,14 @@
 - **Status**: pending
 - **Priority**: [blocker|critical|high|medium|low]
 - **Estimated Hours**: [realistic estimate]
-- **Assigned Agent**: [one of the project's installed agents; check `ls .claude/agents/*.md` (whip-init generates e.g. go-engineer, python-engineer, nodejs-engineer, nextjs-engineer, react-engineer, vue-engineer, infrastructure-engineer, quality-reviewer, task-engineer, research-agent). It must resolve to `.claude/agents/<name>.md`, or the doctor flags FATAL unknown-agent.]
-- **Worktree**: [kebab-case-slug] (Required for code-mutating tasks; use "none" only for research or docs-only tasks. The orchestrator dispatches one specialist per slug at a time, so tasks that share a slug run one after another. If an active code task has no slug, `/whip-doctor --fix` (which `/go` runs at startup) derives one from its id.)
+- **Assigned Agent**: [the task's role: one of the project's installed agents (`ls .claude/agents/*.md`) or role skills (`ls .claude/skills/*/SKILL.md`), e.g. go-engineer, python-engineer, nodejs-engineer, nextjs-engineer, react-engineer, vue-engineer, infrastructure-engineer, devops, research-agent. It must resolve to `.claude/agents/<name>.md` or `.claude/skills/<name>/SKILL.md`, or the doctor flags FATAL unknown-agent. An installed agent runs the task itself; a role skill runs on the `whippet` worker, which loads it first. The field keeps its name so existing tasks keep working.]
+- **Worktree**: [kebab-case-slug] (Required for code-mutating tasks; use "none" only for research or docs-only tasks. The orchestrator dispatches one worker per slug at a time, so tasks that share a slug run one after another. If an active code task has no slug, `/whip-doctor --fix` (which `/go` runs at startup) derives one from its id.)
 - **PR Group**: [kebab-case-slug] (defaults to the same value as Worktree; sibling tasks ship together as one PR)
 - **Touches Globs**: [comma-separated file globs this task will modify, e.g. `services/user-api/**, go.mod`] or "none" (the doctor WARNs when two pending tasks on different slugs overlap, a sign the partition is wrong)
 - **Dependencies**: [task-id-1, task-id-2] or "none"
 - **Integrated-At**: (Since 3.0.0 / LP-CAS this is display and operator-ack metadata. The integrator never reads or writes it: integration truth is the in-tree ledger marker `.acfwhip/integrated/<shard>/<key>.json` on trunk, written by `integrate-lpcas`. Set it only through `/whip-move --integrated-at`.)
 - **Rejection Count**: 0 (max 3. `/go` adds 1 when quality-reviewer rejects; at the cap it blocks the task for task-engineer to redesign. A review reporting `faultClass: mechanism`, such as a broken environment or a lost clean-checkout token, does not add to it.)
-- **Block-Count**: 0 (per-task re-block counter. `/go` adds 1 each time a specialist re-blocks a dispatched task, and stops re-dispatching at the cap, parking the task for an operator)
+- **Block-Count**: 0 (per-task re-block counter. `/go` adds 1 each time the task's worker re-blocks a dispatched task, and stops re-dispatching at the cap, parking the task for an operator)
 - **Created By**: task-engineer
 - **Created At**: $(date +"%Y-%m-%d %H:%M:%S") UTC
 - **Documentation**: [existing docs agent must read first, or "none"]
@@ -103,7 +103,7 @@
 | ---------------------------- | ----- | ------- | ------------- | --------------------- |
 | $(date +"%Y-%m-%d %H:%M:%S") | draft | pending | task-engineer | Initial task creation |
 
-**Concurrency token (mandatory for code-mutating tasks)**: implementer specialists and quality-reviewer invoke `clean-checkout-before-task` as Step 0. The skill appends a line in this exact form, where `<status>` is literally `ok`:
+**Concurrency token (mandatory for code-mutating tasks)**: implementers and quality-reviewer invoke `clean-checkout-before-task` as Step 0 (inside `/go`'s per-task harness, its checkout stage runs it once for the whole task). The skill appends a line in this exact form, where `<status>` is literally `ok`:
 
 ```
 | <UTC ts> | clean-checkout | <status> | clean-checkout-before-task | <slug> | <branch> |
@@ -295,7 +295,7 @@ quality-reviewer must:
 **Where commits land**:
 - **task-engineer** commits on the trunk branch at the repo root: new tasks in `.backlog/pending/`, plus the retry, unblock and redesign moves on the legacy markdown loop. It never enters a worktree.
 - **The `/go` orchestrator** commits every other `.backlog/` state move, on the trunk branch at the repo root: pending→in-progress, in-progress→completed/blocked, completed→in-review, in-review→accepted/rejected, and on the workflow path rejected→pending, rejected→blocked and blocked→pending. An operator's `/whip-move` also commits one move at a time, at the root.
-- **Implementer specialists** commit only **code**, inside `.worktree/<slug>` on `worktree/<slug>`. quality-reviewer commits nothing. Neither moves task files or commits `.backlog/` changes on the worktree branch: they signal state through the ACFW-RESULT marker, and the orchestrator performs the move at the root.
+- **Implementers** (the task's worker) commit only **code**, inside `.worktree/<slug>` on `worktree/<slug>`. quality-reviewer commits nothing. Neither moves task files or commits `.backlog/` changes on the worktree branch: they signal state through the ACFW-RESULT marker, and the orchestrator performs the move at the root.
 - **`integrate-lpcas`** (driven by the orchestrator in default mode) cherry-picks each accepted task's single-parent candidate onto the live trunk and lands it by compare-and-swap, with a co-committed ledger marker. An override in `CLAUDE.md` (for example, a PR per group) is honored automatically.
 
 ### When Creating Task (task-engineer)
@@ -388,7 +388,7 @@ ml-001-bentoml-face-recognition-deployment.md
 - All required fields populated
 - Priority is a valid value (blocker|critical|high|medium|low)
 - Dependencies exist or "none"
-- Assigned agent exists and is valid for this project
+- Assigned Agent names a role this project has: an installed agent or a role skill
 - At least 3 acceptance criteria
 - Technical requirements are specific
 - Edge cases identified
@@ -403,5 +403,5 @@ ml-001-bentoml-face-recognition-deployment.md
 
 ---
 
-**Last Updated**: 2026-09-29
+**Last Updated**: 2026-10-29
 **Document Owner**: task-engineer

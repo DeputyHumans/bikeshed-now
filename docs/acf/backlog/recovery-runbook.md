@@ -1,4 +1,4 @@
-<!-- acf-whip-artifact: content/backlog/recovery-runbook.md v3.6.0 -->
+<!-- acf-whip-artifact: content/backlog/recovery-runbook.md v3.7.0 -->
 # Recovery Runbook
 
 Operator reference for an acf-whip backlog that will not run, or a `/go` run that stopped short.
@@ -50,7 +50,7 @@ Severity also depends on the dispatch path. A task in `accepted/` is terminal, s
 | `dangling-dep` | Task depends on an id with no task file. | Create the missing task, or drop the dep. |
 | `cyclic-deps` | Task participates in a dependency cycle. | Break the cycle: remove one edge with an edit to `Dependencies`, or split the task. |
 | `cross-slug-dep-not-integrated` | A dispatched task's cross-slug dep is not yet on trunk. | Let `/go` integrate the dep first. If the dep's change is already on trunk, see `accepted-branchless-unverified` below. |
-| `unknown-agent` | `Assigned Agent` has no `.claude/agents/<name>.md`. | `/whip-add-agents`, or reassign the task. |
+| `unknown-agent` | `Assigned Agent` names no role: there is no installed agent `.claude/agents/<name>.md` and no role skill `.claude/skills/<name>/SKILL.md`. | `/whip-add-skills` to write the role skill, or reassign the task. |
 | `worktree-wrong-branch` | `.worktree/<slug>` is on the wrong branch. | `git worktree remove --force .worktree/<slug>`; `/go` recreates it. |
 
 `duplicate-id` is **WARN**, not FATAL: it quarantines that id and the run continues. De-dup when convenient.
@@ -111,13 +111,15 @@ Any transition rows written between the restored commit and now are lost. Re-ins
 |------|---------|----------------|
 | `orphaned-worktree-dirty` | The reaper **skipped** a dirty orphan worktree rather than destroying uncommitted work. | Inspect it, salvage anything you want, then `git worktree remove --force .worktree/<slug>`. |
 | `accepted-branchless-unverified` | An accepted code task has no worktree branch **and** no ledger marker. Its deliverable may or may not be on trunk. | Check that the deliverable is on trunk, then clear the finding the way your backend allows (below). It gates nothing: the scheduler already treats a branchless accepted task as terminal. |
-| `dirty-trunk-root` | Tracked files are modified or staged at the shared root, outside `.backlog/` and `docs/cycles/`. A specialist may have escaped its worktree. | **Commit or stash them now.** An integration that changes one of those paths overwrites your copy. It then prints a WARN (also in `/go`'s report, under `integrationWarnings`) with a snapshot commit and a `Recover:` command, `git -C <root> diff --binary <observed> <snapshot> \| git -C <root> apply -3`, which re-applies only your edits on top of the landed content (a clash leaves conflict markers; the result is staged). `git show <snapshot>:<path>` shows one path as it was. `docs/cycles/` is not counted: plans are edited at the root by design, and no landing can overwrite them, because the integrator drops every task's `docs/cycles/` edits. |
+| `dirty-trunk-root` | Tracked files are modified or staged at the shared root, outside `.backlog/` and `docs/cycles/`. A task worker may have escaped its worktree. | **Commit or stash them now.** An integration that changes one of those paths overwrites your copy. It then prints a WARN (also in `/go`'s report, under `integrationWarnings`) with a snapshot commit and a `Recover:` command, `git -C <root> diff --binary <observed> <snapshot> \| git -C <root> apply -3`, which re-applies only your edits on top of the landed content (a clash leaves conflict markers; the result is staged). `git show <snapshot>:<path>` shows one path as it was. `docs/cycles/` is not counted: plans are edited at the root by design, and no landing can overwrite them, because the integrator drops every task's `docs/cycles/` edits. |
 | `trunk-unpushed` | Local trunk is ahead of its remote. LP-CAS lands on the **local** trunk and never pushes, by design. | `git push` when ready. |
 | `duplicate-id` | One `ID` appears in two task files. Each runs on its own slug and ledger key, so there is no integration collision. | De-dup the id. |
 | `stale-in-progress` | Dispatched longer ago than the timeout. | Nothing. `/go` recovers it (see below). |
 | `lingering-in-review` | Stuck in `in-review/`; the reviewer never terminated it. | Re-run `/go`; it is re-reviewed. |
 | `missing-clean-checkout-token` | Accepted without a `clean-checkout \| ok` row. | Nothing; historical tasks predate the token. |
 | `cross-slug-glob-overlap` | Two pending tasks on different slugs declare the same glob, which may mean the partition is wrong. | Merge the slugs, or narrow `Touches Globs`. |
+| `worker-not-installed` | Repo-scoped (`(repo)`): there is no `.claude/agents/whippet.md`. A task whose role is a role skill then runs on the runtime's default subagent, told to load the skill. | `/whip-init`, which installs `whippet`. |
+| `unused-agent` | Repo-scoped (`(repo)`): `.claude/agents/workflow-architect.md` is still installed. Nothing has run it since 3.7.0. | `git rm .claude/agents/workflow-architect.md` |
 
 ---
 

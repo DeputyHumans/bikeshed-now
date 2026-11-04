@@ -30,12 +30,9 @@ project vouches for it. The full OFL text and the attribution are in
 `app/public/fonts/OFL.txt`, and **the OFL applies to the font files only** — it
 does not extend to any other part of this work.
 
-### docs/acf/** and .claude/scripts/
+### docs/acf/** and .claude/scripts/status-line.py
 
-© Fibonacci Seven, LLC, under a proprietary license that forbids
-redistribution. **This is a known conflict**, recorded in full in `NOTICE`,
-including what a downstream recipient has to do about it. Read that before
-publishing, forking or mirroring this repository.
+© Fibonacci Seven, LLC, under the Apache License 2.0: copies of files from [ACF Tools](https://github.com/fib7/acf-tools), relicensed under Apache-2.0 on 2026-10-28. `NOTICE` maps each copy to its upstream file and says which one differs from it.
 
 ---
 

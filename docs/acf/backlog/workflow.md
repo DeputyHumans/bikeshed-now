@@ -1,4 +1,4 @@
-<!-- acf-whip-artifact: content/backlog/workflow.md v3.6.0 -->
+<!-- acf-whip-artifact: content/backlog/workflow.md v3.7.0 -->
 # Task Workflow
 
 ## Pluggable task store (3.1.0)
@@ -40,7 +40,7 @@ When the host supports dynamic workflows, `/task` and `/go` run as workflows
 script holds the loop, the slug partition, the dependency gate, the topological integration order,
 and the stall and terminal bookkeeping. **Intermediate state lives in script variables, not in
 Claude's context**, which stays flat across iterations however large the backlog. Every filesystem or git action goes to a narrow agent: a read-only scanner
-(`scan-backlog.sh`), a single sequential writer (`apply-transition.sh`), parallel specialists and
+(`scan-backlog.sh`), a single sequential writer (`apply-transition.sh`), parallel task workers and
 reviewers isolated by worktree slug, and a sequential LP-CAS integrator (`integrate-lpcas.sh`), with
 conflict-resolver dispatch hoisted into the script.
 
@@ -85,18 +85,18 @@ worktree-slug partitioning, and the dependency gate.
 ## State Transition Authority
 
 All `.backlog/` state moves happen at the **repo root** (`$ACFW_TRUNK_ROOT`) on the **trunk branch**.
-The orchestrator (`/go`) is the single writer of `.backlog/` files. Specialists and quality-reviewer
-report their decisions through the `ACFW-RESULT` marker in their Task() return, and the orchestrator
+The orchestrator (`/go`) is the single writer of `.backlog/` files. Task workers and quality-reviewer
+report their decisions through the `ACFW-RESULT` marker in their result, and the orchestrator
 performs the matching move and commit on trunk.
 
 | From | To | Who performs the move (at root, on trunk) |
 |------|----|-------------------------------------------|
 | N/A | pending | task-engineer (creation, at root, never in a worktree) |
-| pending | in-progress | `/go` orchestrator (pre-move + commit before dispatching specialist) |
-| in-progress | completed | `/go` orchestrator on specialist's `transition: completed` signal |
-| in-progress | blocked | `/go` orchestrator on specialist's `transition: blocked` signal (increments `Block-Count`, the per-task loop-breaker) |
+| pending | in-progress | `/go` orchestrator (pre-move + commit before dispatching the task's worker) |
+| in-progress | completed | `/go` orchestrator on the worker's `transition: completed` signal |
+| in-progress | blocked | `/go` orchestrator on the worker's `transition: blocked` signal (increments `Block-Count`, the per-task loop-breaker) |
 | completed | in-review | `/go` orchestrator (pre-move before dispatching quality-reviewer) |
-| in-review | accepted | `/go` orchestrator on reviewer's `transition: accepted` signal |
+| in-review | accepted | `/go` orchestrator on reviewer's `transition: accepted` signal, or when the harness's own adversarial review accepted that exact commit (3.7.0, see [One review per accepted diff](#per-task-child-workflows-320-one-shipped-harness-per-kind-since-370)) |
 | in-review | rejected | `/go` orchestrator on reviewer's `transition: rejected` signal (also increments Rejection Count) |
 | rejected | pending | `/go` orchestrator (workflow path) on retry, up to the orchestrator's cap (`MAX_REJECT_RETRY`, currently 3); task-engineer at root on the legacy markdown loop |
 | blocked | pending | `/go` orchestrator when deps resolve (gated on `Rejection Count` < cap and `Block-Count` < cap), or task-engineer (unblock, at root) |
@@ -105,7 +105,7 @@ performs the matching move and commit on trunk.
 **task-engineer never enters a worktree.** It never invokes `clean-checkout-before-task`; all its work
 is on `.backlog/` at the repo root, committed to the trunk branch.
 
-**Specialists** do their code work inside `.worktree/<slug>` on `worktree/<slug>`. Their commits there
+**Task workers** do their code work inside `.worktree/<slug>` on `worktree/<slug>`. Their commits there
 contain code only: they do not move task files and do not commit `.backlog/` changes on the worktree
 branch.
 
@@ -150,7 +150,7 @@ and never equal to the task id, that deps are acyclic, and that ids are unique. 
 doctor derives and writes a missing slug on an active task.
 
 **Parallelism is the default.** The slug is the partition. `/go` groups pending tasks by `Worktree:`
-and dispatches at most one specialist per group: tasks on different slugs run **in parallel**, and
+and dispatches at most one worker per group: tasks on different slugs run **in parallel**, and
 tasks that share a slug run one after another. Decomposition therefore maximizes parallelism: every
 independent file surface gets its own slug, a slug is shared only when tasks write the **same** files,
 and a dependency is declared only when a task consumes another's output. Over-shared slugs and
@@ -169,42 +169,109 @@ branch prefix in `.backlog/.acfw-config` (`ACFW_WORKTREE_DIR`, default `.worktre
 `ACFW_BRANCH_PREFIX`, default `worktree`). Change them only on a fresh backlog: existing worktrees
 stay pinned to the namespace they were created under.
 
-## Per-task child workflows (3.2.0)
+## Roles: who runs a task (3.7.0)
 
-Each dispatched unit runs as its **own nested workflow**, not as a single agent. A
-**workflow-architect** agent authors a harness for that specific task by filling four marked regions
-of a locked, shipped skeleton (`skills/lib/child-skeleton.js.tmpl`). `/go` runs the file only after a
-validator byte-diffs every locked segment. The skeleton owns the single `clean-checkout`, the stage
-primitives, the progress ledger, the budget guard, the commit verifier, the review-panel arithmetic
-and the only return path. The architect cannot author any of that away.
+A task's `Assigned Agent` field names its **role**. The field keeps its name on every store (files:
+`- **Assigned Agent**:`; beads: the assignee; multica and linear: `whip_agent`), so existing tasks and
+filters such as `/go frontend tasks only` keep working. A role is one of two things:
 
-**Seams.** Implementation and LP-CAS conflict resolution escalate by default. The multi-lens review
-panel is opt-in (`args.escalateReview`) because it is the only *subtractive* seam: it can reject work
-that would otherwise have shipped, against a hard 3-rejection terminal. Aggregation is strict majority
-with **no veto**, and a panel of any size can cost at most one rejection per round.
+- an **installed agent**, `.claude/agents/<role>.md`, such as a specialist agent a project generated
+  before 3.7.0 or one it wrote itself;
+- a **role skill**, `.claude/skills/<role>/SKILL.md` (`go-engineer`, `react-engineer`, `devops`), with
+  `user-invocable: false` in its frontmatter. It holds the domain, its scope and its quality gates; the
+  process rules live in the worker.
+
+At dispatch `/go` resolves the role:
+
+1. The role names an installed agent: that agent runs the task, exactly as before 3.7.0. An agent wins
+   over a role skill of the same name, so a project migrates by deleting the agent file
+   (`/whip-add-skills --migrate` converts it), never by renaming tasks.
+2. Otherwise the **`whippet`** worker runs it (the runtime's default subagent when `whippet` is not
+   installed). When the role names a role skill, the dispatch prompt tells the worker to load that
+   skill first, with the Skill tool, or by reading the `SKILL.md` when the Skill tool is unavailable.
+
+Every dispatch prompt also carries a GOAL line: when the task's `Documentation` names a plan
+(`docs/cycles/<ID>/plan.md (D2)`), the worker reads the plan's goal and those deliverables before it
+starts. `whippet` is the only writer in its worktree. It spawns subagents only for read-only work that
+would flood its context (a wide sweep, independent research, a second read of a risky diff).
+
+The resolved role runs every stage of the task that writes: implementation, the gate and review
+fixes, a non-code task's work, and the task's merge-conflict resolution (the integrator reports the
+task's role as the resolver, and it resolves the same way). The doctor raises `unknown-agent` when a role names neither an installed agent nor a role
+skill, which holds that task out before dispatch. One that slips past the doctor still runs on the
+worker, with no skill to load; before 3.7.0 the runtime threw on the unknown agent name.
+
+## Per-task child workflows (3.2.0; one shipped harness per kind since 3.7.0)
+
+Each dispatched unit runs as its **own nested workflow**, not as a single agent. At bootstrap `/go`
+scaffolds one harness per kind (`impl`, `direct`, `review`, `resolve`) from the shipped skeleton
+(`skills/lib/child-skeleton.js.tmpl`, through `skills/lib/bin/acfw-child-scaffold`) into
+`.acfwhip/run/child/_default/<kind>.workflow.js`. Every unit of a kind runs that same file with its own
+args. The skeleton owns the single `clean-checkout`, the stage primitives, the progress ledger, the
+budget guard, the commit verifier, the review-panel arithmetic and the only return path.
+
+Until 3.7.0 a **workflow-architect** agent wrote each task's harness by filling four marked regions of
+that skeleton, a 20-check validator byte-diffed the rest, and a harness that threw was amended and run
+again. 3.7.0 removed the architect, the validator and the amend loop. They cost two agents per unit
+and, most of the time, arrived at the default body anyway.
+
+**What each harness runs.**
+
+- `impl`: checkout → implement → a bounded gate loop (at most two gate runs, with a fix after a
+  failure) → an adversarial review of the diff by a fresh `quality-reviewer` → verify. A rejection by
+  that reviewer gets one fix stage.
+- `direct` (a non-code task): one stage that does the work in the trunk root and commits nothing.
+- `review` (only with the review panel on): the gates again, then three read-only `quality-reviewer`
+  lenses.
+- `resolve`: **one** resolver, as the task's resolved role, with every conflicted path in view. The
+  locked verify-resolve probe stays the authority on whether the conflict is resolved. (Before 3.7.0
+  this body split the work across shell-tier per-file analysts and a shell-tier stager.)
+
+**One review per accepted diff, when a gate is configured (3.7.0).** The gate stage and the
+adversarial stage each report the commit they ran on. The harness returns the verdict and sha only
+when the project configured `ACFW_GATE_CMD` (so the gate ran exactly that command rather than checks a
+shell-tier agent chose), that gate passed on the very commit the adversarial stage reviewed, and the
+stage ran as `quality-reviewer` and accepted; a fix after the review leaves them empty. `/go` then skips its
+separate review and moves the task in-review → accepted, with the note "accepted by the in-harness
+adversarial review (quality-reviewer) at <sha>", only when all of these hold:
+
+- the review panel is off;
+- the verdict is accept, and the reviewed sha equals the commit the harness reports;
+- a deterministic probe observed the task's clean-checkout token.
+
+Everything else gets the separate review as before: no configured gate, legacy dispatch, a non-code
+task, a fix after the review, a commit by the verify stage, the panel on, or a token not observed. The run report counts
+the skips in `escalation.reviewSkipped`.
+
+**Seams.** Implementation and LP-CAS conflict resolution run in a harness by default. The multi-lens
+review panel is opt-in (`args.escalateReview`) because it is the only *subtractive* seam: it can
+reject work that would otherwise have shipped, against a hard 3-rejection terminal. Aggregation is
+strict majority with **no veto**, and a panel of any size can cost at most one rejection per round.
 
 **Durability.** A workflow script has no filesystem, so each stage's own agent appends its result to
 a ledger under `.acfwhip/run/child/<stem>/<attempt>/<kind>/` (gitignored). Because the record lives
-outside the script, it survives the script throwing *and* the architect's repair edit. When a harness
-throws, a scout reconciles that ledger against git, and the architect amends the harness knowing
-which stages completed; the amended run replays those stages in **zero agents**. A commit-bearing
-entry is trusted only when git confirms it with an `ACFW-Stage:` trailer, and every disagreement
-resolves toward an **informed re-run**, never a skip.
+outside the script, it survives the script throwing. Before each run a scout reconciles that ledger
+against git, and the harness replays the stages it proves complete in **zero agents**. A
+commit-bearing entry is trusted only when git confirms it with an `ACFW-Stage:` trailer, and every
+disagreement resolves toward an **informed re-run**, never a skip. When a harness throws, the scout
+records what it left, `/go` commits any uncommitted work in the worktree as WIP, and the task falls
+back to single-agent (3.1.0) dispatch. There is no repair round.
 
-The attempt key is `a<RejectionCount>-b<BlockCount>`. It stays stable across amends, re-dispatches
-and `/go` crashes, so progress survives them, and it is **new** after an external rejection, since a
-retry harness that replayed everything as done would produce nothing.
+The attempt key is `a<RejectionCount>-b<BlockCount>`. It stays stable across re-dispatches and `/go`
+crashes, so progress survives them, and it is **new** after an external rejection, since a retry
+harness that replayed everything as done would produce nothing.
 
 **Degradation.** The runtime caps the total agents per run, and children share that count, so `/go`
 steps down FULL → LEAN → DIRECT → CLOSE as the budget runs low, ending at verbatim 3.1.0 single-agent
-dispatch. Escalation is a **policy, not a guarantee**: on a large backlog the tail of a run is 3.1.0,
+dispatch. The harness is a **policy, not a guarantee**: on a large backlog the tail of a run is 3.1.0,
 and the report says so (`escalation{}`, `agentsUsed`, `stopReason: agent-cap-reached`). Every failure
-path (architect non-emit, pre-flight rejection, an exhausted amend budget, `workflow()` unavailable)
-lands on the same fallback. `args.escalate: false` turns the whole feature off.
+path (a harness that throws or returns `ok: false`, default harnesses that could not be scaffolded,
+`workflow()` unavailable) lands on the same fallback. `args.escalate: false` turns the
+whole feature off.
 
 ### Step 0: clean-checkout-before-task
 
-Every implementer specialist and `quality-reviewer` invokes the `clean-checkout-before-task` skill as Step 0, before reading the task body. The skill:
+Every implementer and `quality-reviewer` invokes the `clean-checkout-before-task` skill as Step 0, before reading the task body. Inside a child harness the locked checkout stage runs it once for the whole task (below). The skill:
 
 1. Resolves `<slug>` from the task front-matter.
 2. Lazy-creates `.worktree/<slug>` on branch `worktree/<slug>`.
@@ -224,8 +291,8 @@ worktree passes the branch check and goes on to step 4, whose `git stash push -u
 sweeps another stage's in-flight work into the **shared** `refs/stash`. Inside a child workflow the
 checkout therefore runs once, in the locked prologue. It is guarded by an **observation**
 (`git worktree list --porcelain` shows the branch), not by a ledger record, because a lost ledger
-entry must never trigger a second stash. No authored stage may invoke the skill, and the validator
-rejects a harness that names it.
+entry must never trigger a second stash. No body stage invokes the skill: the implementation harness
+tells every stage agent to skip Step 0.
 
 **One writer at a time.** Within a task, "write" includes editing files, `git add`/`git commit`,
 **and running the build or test suite**, which produces build output, caches, coverage and formatter
@@ -234,7 +301,7 @@ parallel. The stage runner forces mutating stages to run one at a time, so the r
 structure, not by asking.
 
 After Step 0, every code edit and commit happens inside the worktree on `worktree/<slug>`. Task state
-stays with the orchestrator, which moves task files at the root. **A specialist never commits on the
+stays with the orchestrator, which moves task files at the root. **A task worker never commits on the
 trunk branch.**
 
 ### Integration
@@ -247,12 +314,13 @@ candidate's own parent: never a cached snapshot, never a rebase or replay. The c
 in-tree ledger marker (`.acfwhip/integrated/<shard>/<key>.json`) go into **one** single-parent
 commit, the project union gate runs on that candidate tree, and the result lands by compare-and-swap
 (`update-ref <new> <observed>`). A cherry-pick conflict, such as two parallel tasks editing one file,
-goes to the task's `assigned_agent` as a resolver; it is never dropped silently. **Integration truth
-is the marker's presence in the live-trunk tree, and nothing else.** The integrator ignores
-`Integrated-At:`, which is display and operator-ack metadata (see `recovery-runbook.md`).
+goes to a resolver: the agent the integrator names, or else the task's resolved role (see
+[Roles](#roles-who-runs-a-task-370)). It is never dropped silently. **Integration truth is the
+marker's presence in the live-trunk tree, and nothing else.** The integrator ignores `Integrated-At:`,
+which is display and operator-ack metadata (see `recovery-runbook.md`).
 
 **Streaming, not a wave barrier.** Each dispatched unit moves through its **own** lifecycle
-(specialist → review → integrate) as soon as it is ready, instead of waiting for the slowest task in
+(implement → review → integrate) as soon as it is ready, instead of waiting for the slowest task in
 the iteration. A documentation task done in minutes is reviewed, accepted and, for code, integrated
 within minutes, even while a multi-hour task from the same wave is still running. Two invariants hold
 through **explicit serialization** rather than the iteration barrier: a single-writer promise chain,
@@ -356,10 +424,14 @@ line per severity (so callers summarize instead of dumping every line), then
 structural defects are **advisory (WARN), never blocking**. A pre-2.0.0 backlog of historical accepted
 tasks (missing slugs, stale `Status:`, even dangling or cyclic deps among themselves) does not trip
 the gate. A task-scoped FATAL can only name an **active** task (pending, in-progress, completed,
-in-review): an unknown Assigned Agent, dangling or cyclic deps, or a cross-slug dependent dispatched
+in-review): an Assigned Agent that names neither an installed agent nor a role skill
+(`unknown-agent`), dangling or cyclic deps, or a cross-slug dependent dispatched
 before its dep is on trunk (branch-aware: a branchless historical dep counts as satisfied). A
 worktree on the wrong branch and a detached HEAD at trunk are repo-scoped. Since 3.0.0 a **duplicate
 id** is advisory (WARN, quarantine): it isolates that id for an operator and the run continues.
+Two repo-scoped WARNs (3.7.0, `(repo)` in field 3) gate nothing: `worker-not-installed` (there is no
+`.claude/agents/whippet.md`, so a task whose role is a skill runs on the default subagent) and
+`unused-agent` (a leftover `.claude/agents/workflow-architect.md` to delete).
 
 `--fix` repairs the REPAIRABLE class:
 
@@ -395,21 +467,21 @@ re-dispatched forever. `whip-init` scaffolds the config.
 
 ## Per-task loop-breaker (Block-Count)
 
-`/go` dispatches a specialist only on a task whose dependencies are satisfied, so a specialist that
+`/go` dispatches a task only when its dependencies are satisfied, so a worker that
 returns `transition: blocked` is saying the **real blocker is not modeled** (for example, "needs a
 python-engineer task that does not exist"). Unguarded, such a task cycles
 `pending → in-progress → blocked → pending` forever. Its declared deps stay accepted, so the unblock
 pass re-queues it every iteration, and the global no-gain guard never trips because other tasks keep
 making progress.
 
-`/go` breaks the loop with a **durable per-task `Block-Count`**. Each time a specialist re-blocks a
+`/go` breaks the loop with a **durable per-task `Block-Count`**. Each time its worker re-blocks a
 dispatched task, the counter goes up by 1; blocks from a timeout or a max-rejection redesign do
 **not** count. Once `Block-Count` reaches the cap (default **3**), the unblock pass stops re-queueing
 the task. It stays in `blocked/` (terminal) and appears in the run report under `needsOperator`, with
 its reason. The count lives in the task front-matter, so it survives a crash or restart. To re-enable
 the task, an operator clears `Block-Count` or models the missing dependency.
 
-**Structured `dependency-missing` signal.** A specialist can name the missing blocker outright: its
+**Structured `dependency-missing` signal.** A worker can name the missing blocker outright: its
 `ACFW-RESULT` may carry `blocked_reason: dependency-missing` and a free-text `needs_task`. The
 orchestrator then **parks the task for an operator at once**. It stops re-queueing the task for this
 run instead of spending the whole Block-Count budget on the loop, and prints a "create a task: …" line
@@ -506,4 +578,4 @@ These say when a run must stop and ask a person. They are **not** criteria for a
 
 ---
 
-**Last Updated**: 2026-09-29
+**Last Updated**: 2026-10-29

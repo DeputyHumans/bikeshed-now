@@ -1,9 +1,9 @@
-<!-- acf-whip-artifact: content/style/task-descriptions.md v3.6.0 -->
+<!-- acf-whip-artifact: content/style/task-descriptions.md v3.7.0 -->
 # Task Description Style
 
 ## For: task-engineer, whenever it writes a task
 
-A task says what to build, why, and how anyone can tell it is done. How to build it is the specialist's call.
+A task says what to build, why, and how anyone can tell it is done. How to build it is the implementer's call: the installed agent the task's Assigned Agent names, or `whippet` with that role skill loaded.
 
 ## Core Principles
 
@@ -33,12 +33,12 @@ A task states WHAT and WHY. It never states HOW.
 - WHY it's needed: business value, fit with the architecture
 - WHAT constraints apply: performance, security, compatibility
 
-**The specialist agent decides** (keep these out of the task):
+**The implementer decides** (keep these out of the task):
 - HOW to implement it: algorithms, data structures, patterns
 - WHICH libraries or frameworks to use, unless the architecture mandates one
 - HOW to structure the code: file layout, class design
 
-**Boundary test**: if you are writing step-by-step implementation, stop. That work belongs to the specialist.
+**Boundary test**: if you are writing step-by-step implementation, stop. That work belongs to the implementer.
 
 ## Code Snippet Policy
 
@@ -176,7 +176,7 @@ func ValidateMethod(name string) error {
 - 50+ lines of implementation code
 - Prescribes the exact algorithm
 - Dictates the code structure
-- Leaves the specialist agent nothing to decide
+- Leaves the implementer nothing to decide
 - Duplicates the code in the task and the implementation, and both then need maintaining
 
 **The same task, written correctly**:
@@ -246,10 +246,10 @@ func ValidateMethod(name string) error {
 
 ## The Test
 
-A specialist who reads your task should be able to say "I know WHAT to build and WHY." If they say "I just need to copy-paste this code", the task has failed.
+An implementer who reads your task should be able to say "I know WHAT to build and WHY." If they say "I just need to copy-paste this code", the task has failed.
 
 **Enforcement**: quality-reviewer must reject a task with extensive code snippets or implementation algorithms. A rejected task moves back to pending/ with comments that cite this guide.
 
 ---
 
-**Last Updated**: 2025-10-28
+**Last Updated**: 2026-10-29

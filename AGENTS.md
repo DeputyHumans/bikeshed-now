@@ -245,5 +245,7 @@ is ephemeral output regenerated on demand.
 - **Organization**: `docs/acf/organization.md` (naming, directory structure, documentation standards)
 - **Git**: `docs/acf/git/commit-conventions.md` (conventional commits, atomic commits)
 - **Audit**: `/audit-acf-conventions` checks compliance and `--fix` repairs it. It
-  is a slash command from the `acf-librarian` Claude Code plugin, which is not
-  vendored here — without that plugin installed, the command does not exist.
+  is a slash command from the `acf-librarian` Claude Code plugin in
+  [ACF Tools](https://github.com/fib7/acf-tools), which is not vendored here —
+  without that plugin installed, the command does not exist. The `docs/acf/`
+  files are copies of ACF Tools files, Apache-2.0 like the rest (`NOTICE`).

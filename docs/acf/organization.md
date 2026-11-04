@@ -1,3 +1,4 @@
+<!-- Copied from fib7/acf-tools acf-librarian/content/organization-template.md (Apache-2.0, © Fibonacci Seven, LLC). This copy differs from that upstream file. -->
 # ACF Naming & Organization Conventions
 
 > This file defines the naming and organization conventions for this ACF project.

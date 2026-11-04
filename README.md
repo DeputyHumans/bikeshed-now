@@ -194,15 +194,10 @@ that lets somebody read a document they should not.
 
 ## Licence
 
-[Apache-2.0](LICENSE) — with two carve-outs, both recorded in [`NOTICE`](NOTICE),
-which is worth reading before you fork, mirror or redistribute this repository:
+[Apache-2.0](LICENSE). Two kinds of third-party material ship in the tree, both recorded in [`NOTICE`](NOTICE):
 
-- `app/public/fonts/*.woff2` is a renamed subset of an upstream typeface under
-  the SIL Open Font License 1.1. It covers the font files and nothing else.
-- `docs/acf/**` and `.claude/scripts/` are third-party material under a
-  proprietary licence that forbids redistribution. **They are not licensed to
-  you under Apache-2.0**, and nothing in `LICENSE` grants any right in them.
-  Removing them is safe: no build step and no runtime reads them.
+- `app/public/fonts/*.woff2` is a renamed subset of an upstream typeface under the SIL Open Font License 1.1. The OFL covers the font files and nothing else.
+- `docs/acf/**` and `.claude/scripts/status-line.py` are copies of [ACF Tools](https://github.com/fib7/acf-tools) files, © Fibonacci Seven, LLC, also under Apache-2.0. They are agent-workflow documentation; no build step and no runtime reads them.
 
 Dependency licences, and the CI gate that hard-fails anything outside the
 permissive allowlist, are in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).

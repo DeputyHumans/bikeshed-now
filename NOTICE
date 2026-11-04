@@ -24,37 +24,31 @@ their licenses are listed in THIRD_PARTY_LICENSES.md. The items below are files
 that ship inside this repository and are not covered by the Apache License above.
 
 
-1. docs/acf/** and .claude/scripts/
+1. docs/acf/** and .claude/scripts/status-line.py
    -------------------------------------------------------------------------
-   Agentic Coding Framework (ACF) documentation and helper scripts.
-   Copyright (c) 2025 Fibonacci Seven, LLC. All rights reserved.
+   ACF Tools documentation and a Claude Code status line.
+   Copyright 2025-2026 Fibonacci Seven, LLC.
 
-   KNOWN LICENSE CONFLICT — READ BEFORE REDISTRIBUTING.
+   Licensed under the Apache License, Version 2.0, the same terms as the rest
+   of this repository. Upstream: https://github.com/fib7/acf-tools, which was
+   relicensed under Apache-2.0 on 2026-10-28.
 
-   These files originate from a work published under a PROPRIETARY LICENSE whose
-   terms state, in relevant part, that you may NOT "copy, modify, merge,
-   publish, distribute, sublicense, or sell copies of the Software" and may NOT
-   "redistribute the Software in any form, modified or unmodified."
+   Each file is a copy of an upstream file, written here by an ACF Tools
+   plugin:
 
-   They are present here at the express direction of this repository's author,
-   who is also the author of the substantial majority of the upstream work, and
-   who accepted this risk knowingly after it was raised. Their presence is
-   recorded here rather than left silent.
+     docs/acf/organization.md       acf-librarian/content/organization-template.md
+     docs/acf/git/commit-conventions.md
+                                    acf-librarian/content/git-commit-conventions-template.md
+     docs/acf/backlog/*.md          acf-whip/content/backlog/
+     docs/acf/style/*.md            acf-whip/content/style/
+     .claude/scripts/status-line.py acf-mission-control/hooks/handlers/status-line.py
 
-   Consequences a downstream recipient must understand:
+   The plugins add a first-line comment naming the upstream file and version.
+   docs/acf/organization.md also differs in content from its upstream file,
+   and says so in its first line.
 
-     - These paths are NOT licensed to you under Apache-2.0. Nothing in the
-       LICENSE file grants any right in them.
-     - At least one upstream commit is authored by a third party, so the
-       author's own rights may not cover the whole of the material.
-     - Before publishing, forking, mirroring or redistributing this repository,
-       obtain written permission from Fibonacci Seven, LLC (acf@fib7.ai), or
-       remove these paths.
-
-   Removing them is safe and affects no product behaviour: they are
-   agent-workflow documentation and a shell status line. Nothing in app/,
-   functions/, scripts/, cli/ or content/ reads them at build time or at
-   runtime.
+   Nothing in app/, functions/, scripts/, cli/ or content/ reads these files at
+   build time or at runtime; they are agent-workflow documentation.
 
 
 2. app/public/fonts/*.woff2 — "Bikeshed Sans"
