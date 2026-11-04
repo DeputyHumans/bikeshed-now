@@ -1260,7 +1260,7 @@ app/src/
   wysiwyg/{EditToolbar.tsx,placeholders.ts}
   export/{labels.ts,html.ts,pdf.ts,image.ts}
   viewer/{useDocFrame.ts,useAnnotationLayer.ts,useInlineEditor.ts,...}
-  workspace/tree.ts
+  workspace/{tree.ts,prefs.ts}
   pages/{DocList.tsx,DocViewer.tsx,SharedFolder.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
   components/*.tsx
   hooks/{breakpoints.ts,useMediaQuery.ts}
@@ -1688,6 +1688,25 @@ a folder gets both rows, because removing the direct grant leaves the other. The
 owner may be unable to open a folder above: its people are already in the
 record's own sets, so they are listed, but the folder is "a folder you cannot
 open", never its name.
+
+### Grid and list
+
+The workspace shows its folders and documents as cards or as a list, and each
+kind of page remembers which. Cards are the default on Everything and in
+folders, where people browse and a cover is how a deck is recognised. A list row
+carries a small cover, the title and its chips, the owner ("You" for your own),
+the last update, the reads and the menu; a folder row its people, and it takes
+a dropped file as its card does. While a search is on, its results come from
+every folder, so a card and a row say where each is filed: "Everything" at the
+top, the folder's path, or "A folder you can't open" for a folder that is not
+the reader's, whose name is not theirs to see. The Name, Updated and Reads
+headers pick the matching sort. On a phone a row is the cover, the title and
+one line.
+
+The sort and each kind of page's layout are kept in the browser's own storage
+(`workspace/prefs.ts`) and never sent anywhere; where storage is blocked they
+last as long as the page. "Last read by anyone" sorts by `stats.lastViewedAt`,
+which any reader moves; a person's own reads are listed by Recent.
 
 ---
 

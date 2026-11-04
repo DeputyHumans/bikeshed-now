@@ -8,6 +8,8 @@ import {
   docsInFolder,
   filterDocs,
   flattenTree,
+  isSortKey,
+  locationOf,
   pathToFolder,
   sortDocs,
   validMoveTargets,
@@ -154,6 +156,31 @@ describe("breadcrumbFor", () => {
     expect(breadcrumbFor("grandchild", partial).map((f) => f.folderId)).toEqual([
       "grandchild",
     ]);
+  });
+});
+
+describe("locationOf", () => {
+  it("names the top level Everything, and a folder by its whole path", () => {
+    expect(locationOf(null, FOLDERS)).toBe("Everything");
+    expect(locationOf(undefined, FOLDERS)).toBe("Everything");
+    expect(locationOf("grandchild", FOLDERS)).toBe("Alpha / Child / Grandchild");
+  });
+
+  it("gives no name for a folder this account cannot open, rather than an id", () => {
+    // Shared a document without the folder it is in (SPEC §13): the folder's
+    // name is not this reader's to see.
+    expect(locationOf("someone-elses", FOLDERS)).toBeNull();
+  });
+
+  it("starts the path where this account's folders start, when it was granted a folder without its parent", () => {
+    expect(locationOf("grandchild", FOLDERS.slice(1))).toBe("Child / Grandchild");
+  });
+});
+
+describe("isSortKey", () => {
+  it("accepts the four sorts and nothing else a stored value might hold", () => {
+    for (const key of ["recent", "name", "views", "lastViewed"]) expect(isSortKey(key)).toBe(true);
+    for (const value of ["", "Name", null, 3, {}, "createdAt"]) expect(isSortKey(value)).toBe(false);
   });
 });
 

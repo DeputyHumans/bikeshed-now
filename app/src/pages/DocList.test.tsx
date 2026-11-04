@@ -99,6 +99,9 @@ function folderMeta(overrides: Partial<FolderMeta> = {}): FolderMeta {
 const EMPTY = /Nothing here yet/;
 
 beforeEach(() => {
+  // The workspace remembers its sort and layout in this browser; each test
+  // starts from a browser that has never chosen.
+  window.localStorage.clear();
   listeners.docs = null;
   listeners.folders = null;
   createFolder.mockReset();
@@ -503,3 +506,146 @@ describe("each card's length and last update", () => {
   });
 });
 
+
+describe("the list layout", () => {
+  const rows = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll<HTMLElement>('[role="rowgroup"]:not(.doc-table-head) [role="row"]'));
+  const cell = (row: HTMLElement, col: string) => row.querySelector<HTMLElement>(`[data-col="${col}"]`)?.textContent ?? null;
+  const land = (docs: DocMeta[], folders: FolderMeta[] = []) => {
+    act(() => listeners.folders!(folders));
+    act(() => listeners.docs!(docs));
+  };
+
+  it("starts as the grid, and once chosen is still the list after leaving and coming back", () => {
+    // Opening a document unmounts the workspace; coming back mounts it again,
+    // in the same page. That sequence is the one a person performs.
+    const first = mount();
+    land([docMeta()]);
+    expect(first.container.querySelector(".doc-grid")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Grid" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    expect(screen.getByRole("table", { name: "Documents" })).toBeTruthy();
+    expect(first.container.querySelector(".doc-grid")).toBeNull();
+    first.unmount();
+
+    const again = mount();
+    land([docMeta()]);
+    expect(screen.getByRole("button", { name: "List" }).getAttribute("aria-pressed")).toBe("true");
+    expect(rows(again.container)).toHaveLength(1);
+  });
+
+  it("gives each document its owner, its reads and its menu, and each folder its people", () => {
+    const { container } = mount();
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    land(
+      [
+        docMeta({ docId: "mine", title: "Mine", ownerEmail: "me@example.com", stats: { views: 7 } as never }),
+        docMeta({ docId: "theirs", title: "Theirs" }),
+      ],
+      [folderMeta()],
+    );
+    const [folderRow, mineRow, theirsRow] = rows(container);
+    expect(folderRow.getAttribute("data-kind")).toBe("folder");
+    expect(cell(folderRow, "people")).toBe("1 person");
+    expect(cell(mineRow, "owner")).toBe("You");
+    expect(cell(mineRow, "reads")).toBe("7");
+    expect(cell(theirsRow, "owner")).toBe("ana@example.com");
+    expect(cell(theirsRow, "reads")).toBe("0");
+    expect(mineRow.querySelector('a.doc-row-title')?.getAttribute("href")).toBe("/d/mine");
+    const thumb = mineRow.querySelector<HTMLAnchorElement>("a.doc-row-thumb")!;
+    expect(thumb.tabIndex).toBe(-1);
+    expect(thumb.getAttribute("aria-hidden")).toBe("true");
+    expect(mineRow.querySelector('button[aria-label="Actions"]')).not.toBeNull();
+  });
+
+  it("says where each one is filed once a search reaches into every folder, a folder it cannot open included", () => {
+    const { container } = mount();
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    land(
+      [
+        docMeta({ docId: "top", title: "Plan at the top", folderId: null }),
+        docMeta({ docId: "filed", title: "Plan filed", folderId: "plans" }),
+        docMeta({ docId: "hidden", title: "Plan in someone else's folder", folderId: "not-mine" }),
+      ],
+      [folderMeta()],
+    );
+    expect(screen.queryByRole("columnheader", { name: "Folder" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "plan" } });
+    expect(screen.getByRole("columnheader", { name: "Folder" })).toBeTruthy();
+    const where = Object.fromEntries(
+      rows(container)
+        .filter((r) => r.getAttribute("data-kind") !== "folder")
+        .map((r) => [r.querySelector(".doc-row-title")!.textContent, cell(r, "location")]),
+    );
+    expect(where).toEqual({
+      "Plan at the top": "Everything",
+      "Plan filed": "Plans",
+      "Plan in someone else's folder": "A folder you can't open",
+    });
+  });
+
+  it("shows the same place on a card while a search is on, and none without one", () => {
+    const { container } = mount();
+    land([docMeta({ docId: "filed", title: "Plan filed", folderId: "plans" })], [folderMeta()]);
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "plan" } });
+    const card = screen.getByText("Plan filed").closest(".doc-card") as HTMLElement;
+    expect(card.querySelector(".doc-card-location")?.textContent).toBe("Plans");
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "" } });
+    expect(container.querySelector(".doc-card-location")).toBeNull();
+  });
+
+  it("sorts from a column header, says which sort is on, and remembers it", () => {
+    const first = mount();
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    land([
+      docMeta({ docId: "b", title: "Bravo" }),
+      docMeta({ docId: "a", title: "alpha" }),
+    ]);
+    const sort = () => (screen.getByLabelText("Sort") as HTMLSelectElement).value;
+    expect(sort()).toBe("recent");
+    expect(screen.getByRole("columnheader", { name: /Updated/ }).getAttribute("aria-sort")).toBe("descending");
+    fireEvent.click(screen.getByRole("button", { name: /^Name/ }));
+    expect(sort()).toBe("name");
+    expect(screen.getByRole("columnheader", { name: /Name/ }).getAttribute("aria-sort")).toBe("ascending");
+    expect(screen.getByRole("columnheader", { name: /Updated/ }).getAttribute("aria-sort")).toBeNull();
+    expect(rows(first.container).map((r) => r.querySelector(".doc-row-title")!.textContent)).toEqual(["alpha", "Bravo"]);
+    first.unmount();
+
+    mount();
+    land([docMeta()]);
+    expect(sort()).toBe("name");
+  });
+
+  it("files a document dropped on a folder's row into that folder", async () => {
+    const { container } = mount();
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    land([], [folderMeta()]);
+    const file = new File(["<title>Q4</title>"], "q4.html", { type: "text/html" });
+    fireEvent.drop(rows(container)[0], { dataTransfer: { types: ["Files"], files: [file] } });
+    await waitFor(() => expect(uploadDoc).toHaveBeenCalledTimes(1));
+    const [, options] = uploadDoc.mock.calls[0] as unknown as [File, { folderId?: string | null }];
+    expect(options.folderId).toBe("plans");
+  });
+
+  it("still switches, for this visit, in a browser that blocks storage", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    mount();
+    land([docMeta()]);
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    expect(screen.getByRole("table", { name: "Documents" })).toBeTruthy();
+    vi.restoreAllMocks();
+  });
+});
+
+describe("the sort that reads the record's last read", () => {
+  it("says it means anyone's read, not yours", () => {
+    mount();
+    const labels = Array.from((screen.getByLabelText("Sort") as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(labels).toEqual(["Recently updated", "Name", "Most read", "Last read by anyone"]);
+  });
+});

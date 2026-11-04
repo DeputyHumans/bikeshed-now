@@ -16,8 +16,15 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ## Unreleased
 
+### Added
+
+- **The workspace has a list.** A switch beside the sort shows folders and documents as rows instead of cards: a small cover, the title and its chips, the owner, the last update, the reads and the menu. The Name, Updated and Reads headers sort, and a folder row takes a dropped file into that folder as its card does. On a phone each row is the cover, the title and one line. Cards stay the default on Everything and in folders (SPEC §13 "Grid and list").
+- **Search results say where each document is filed**, on a card and in a row: "Everything", the folder's path, or "A folder you can't open" for one shared with you without its folder.
+- **The workspace remembers how you left it.** The sort and the layout survive opening a document and coming back, in this browser's own storage, which never leaves it. The privacy policy says so.
+
 ### Changed
 
+- The sort called "Recently read" is now "Last read by anyone", which is what it always sorted by.
 - **A signed-in person can list their own reading across documents.** The security rules let a verified account list its own per-person read rows (`docs/{docId}/viewers/{uid}`), newest first, from a new collection-group index, and nobody else's. Getting a single row stays the document's editors' alone. Nothing new is written: the rows are the ones every read already keeps. A row outlives access to its document and says only what its reader saw. `tools/viewers-collection.test.mjs` pins the rule's one assumption, that `viewers` names one collection (ADR 0027, SPEC §5 "Your own reading").
 
 ## 0.32.0 — 2026-11-03

@@ -108,6 +108,21 @@ export function breadcrumbFor(
   return [...trail, folder];
 }
 
+/**
+ * Where something is filed, in words: "Everything" at the top, the folder's
+ * path otherwise, or null for a folder this account cannot open. That last is
+ * real, not an error: somebody can share a document with you without sharing
+ * the folder it is in (SPEC §13), and its name is then not yours to see.
+ */
+export function locationOf(
+  folderId: string | null | undefined,
+  folders: readonly FolderMeta[],
+): string | null {
+  if (!folderId) return "Everything";
+  const trail = breadcrumbFor(folderId, folders);
+  return trail.length ? trail.map((f) => f.name).join(" / ") : null;
+}
+
 /** Folders a given folder may legally move into: not itself, not its subtree. */
 export function validMoveTargets(
   folderId: string,
@@ -121,6 +136,10 @@ export function validMoveTargets(
 // --- Documents -------------------------------------------------------------
 
 export type SortKey = "recent" | "name" | "views" | "lastViewed";
+
+export const SORT_KEYS: readonly SortKey[] = ["recent", "name", "views", "lastViewed"];
+
+export const isSortKey = (v: unknown): v is SortKey => SORT_KEYS.includes(v as SortKey);
 
 /** Documents directly inside a folder, or at the root when null. */
 export function docsInFolder(

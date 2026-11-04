@@ -70,6 +70,20 @@ export function Loading({ label = "Loading", onRetry }: { label?: string; onRetr
  * A layout-shaped placeholder rather than a spinner, so the page does not jump
  * when the real cards arrive — the jump is what makes a fast load feel slow.
  */
+/** The list's stand-in, row for row, so the layout does not jump when the rows land. */
+export function RowSkeletons({ count = 6 }: { count?: number }) {
+  return (
+    <div className="doc-table" aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="doc-row doc-row-skeleton">
+          <div className="skeleton doc-row-thumb" />
+          <div className="skeleton" style={{ height: 14, width: "55%" }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CardSkeletons({ count = 6 }: { count?: number }) {
   return (
     <div className="doc-grid" aria-hidden="true">

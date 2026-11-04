@@ -199,6 +199,147 @@
 }
 .doc-card-stat { display: inline-flex; align-items: center; gap: 4px; }
 
+/* Where a card is filed, shown only while the cards come from more than one
+   folder, as a search's do. */
+.doc-card-location {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+
+/* --- The list (SPEC §13) ----------------------------------------------------
+ * One row per folder or document. The cover is the first column, a picture of
+ * the document small enough to sit beside its name, so a deck is still
+ * recognisable without the grid. The columns are one template on the table,
+ * so every row and the header line up without a <table>.
+ */
+/* Two classes, because .pane-toggle hides itself above one column and
+   comments.css comes later in the same layer. */
+.pane-toggle.layout-toggle { display: inline-flex; }
+.layout-toggle button { display: inline-flex; align-items: center; }
+
+.doc-table {
+  --doc-cols: 64px minmax(0, 3fr) minmax(0, 1.3fr) minmax(0, 1.7fr) 4.5rem 40px;
+  border-top: 1px solid var(--color-line);
+}
+.doc-table[data-location] {
+  --doc-cols: 64px minmax(0, 2.6fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1.6fr) 4.5rem 40px;
+}
+.doc-row {
+  display: grid;
+  grid-template-columns: var(--doc-cols);
+  align-items: center;
+  column-gap: var(--s-3);
+  min-height: 52px;
+  padding: var(--s-1) var(--s-2);
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--fs-small);
+}
+.doc-row:hover { background: var(--color-surface); }
+.doc-table-head .doc-row {
+  min-height: 36px;
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.doc-table-head .doc-row:hover { background: none; }
+.doc-table-sort {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.doc-table-sort:hover,
+.doc-table-sort[data-active] { color: var(--color-ink); }
+.doc-table-sort[data-active] { font-weight: 620; }
+.doc-row-thumb {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+}
+.doc-table-head .doc-row-thumb { visibility: hidden; }
+.doc-row-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.doc-row-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-2);
+  min-width: 0;
+}
+.doc-row-title {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 620;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+.doc-row-title:hover { text-decoration: underline; }
+.doc-row [data-col="location"],
+.doc-row [data-col="owner"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-ink-muted);
+}
+.doc-row [data-col="updated"],
+.doc-row [data-col="summary"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--s-2);
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.doc-row [data-col="reads"] { text-align: right; color: var(--color-ink-muted); }
+.doc-row [data-col="people"] {
+  grid-column: span 2;
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+.doc-row [data-col="actions"] { justify-self: end; }
+/* Displayed only on a phone, where it stands in for the columns. */
+.doc-row [data-col="summary"] { display: none; }
+.doc-row-skeleton { grid-template-columns: 64px minmax(0, 1fr); }
+
+/* A folder row claims a dropped file, as a folder card does. */
+.doc-row[data-drop-over] {
+  background: var(--color-accent-soft);
+  outline: 1px solid var(--color-accent);
+}
+
+@media (max-width: 600px) {
+  .doc-table-head { display: none; }
+  .doc-row {
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    row-gap: 2px;
+    padding: var(--s-2) 0;
+  }
+  .doc-row-thumb { grid-column: 1; grid-row: 1 / 3; }
+  .doc-row [data-col="name"] { grid-column: 2; grid-row: 1; }
+  .doc-row [data-col="summary"] { display: flex; grid-column: 2; grid-row: 2; }
+  .doc-row [data-col="actions"] { grid-column: 3; grid-row: 1 / 3; }
+  .doc-row :is([data-col="location"], [data-col="owner"], [data-col="updated"], [data-col="reads"], [data-col="people"]) {
+    display: none;
+  }
+}
+
 /* Visibility is stated on the card, because "who can see this" should never
    require opening a panel. */
 .visibility-chip[data-visibility="public"] { color: var(--color-success); }

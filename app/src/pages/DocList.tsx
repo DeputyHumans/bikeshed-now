@@ -20,9 +20,12 @@ import {
   docsInFolder,
   filterDocs,
   filterFolders,
+  isSortKey,
+  locationOf,
   sortDocs,
   type SortKey,
 } from "../workspace/tree";
+import { PREF_KEYS, isLayout, useRemembered } from "../workspace/prefs";
 import { useIsSingleColumn } from "../hooks/useMediaQuery";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { UPLOAD_HINT, isUploadable, uploadDoc } from "../upload";
@@ -37,12 +40,20 @@ import { MoreMenu } from "../components/MoreMenu";
 import { MoveDialog } from "../components/MoveDialog";
 import { ExpiryChip } from "../components/ExpiryChip";
 import { SharePanel, type ShareTarget } from "../components/SharePanel";
+import {
+  DocRow,
+  DocTable,
+  FolderRow,
+  LayoutToggle,
+  UNREADABLE_FOLDER,
+  VisibilityChip,
+} from "../components/WorkspaceList";
 import { folderVisibilityStateOf, liveReach, visibilityStateOf, type VisibilityState } from "../visibility";
 import { SharedFolder } from "./SharedFolder";
 import { UploadDialog } from "../components/UploadDialog";
 import { UploadVersionDialog, versionUploadMessage } from "../components/UploadVersionDialog";
 import { offersVersionUpload } from "../roles";
-import { CardSkeletons } from "../components/Spinner";
+import { CardSkeletons, RowSkeletons } from "../components/Spinner";
 import { coverUrl } from "../thumbs";
 import { useCoverBackfill } from "../hooks/useCoverBackfill";
 import { isExpired } from "../expiry";
@@ -54,31 +65,10 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "recent", label: "Recently updated" },
   { value: "name", label: "Name" },
   { value: "views", label: "Most read" },
-  { value: "lastViewed", label: "Recently read" },
+  // Anyone's last read, as the record keeps it: the only per-person reads a
+  // reader may see are their own, and Recent is where those are.
+  { value: "lastViewed", label: "Last read by anyone" },
 ];
-
-/**
- * The level a stranger meets: the record's own, or a folder's above it that
- * has not ended, whichever reaches further (SPEC §17 "A folder's reach"). A
- * private document in a public folder is public, and the card must not say
- * otherwise.
- */
-function VisibilityChip({ own, through }: { own?: DocMeta["visibility"]; through?: "unlisted" | "public" | null }) {
-  const mine = own ?? "private";
-  const visibility = mine === "public" || through === "public" ? "public" : mine === "unlisted" || through ? "unlisted" : "private";
-  if (visibility === "private") return null;
-  const inherited = visibility !== mine;
-  return (
-    <span
-      className="chip visibility-chip"
-      data-visibility={visibility}
-      title={inherited ? "Through a folder it is in" : undefined}
-    >
-      <Icon name={visibility === "public" ? "globe" : "eye"} size={12} />
-      {visibility === "public" ? "Public" : "Link"}
-    </span>
-  );
-}
 
 function DocCard({
   doc,
@@ -86,6 +76,7 @@ function DocCard({
   menu,
   onShare,
   showCover,
+  location,
 }: {
   doc: DocMeta;
   /** The level its folder's reach gives it, when the folder is one this account can read. */
@@ -95,6 +86,8 @@ function DocCard({
   onShare?: () => void;
   /** False for an expired document read by anyone but its owner (SPEC §17). */
   showCover: boolean;
+  /** Where it is filed, when the cards on screen come from more than one folder. */
+  location?: string;
 }) {
   const cover = showCover ? coverUrl(doc.docId, doc.thumb) : null;
   return (
@@ -131,6 +124,7 @@ function DocCard({
           />
         </span>
       </div>
+      {location !== undefined ? <div className="doc-card-location">{location}</div> : null}
       <div className="doc-card-meta">
         <VisibilityChip own={doc.visibility} through={through} />
         {/* A fork usually carries its original's title, so in a list that
@@ -246,7 +240,10 @@ export function DocList() {
   const [foldersLoading, setFoldersLoading] = useState(true);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortKey>("recent");
+  // Remembered in this browser, so opening a document and coming back finds
+  // the workspace as it was left.
+  const [sort, setSort] = useRemembered<SortKey>(PREF_KEYS.sort, "recent", isSortKey);
+  const [layout, setLayout] = useRemembered(PREF_KEYS.layoutFolders, "grid", isLayout);
   const [drawer, setDrawer] = useState(false);
   const [uploading, setUploading] = useState(false);
   // A document brings its visibility triple along; a folder its level and date.
@@ -419,6 +416,11 @@ export function DocList() {
     });
 
   const folderById = useMemo(() => new Map(folders.map((f) => [f.folderId, f])), [folders]);
+  // A search reaches into every folder, so what it finds says where each is.
+  // The same test the scoping above uses, so the two never disagree.
+  const spansFolders = Boolean(search);
+  const placeOf = (id: string | null | undefined) => locationOf(id, folders) ?? UNREADABLE_FOLDER;
+  const ownerLabel = (email: string) => (email === emailLower ? "You" : email);
   // The folder this page is showing, looked up once for its header, its name
   // and whether this account can see it at all.
   const current = folderId ? folderById.get(folderId) : undefined;
@@ -653,6 +655,8 @@ export function DocList() {
             ))}
           </select>
 
+          <LayoutToggle layout={layout} onChange={setLayout} />
+
           <span style={{ flex: 1 }} />
 
           <button
@@ -677,7 +681,7 @@ export function DocList() {
         </div>
 
         {loading || foldersLoading ? (
-          <CardSkeletons />
+          layout === "list" ? <RowSkeletons /> : <CardSkeletons />
         ) : visibleDocs.length === 0 && visibleFolders.length === 0 ? (
           <div className="empty-state">
             {search ? (
@@ -699,39 +703,73 @@ export function DocList() {
           </div>
         ) : (
           <>
-            {/* Two grids, not one: a folder has no cover, and in a row with
-                documents that do it would stretch to their height and stand
-                mostly empty. */}
-            {visibleFolders.length > 0 ? (
-              <div className="doc-grid">
+            {layout === "list" ? (
+              <DocTable showLocation={spansFolders} sort={sort} onSort={setSort}>
                 {visibleFolders.map((folder) => (
-                  <FolderCard
+                  <FolderRow
                     key={folder.folderId}
                     folder={folder}
                     menu={folderMenu(folder)}
                     onFiles={uploadFiles}
                     onShare={folder.ownerEmail === emailLower ? () => shareFolder(folder) : undefined}
+                    location={spansFolders ? placeOf(folder.parentId) : undefined}
+                    owner={ownerLabel(folder.ownerEmail)}
                   />
                 ))}
-              </div>
-            ) : null}
-            {visibleDocs.length > 0 ? (
-              <div className="doc-grid">
                 {visibleDocs.map((doc) => {
                   const isOwner = doc.ownerEmail === emailLower;
                   return (
-                    <DocCard
+                    <DocRow
                       key={doc.docId}
                       doc={doc}
                       through={liveReach(doc.folderId ? folderById.get(doc.folderId) : undefined)}
                       menu={docMenu(doc)}
                       onShare={isOwner ? () => shareDoc(doc) : undefined}
                       showCover={isOwner || !isExpired(doc.expiresAt)}
+                      location={spansFolders ? placeOf(doc.folderId) : undefined}
+                      owner={ownerLabel(doc.ownerEmail)}
                     />
                   );
                 })}
-              </div>
-            ) : null}
+              </DocTable>
+            ) : (
+              <>
+                {/* Two grids, not one: a folder has no cover, and in a row with
+                    documents that do it would stretch to their height and stand
+                    mostly empty. */}
+                {visibleFolders.length > 0 ? (
+                  <div className="doc-grid">
+                    {visibleFolders.map((folder) => (
+                      <FolderCard
+                        key={folder.folderId}
+                        folder={folder}
+                        menu={folderMenu(folder)}
+                        onFiles={uploadFiles}
+                        onShare={folder.ownerEmail === emailLower ? () => shareFolder(folder) : undefined}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {visibleDocs.length > 0 ? (
+                  <div className="doc-grid">
+                    {visibleDocs.map((doc) => {
+                      const isOwner = doc.ownerEmail === emailLower;
+                      return (
+                        <DocCard
+                          key={doc.docId}
+                          doc={doc}
+                          through={liveReach(doc.folderId ? folderById.get(doc.folderId) : undefined)}
+                          menu={docMenu(doc)}
+                          onShare={isOwner ? () => shareDoc(doc) : undefined}
+                          showCover={isOwner || !isExpired(doc.expiresAt)}
+                          location={spansFolders ? placeOf(doc.folderId) : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </>
+            )}
           </>
         )}
       </div>

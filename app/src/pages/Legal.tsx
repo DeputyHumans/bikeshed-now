@@ -218,6 +218,12 @@ export function Privacy() {
           if this deployment configured analytics at all. Decline and the
           measurement script is never loaded, rather than loaded and disabled.
         </li>
+        <li>
+          <strong>Your view choices</strong> — how you last sorted and laid out
+          your documents, kept in this browser's own storage so they are there
+          when you come back. They never leave the browser, and clearing this
+          site's data forgets them.
+        </li>
       </ul>
       {analyticsConfigured() ? (
         <p>

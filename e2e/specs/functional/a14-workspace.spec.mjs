@@ -10,7 +10,8 @@
  *          nothing to sort on keeps the query's createdAt desc (SPEC §5);
  *          Name sorts by title; and searching narrows the cards without one
  *          network request (no search index, overview "What this is not"),
- *          and reaches into folders
+ *          and reaches into folders. The list shows the same order, sorts
+ *          from its Name header, and the layout and sort survive a reload
  *   A14.2  a folder made with the toolbar's Folder button, and one made inside
  *          it, each deep-link: their URL survives a reload and a fresh
  *          navigation, with the breadcrumb, the rail and the contents
@@ -436,17 +437,36 @@ scenario("A14.1 the workspace lists Recently updated first (by the current versi
   await u.page.locator(".doc-card", { hasText: `${titles.A} renamed` }).waitFor({ timeout: PAGE_LOAD_MS });
   assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "a rename is not an update: Recently updated still reads Charlie, Bravo, Alpha");
 
-  ctx.step("Name sorts by title; Most read and Recently read, with no reads to sort on, keep the query's createdAt desc (SPEC §5)");
+  ctx.step("Name sorts by title; Most read and Last read by anyone, with no reads to sort on, keep the query's createdAt desc (SPEC §5)");
   await sort.selectOption("name");
   assert.deepEqual(await docOrder(u.page), [ids.A, ids.B, ids.C], "Name: by title");
   await sort.selectOption("views");
   assert.deepEqual(await docOrder(u.page), [ids.B, ids.A, ids.C], "Most read with no views: the listener's createdAt desc");
   await sort.selectOption("lastViewed");
-  assert.deepEqual(await docOrder(u.page), [ids.B, ids.A, ids.C], "Recently read with no reads: the listener's createdAt desc");
+  assert.equal((await sort.locator("option:checked").textContent())?.trim(), "Last read by anyone", "the sort on the record's last read says it is anyone's");
+  assert.deepEqual(await docOrder(u.page), [ids.B, ids.A, ids.C], "Last read by anyone with no reads: the listener's createdAt desc");
   await sort.selectOption("recent");
   assert.deepEqual(await docOrder(u.page), [ids.C, ids.B, ids.A], "back to Recently updated");
 
-  ctx.step("real counted reads distinguish Most read from Recently read and from creation order");
+  ctx.step("the list shows the same documents in the same order, sorts from its Name header, and is still the list, sorted by name, after a reload");
+  const rowOrder = () => u.page.$$eval('[role="table"] [role="rowgroup"]:not(.doc-table-head) a.doc-row-title', (els) =>
+    els.map((e) => decodeURIComponent((e.getAttribute("href") ?? "").slice(3))));
+  await u.page.getByRole("button", { name: "List", exact: true }).click();
+  await u.page.getByRole("table", { name: "Documents" }).waitFor({ timeout: PAGE_LOAD_MS });
+  assert.deepEqual(await rowOrder(), [ids.C, ids.B, ids.A], "List: Recently updated, as the grid had it");
+  await u.page.getByRole("button", { name: /^Name/ }).click();
+  assert.equal(await sort.inputValue(), "name", "the Name header picks the Name sort");
+  assert.deepEqual(await rowOrder(), [ids.A, ids.B, ids.C], "List: by title");
+  await u.page.reload();
+  await u.page.getByRole("table", { name: "Documents" }).waitFor({ timeout: PAGE_LOAD_MS });
+  await eventually(async () => (await rowOrder()).length === 3, { timeout: PAGE_LOAD_MS, message: "the list after a reload draws all three rows" });
+  assert.equal(await sort.inputValue(), "name", "the sort survives a reload");
+  assert.deepEqual(await rowOrder(), [ids.A, ids.B, ids.C], "and so does the list");
+  await u.page.getByRole("button", { name: "Grid", exact: true }).click();
+  await sort.selectOption("recent");
+  await waitDocCards(u.page, Object.values(ids));
+
+  ctx.step("real counted reads distinguish Most read from Last read by anyone and from creation order");
   for (const k of ["B", "B", "B", "C", "C", "A"]) {
     const r = await V.http.postJson("/view", { docId: ids[k], versionId: rec[k].currentVersion, sessionId: `a14-${rand4()}-${rand4()}-${Date.now()}`, ms: 0 });
     assert.equal(r.status, 200, `a counted read for ${k}`);
@@ -457,7 +477,7 @@ scenario("A14.1 the workspace lists Recently updated first (by the current versi
     assert.deepEqual(await docOrder(u.page), expected, message);
   };
   await readOrder("views", [ids.B, ids.C, ids.A], "Most read uses nonzero view totals");
-  await readOrder("lastViewed", [ids.A, ids.C, ids.B], "Recently read uses distinct last-read times");
+  await readOrder("lastViewed", [ids.A, ids.C, ids.B], "Last read by anyone uses distinct last-read times");
   await readOrder("recent", [ids.C, ids.B, ids.A], "reading does not change Recently updated");
 
   ctx.step("let the workspace settle: its cover backfill fills in all three covers, and then the page starts nothing for 2.5 s");
