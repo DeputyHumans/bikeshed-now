@@ -319,7 +319,7 @@ A `.zip` upload is the only place attacker-controlled relative paths enter
 Storage.
 
 **Mitigation.** Every entry is validated before any write: no `..`, no absolute
-paths, no backslashes, no NUL, no empty segments. The total is capped. The bomb
+paths, no backslashes, no NUL, no empty segments. The total is capped, and so is the number of files (2,000, since 0.32.0), because each is a Storage write. The bomb
 guard rejects on the **declared** uncompressed size from the central directory
 *before* decompressing, and rejects a size-0 declaration that still carries
 meaningful compressed bytes — because a spoofed zero declaration would otherwise

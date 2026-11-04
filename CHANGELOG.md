@@ -27,6 +27,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **Exchanging an authorization code requires `client_id` and `redirect_uri`.** `/oauth/token` compared them only when they were sent; PKCE still bound the code to its verifier, but the code should also name the app and address it was issued for, as OAuth requires. Both are now required and a missing one is `invalid_request`. The command line has always sent both (SPEC §23).
 
+- **A `.zip` may hold at most 2,000 files.** The only limit was 25 MB of bytes, so one upload of tiny files could cost millions of Storage writes. The count is checked before anything is decompressed (`docs/development/authoring-bundles.md`).
+
 ### Breaking
 
 - **Editors can no longer move documents or folders they do not own**, through the browser, the CLI or an agent. They can still rename them. An agent's `move_document` or `move_folder` on someone else's item now fails with "only its owner can move…".

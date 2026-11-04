@@ -102,7 +102,7 @@ say what it cannot do.
 | A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
 
 Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB
-uncompressed. Markdown is read as UTF-8.
+uncompressed and at most 2,000 files. Markdown is read as UTF-8.
 
 Without a title from you, a Markdown document is named by its first `#` heading
 and an HTML one by its `<title>`; failing both, by the file name.

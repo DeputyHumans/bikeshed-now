@@ -296,6 +296,19 @@ test("the byte cap is enforced across entries, not per entry", () => {
   assert.match(result.error, /too large/);
 });
 
+test("a bundle of more files than the cap is refused before they are read", () => {
+  // Every file is a Storage write at publish, so the bytes cap alone let one
+  // upload of tiny files become millions of writes.
+  const { MAX_BUNDLE_FILES } = require("../lib/config.js");
+  const many = [["index.html", "<p>hi</p>"], ...Array.from({ length: MAX_BUNDLE_FILES }, (_, i) => [`f/${i}.txt`, "x"])];
+  const result = extractBundle(zipOf(many), "b.zip", MAX);
+  assert.ok("error" in result, "refused");
+  assert.match(result.error, new RegExp(`more than ${MAX_BUNDLE_FILES} files`));
+  const fits = extractBundle(zipOf(many.slice(0, MAX_BUNDLE_FILES)), "b.zip", MAX);
+  assert.ok(!("error" in fits), `exactly the cap is accepted: ${fits.error}`);
+  assert.equal(fits.files.length, MAX_BUNDLE_FILES);
+});
+
 test("round-trips through zipBundle", () => {
   const buffer = zipBundle([
     { rel: "index.html", data: Buffer.from("<p>x</p>") },

@@ -550,7 +550,7 @@ you may read and may not file into.
 | A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
 
 Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB
-uncompressed. Markdown is read as UTF-8.
+uncompressed and at most 2,000 files. Markdown is read as UTF-8.
 
 **An update keeps the document's format, and what it replaces depends on what
 you send.**

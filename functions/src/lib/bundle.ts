@@ -9,6 +9,7 @@
  */
 
 import AdmZip from "adm-zip";
+import { MAX_BUNDLE_FILES } from "../config";
 
 export type SourceFormat = "html" | "markdown";
 
@@ -171,6 +172,11 @@ export function extractBundle(
     }
     if (declared === 0 && compressed > 64) {
       return { error: "malformed archive (suspicious entry size)" };
+    }
+
+    // Counted before decompressing: every file is a Storage write.
+    if (files.length >= MAX_BUNDLE_FILES) {
+      return { error: `bundle has more than ${MAX_BUNDLE_FILES} files` };
     }
 
     let data: Buffer;

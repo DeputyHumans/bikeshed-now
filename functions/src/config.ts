@@ -16,6 +16,13 @@ export const SESSION_COOKIE_NAME = "__session";
 export const MAX_BUNDLE_BYTES = 25 * 1024 * 1024;
 
 /**
+ * Upper bound on the files in one bundle. Every file is a Storage write at
+ * publish and a function call per reader who loads it, so 25 MB of
+ * one-byte files would be millions of both from one upload.
+ */
+export const MAX_BUNDLE_FILES = 2000;
+
+/**
  * Largest active-time delta a single reading heartbeat may contribute. The
  * client beats every 60s, so anything past a few minutes is a stale tab, a clock
  * jump, or a forged payload — clamp rather than trust it.

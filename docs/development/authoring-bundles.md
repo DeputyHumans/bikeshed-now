@@ -200,7 +200,7 @@ or grants without editing the file.
 
 | | |
 |---|---|
-| Maximum bundle | 25 MB uncompressed |
+| Maximum bundle | 25 MB uncompressed, 2,000 files |
 | Accepted | `.html`, `.htm`, `.md`, `.markdown`, `.zip` |
 | Entry resolution | root `index.html`, then root `index.md`, then a lone `.html`, then a nested `index.html`, then a lone `.md`, then a nested `index.md` |
 | Rejected | absolute paths, `..`, backslashes, NUL in any archive path |
