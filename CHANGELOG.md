@@ -20,6 +20,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **The ACF files are Apache-2.0 now.** `docs/acf/**` and `.claude/scripts/status-line.py` are copies of [ACF Tools](https://github.com/fib7/acf-tools) files, which Fibonacci Seven relicensed under Apache-2.0 on 2026-10-28. `NOTICE`, `README.md` and `THIRD_PARTY_LICENSES.md` stop calling them proprietary, `NOTICE` maps each copy to its upstream file, and `docs/acf/organization.md` says in its first line that it differs from upstream. The copies take the plugins' current versions, and the project settings no longer name the status line, which the plugin now provides.
 
+- **Every GitHub Action is pinned to a commit.** CI, deployment and operations name each action by full SHA with its version in a comment, so a moved tag cannot change what runs with the production credential. `upload-artifact` moves to v7 in the same change. The rules job installs the Firebase CLI at the version deployment already pins, 15.25.1, instead of whatever is newest.
+
 ### Fixed
 
 - **Deployment logs no longer name each function's direct address.** `firebase deploy` prints the Cloud Run address of every HTTPS function, and run logs are public in a public repository. `deploy.yml` and `operations.yml` now mask the host suffix those addresses share. A run that cannot read the suffix says so in a warning.
