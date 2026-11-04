@@ -30,8 +30,10 @@ export function readConfig() {
 }
 
 export function writeConfig(config) {
-  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-  writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
+  mkdirSync(dirname(CONFIG_PATH), { recursive: true, mode: 0o700 });
+  // Created owner-only, so the token is never readable under the umask in the
+  // moment before chmod. The chmod still narrows a file an older version made.
+  writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   try {
     chmodSync(CONFIG_PATH, 0o600);
   } catch {

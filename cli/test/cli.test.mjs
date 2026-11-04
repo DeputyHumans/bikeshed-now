@@ -1518,3 +1518,22 @@ test("a folder's settings print without open editing, and a document says which 
     assert.match(stdout, /readable by anyone with the folder's link through Planning, until 2027-01-01T00:00:00.000Z\n/);
   });
 });
+
+test("the config holding the token is created owner-only, not narrowed after the fact", async () => {
+  // writeFileSync creates a file under the umask, usually 0644, so a chmod
+  // after it leaves a moment in which anyone on the machine can read the
+  // token. Creating it 0600 leaves none; the chmod narrows an older file.
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "config.mjs"), "utf8");
+  const body = src.slice(src.indexOf("export function writeConfig("), src.indexOf("\n}\n", src.indexOf("export function writeConfig(")));
+  assert.match(body, /writeFileSync\(CONFIG_PATH, [^\n]*\{ mode: 0o600 \}\)/, "the token file is created 0600");
+  if (process.platform === "win32") return;
+  const home = mkdtempSync(join(tmpdir(), "bikeshed-mode-"));
+  try {
+    const script = `const { writeConfig } = await import(${JSON.stringify(new URL("../src/config.mjs", import.meta.url).href)}); writeConfig({ token: "bsk_x.y" });`;
+    execFileSync(process.execPath, ["--input-type=module", "-e", script], { env: { ...process.env, XDG_CONFIG_HOME: home } });
+    const { statSync } = await import("node:fs");
+    assert.equal(statSync(join(home, "bikeshed", "config.json")).mode & 0o777, 0o600);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

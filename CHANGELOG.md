@@ -33,6 +33,8 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 - **A destination folder you cannot read is "not found".** Publishing, forking, creating a folder or moving into a folder of somebody else's answered 403, and an id that does not exist 404, so comparing the two confirmed that a folder id was taken. Both are now 404; 403 is kept for a folder you can read but not edit (SPEC §1.4b).
 
+- **The command line's saved sign-in is created readable only by you.** `~/.config/bikeshed/config.json` holds a personal access token, and it was written with the default permissions and narrowed afterwards, which left a moment in which another account on the machine could read it. It is now created owner-only, in a folder only you can open (bikeshed-now 0.21.1).
+
 ### Breaking
 
 - **Editors can no longer move documents or folders they do not own**, through the browser, the CLI or an agent. They can still rename them. An agent's `move_document` or `move_folder` on someone else's item now fails with "only its owner can move…".
