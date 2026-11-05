@@ -35,7 +35,7 @@ function fixture(t) {
 
 function configuredBucket() {
   return {
-    projectNumber: "123456", cors: mediaCors(options.origin),
+    projectNumber: "123456", cors: mediaCors(options.origin, options.project),
     iamConfiguration: { uniformBucketLevelAccess: { enabled: true }, publicAccessPrevention: "inherited" },
   };
 }
@@ -172,7 +172,7 @@ test("setup creates only the dedicated bucket, converges CORS and IAM, then reru
   assert.equal(model.state.bucket.iamConfiguration.uniformBucketLevelAccess.enabled, true);
   assert.equal(model.state.bucket.iamConfiguration.publicAccessPrevention, "inherited");
   assert.deepEqual(model.state.bucket.cors, [{
-    origin: ["https://example.com"], method: ["GET", "HEAD"],
+    origin: ["https://example.com", `https://${options.project}.web.app`, `https://${options.project}.firebaseapp.com`], method: ["GET", "HEAD"],
     responseHeader: ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Cache-Control", "ETag", "Range"], maxAgeSeconds: 3600,
   }]);
   const writes = mutations(model.state);
@@ -198,7 +198,12 @@ test("setup repairs settings on an existing owned bucket without replacing unrel
   assert.equal(model.state.policy.bindings.length, 2);
   assert.equal(model.state.policy.bindings[0].role, "roles/storage.objectAdmin");
   assert.ok(!mutations(model.state).some((call) => call[2] === "create"));
-  assert.deepEqual(model.state.bucket.cors, mediaCors(options.origin));
+  assert.deepEqual(model.state.bucket.cors, mediaCors(options.origin, options.project));
+});
+
+test("CORS names a deployment with no custom domain once, because its origin is already a default host", () => {
+  const [{ origin }] = mediaCors("https://demo-bikeshed.web.app", "demo-bikeshed");
+  assert.deepEqual(origin, ["https://demo-bikeshed.web.app", "https://demo-bikeshed.firebaseapp.com"]);
 });
 
 test("bucket ownership mismatches and missing ownership stop before mutations", () => {

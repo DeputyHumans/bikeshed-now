@@ -330,7 +330,7 @@ node scripts/media.mjs setup --account you@example.com --project demo-bikeshed -
 node scripts/media.mjs publish --account you@example.com --project demo-bikeshed --media-bucket demo-bikeshed-media --directory ./media-release --revision v1 --dry-run
 ```
 
-Both previews are credential-free. For a real run, use the deployment's explicit account, project and media bucket, review the output, then remove `--dry-run`. Setup gives the separate bucket uniform access, public object reads and CORS for the exact landing-page origin. It must refuse to repurpose the content bucket; an organization policy that forbids public storage is an operator decision, not a reason to relax the private content policy.
+Both previews are credential-free. For a real run, use the deployment's explicit account, project and media bucket, review the output, then remove `--dry-run`. Setup gives the separate bucket uniform access, public object reads and CORS for the exact landing-page origin and the project's two default Firebase hosts, which serve the same site. It must refuse to repurpose the content bucket; an organization policy that forbids public storage is an operator decision, not a reason to relax the private content policy.
 
 Publishing writes the three objects under `landing/<revision>`, with their content types, immutable cache policy and SHA-256 metadata. A revision is one short token of letters, digits, underscores or hyphens. Existing objects are checked against the source bytes and expected metadata; identical uploads are a no-op, and a conflict is refused. Choose a new revision for any change. Retain old revisions while an old app build or browser can still reference them.
 

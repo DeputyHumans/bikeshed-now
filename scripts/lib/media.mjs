@@ -84,11 +84,16 @@ export function assertDedicatedMediaBucket({ project, contentBucket, mediaBucket
   bucketName(mediaBucket);
 }
 
-export function mediaCors(origin) {
+/**
+ * Hosting serves the same site on the project's two default hosts, whatever the
+ * custom domain, so a visitor can arrive on either. A bucket's CORS matches exact
+ * origins, and the player fails outright on any origin it does not name.
+ */
+export function mediaCors(origin, project) {
   const normalized = normalizeOrigin(origin);
   if (!normalized) throw new Error("media setup needs --origin or the deployment domain for CORS");
   return [{
-    origin: [normalized],
+    origin: [...new Set([normalized, `https://${project}.web.app`, `https://${project}.firebaseapp.com`])],
     method: ["GET", "HEAD"],
     responseHeader: ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Cache-Control", "ETag", "Range"],
     maxAgeSeconds: 3600,
@@ -170,7 +175,7 @@ export function ensureMediaBucket(options, dependencies) {
   const { project, contentBucket, mediaBucket, origin, location = "us-central1" } = options;
   if (!mediaBucket) return { skipped: true };
   assertDedicatedMediaBucket({ project, contentBucket, mediaBucket });
-  const cors = mediaCors(origin);
+  const cors = mediaCors(origin, project);
   const cloud = runner(options, dependencies);
   const number = projectNumber(cloud, project);
   const url = `gs://${mediaBucket}`;
