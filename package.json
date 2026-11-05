@@ -52,8 +52,8 @@
     "@firebase/rules-unit-testing": "^3.0.4",
     "firebase": "^10.14.1",
     "firebase-admin": "^12.7.0",
-    "mime": "^4.0.4",
-    "playwright-core": "1.63.0"
+    "mime": "^4.1.2",
+    "playwright-core": "1.64.1"
   },
   "overrides": {
     "undici": "^6.29.1",
