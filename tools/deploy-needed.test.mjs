@@ -17,6 +17,7 @@ test("what production serves deploys, and so does anything nobody has classified
   for (const path of [
     "app/public/llms.txt",
     "app/public/skills/bikeshed-publishing/SKILL.md",
+    "claude-plugin/.claude-plugin/plugin.json",
     "app/src/test/README.md",
     "functions/src/index.ts",
     "functions/test/skills.test.js",
@@ -40,6 +41,7 @@ test("what production never serves does not deploy", () => {
     "AGENTS.md",
     "docs/architecture/spec.md",
     "docs/agents/agent-guide.md",
+    "claude-plugin/README.md",
     "claude-plugin/skills/bikeshed-publishing/SKILL.md",
     ".claude-plugin/marketplace.json",
     "content/docs/bundle/index.html",

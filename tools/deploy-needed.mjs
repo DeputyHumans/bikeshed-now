@@ -28,15 +28,17 @@ export const DEPLOY_JOB = "deploy production";
 /**
  * Paths production never serves.
  *
- * `docs/agents/agent-guide.md` and `claude-plugin/` do reach readers, but as the
- * copies under `app/public/`, which are not listed and which `check:agents` keeps in
- * step. `content/` reaches production through `bikeshed update`, and `cli/`
- * through `npm publish`.
+ * `docs/agents/agent-guide.md` and `claude-plugin/skills/` do reach readers, but
+ * as the copies under `app/public/`, which are not listed and which `check:agents`
+ * keeps in step. `content/` reaches production through `bikeshed update`, and
+ * `cli/` through `npm publish`. The plugin's manifest is not listed: it has no
+ * copy under `app/public/`, and the zip every deployment offers packs it from here.
  */
 export const NOT_DEPLOYED = [
   /^[^/]+\.md$/,
   /^docs\//,
-  /^claude-plugin\//,
+  /^claude-plugin\/README\.md$/,
+  /^claude-plugin\/skills\//,
   /^\.claude-plugin\//,
   /^content\//,
   /^cli\//,
