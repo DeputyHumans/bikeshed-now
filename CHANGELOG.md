@@ -31,6 +31,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Fixed
 
+- **Dismiss no longer runs into the edge of a toast on a touch screen.** A long message squeezed the button until the word spilled out of it, and the word now keeps a little more room on its left too.
 - **The wordmark no longer lies over the links beside it, and the logo no longer disappears.** A row short of room took its width out of icons first, down to nothing, and on touch screens the link's underline reached the wordmark. Icons keep their size in a row everywhere now.
 - **iOS no longer zooms the page when you tap a text field.** Fields were under the 16 px where it does; on touch screens they are 16 px now, and pinch zoom still works.
 - **A link no longer loses letters with no sign of it on a touch screen**: "Everything" read "Everythi". Cut links now end in an ellipsis, and a breadcrumb's first folder stays whole.

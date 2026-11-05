@@ -353,7 +353,11 @@ button.badge-automated {
 .toast-busy { animation: toast-busy-in var(--t-base) var(--ease-out) var(--t-slow) both; }
 @keyframes toast-busy-in { from { opacity: 0; } }
 .toast-action {
+  /* A long message would otherwise squeeze it: on touch the 44 px floor replaces
+     the minimum its word would set, and the word spills into the toast's padding. */
+  flex: none;
   margin-left: auto;
+  padding-left: var(--s-1);
   color: inherit;
   background: none;
   border: 0;
