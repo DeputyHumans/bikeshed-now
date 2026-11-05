@@ -7,7 +7,9 @@ import { useEditSession } from "./useEditSession";
 const { openDraftSession } = vi.hoisted(() => ({ openDraftSession: vi.fn() }));
 vi.mock("../edit", () => ({ openDraftSession }));
 const snapshot = (baseVersion = "v1", liveEpoch = "old", draftRevision = "a".repeat(64)) => ({ baseVersion, liveEpoch, draftRevision, entry: "index.html" });
-beforeEach(() => openDraftSession.mockReset());
+beforeEach(() => {
+  openDraftSession.mockReset();
+});
 
 it("retains the opened snapshot until the user explicitly reloads editing", async () => {
   openDraftSession.mockResolvedValueOnce(snapshot()).mockResolvedValueOnce(snapshot("v2", "new"));

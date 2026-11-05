@@ -13,6 +13,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 ### Security
 
 - **Patched `undici`, `@grpc/grpc-js`, `uuid`, `node-forge` and `source-map-js` in the root and app trees.** The operator scripts load the root tree with Admin credentials, so its development scope did not make these harmless. `firebase` pins `undici` at 6.19.7 and `@grpc/grpc-js` at `~1.9.0`, and it still pins the second at 13.2, so a firebase upgrade alone would not clear them. They are `overrides` in the root and app `package.json` instead. Neither package is in the browser bundle, and the built app is byte for byte what it was.
+- **Vite 6 and Vitest 4 for the app.** This clears the app's build and test advisories, including the three critical ones in Vitest and `tinypool`. None was reachable, since nothing starts the Vitest UI or exposes the dev server, but the fixes do not exist for Vite 5 or Vitest 2. Vite 6 rather than 7 keeps the browser target the app ships today, and Vite 8 brings MPL-2.0 `lightningcss`, which the licence check refuses. The coverage threshold for statements moves from 90 to 89, because Vitest 4 counts statements rather than lines: the figure went from 93.4% of 1372 to 89.4% of 851, with the same tests and one fewer left uncovered.
 
 ### Added
 

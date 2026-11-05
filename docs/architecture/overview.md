@@ -59,7 +59,7 @@ firestore.rules  database.rules.json     GENERATED, committed
 functions/       Cloud Functions v2 (CommonJS) — every server-side decision
 scripts/         operator CLIs (ESM) — provision, publish, withdraw, tear down
 cli/             the end-user `bikeshed` CLI — PAT auth, HTTPS only
-app/             React 18 + Vite 5 + TypeScript strict
+app/             React 18 + Vite 6 + TypeScript strict
 content/         the guides at /docs and /docs/developers, and sample bundles
 rules-tests/     the rules suite, against the emulator
 ```

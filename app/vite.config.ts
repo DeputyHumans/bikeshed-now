@@ -150,8 +150,11 @@ export default defineConfig({
         "src/brand/Wordmark.tsx",
       ],
       // Set just under the current figures, so an ordinary change does not
-      // fail the build, and a real drop does.
-      thresholds: { lines: 90, functions: 90, statements: 90, branches: 80 },
+      // fail the build, and a real drop does. Since Vitest 4 `statements` counts
+      // statements rather than lines. That moved the figure from 93.4% of 1372
+      // to 89.4% of 851 with the same tests and one fewer left uncovered, so 89
+      // allows fewer uncovered statements than 90 allowed lines.
+      thresholds: { lines: 90, functions: 90, statements: 89, branches: 80 },
     },
   },
 });
