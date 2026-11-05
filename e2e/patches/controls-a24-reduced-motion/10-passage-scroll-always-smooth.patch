@@ -1,11 +1,11 @@
 --- a/app/src/viewer/useAnnotationLayer.ts
 +++ b/app/src/viewer/useAnnotationLayer.ts
-@@ -136,7 +136,7 @@
+@@ -140,7 +140,7 @@
      if (!wrapper) return;
      scrolledTo.current = selectedId;
      if (inView(wrapper)) return;
 -    wrapper.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
 +    wrapper.scrollIntoView({ block: "center", behavior: "smooth" });
-   }, [enabled, doc, epoch, selectedId, annotations, reduceMotion]);
+   }, [enabled, doc, frameShown, epoch, selectedId, annotations, reduceMotion]);
  
    return { orphaned, stale };

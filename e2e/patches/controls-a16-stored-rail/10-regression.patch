@@ -1,9 +1,11 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -1040,5 +1040,5 @@
+@@ -1209,7 +1209,7 @@
+               drawerOpen={singleColumn ? railOpen || editingNow : undefined}
                baseHref={baseHref}
                stage={deck.stage}
 -              images={railImages}
 +              images={null}
-               onGoTo={deck.goTo}
-               onChanged={onSlidesChanged}
+               onGoTo={(index) => {
+                 deck.goTo(index);
+                 // A drawer over the slide just chosen is in the way of looking at it.

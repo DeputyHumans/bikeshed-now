@@ -1,11 +1,11 @@
 --- a/app/src/viewer/useAnnotationLayer.ts
 +++ b/app/src/viewer/useAnnotationLayer.ts
-@@ -129,7 +129,7 @@
-       scrolledTo.current = null;
-       return;
+@@ -133,7 +133,7 @@
      }
--    if (!enabled || !doc || scrolledTo.current === selectedId) return;
-+    if (!enabled || !doc) return;
+     // Not while the frame is hidden. Its box measures zero, so every passage looks
+     // in view and the jump would be used up; this waits for the frame to come back.
+-    if (!enabled || !doc || !frameShown || scrolledTo.current === selectedId) return;
++    if (!enabled || !doc || !frameShown) return;
      const wrapper = Array.from(doc.querySelectorAll(HL_SELECTOR)).find(
        (el) => el.getAttribute(ANN_ATTR) === selectedId,
      );

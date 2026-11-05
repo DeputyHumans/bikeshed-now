@@ -35,6 +35,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - **A link no longer loses letters with no sign of it on a touch screen**: "Everything" read "Everythi". Cut links now end in an ellipsis, and a breadcrumb's first folder stays whole.
 - **Closing the comments panel on a phone no longer leaves a blank screen.** The close button is gone in one column, where the Document half of the toggle already does it.
 - **A long ⋮ menu stays on the screen and scrolls inside itself**, a tap on the document closes it, and a menu in the header no longer opens lower by however far the page has scrolled.
+- **No blue box round the document after touching it.** A finger in the document focuses its frame, which drew the keyboard focus ring round the page. On a touch screen only a Tab draws it now.
 - **Tapping a thread and then Document lands on its passage.** The jump was being used up while the frame was hidden.
 
 ## 0.33.1 — 2026-11-04

@@ -126,7 +126,14 @@ test('the actual product cascade floors touch controls and paints the focused if
   await u.page.setContent(`<meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}.check-label{display:flex;align-items:center}</style>${controls}`);
   assert.deepEqual((await inspectUi(u.page)).issues.small, []);
   await u.page.evaluate(`window.stopFocus = (${observeFrameFocus.toString()})(document.querySelector('iframe'))`);
+  // A finger in the document focuses the frame too, and must not leave a ring round the page.
   await u.page.locator('button').focus();
+  await u.page.locator('iframe').focus();
+  await u.page.waitForTimeout(100);
+  assert.equal(await u.page.locator('iframe').getAttribute('data-frame-focus'), null, 'negative: focus with no Tab on a touch screen draws no ring');
+  // A hardware keyboard's Tab does.
+  await u.page.locator('button').focus();
+  await u.page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
   await u.page.locator('iframe').focus();
   await u.page.waitForFunction(() => document.querySelector('iframe').hasAttribute('data-frame-focus'));
   const ring = () => u.page.locator('iframe').evaluate((el) => { const s = getComputedStyle(el); return [s.outlineStyle, s.outlineWidth, s.outlineColor]; });

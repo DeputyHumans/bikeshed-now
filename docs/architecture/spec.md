@@ -1275,8 +1275,8 @@ its associated label as its hit area; inline links within prose retain their
 inline-target exception. Keyboard focus uses `:focus-visible`; when the browser
 focuses an iframe document without matching a focus pseudo-class on its host,
 the app reflects that focus with the same ring on the app-owned iframe. This
-indicator never decorates the authored document, and on a touch screen it is not
-drawn, because a finger in the document would leave it round the page. Dialogs contain Tab focus even
+indicator never decorates the authored document. On a touch screen a finger in the
+document focuses the frame too, so there only a Tab draws it. Dialogs contain Tab focus even
 when a focused control is disabled or removed, and restore their opener when
 closed. Reduced motion applies to every app-driven scroll, including review
 navigation and the slide rail. Presence mode shapes remain visibly painted in

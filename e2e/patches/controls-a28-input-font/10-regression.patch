@@ -1,6 +1,6 @@
 --- a/app/src/styles/base.css
 +++ b/app/src/styles/base.css
-@@ -154,7 +154,7 @@
+@@ -151,7 +151,7 @@
       size must not bring the zoom back. The code field is larger on purpose. */
    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"], .verify-code-input),
    select, textarea {

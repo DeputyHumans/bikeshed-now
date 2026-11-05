@@ -7,5 +7,5 @@
 -  a[href]:not(:is(p, .legal li, .field-hint, .caption) a) { display: inline-block; align-content: center; }
 +  a[href]:not(:is(p, .legal li, .field-hint, .caption) a) { display: inline-flex; align-items: center; }
    summary, .checkbox-row > label { align-content: center; }
-   /* A finger in the document focuses its frame, and the ring that tells a keyboard
-      user where they are becomes a blue box round the page for as long as they read. */
+   /* Below 16px iOS zooms the whole page when a field takes focus, and leaves it
+      zoomed. Important for the same reason as the floor above: a feature's own

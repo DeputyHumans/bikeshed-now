@@ -1,7 +1,12 @@
 --- a/app/src/viewer/frameFocus.ts
 +++ b/app/src/viewer/frameFocus.ts
-@@ -10,3 +10,3 @@
+@@ -17,7 +17,8 @@
    const update = () => {
--    frame.toggleAttribute("data-frame-focus", doc.activeElement === frame && doc.hasFocus());
+     const focused = doc.activeElement === frame && doc.hasFocus();
+     if (!focused) tabbed = false;
+-    frame.toggleAttribute("data-frame-focus", focused && (tabbed || !touch));
++    void focused; void tabbed; void touch;
 +    frame.removeAttribute("data-frame-focus");
    };
+   // The active element changes after the window's blur event has dispatched.
+   const defer = () => {
