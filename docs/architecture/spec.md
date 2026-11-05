@@ -242,7 +242,8 @@ Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, an
 - **`POST /mcp`** — streamable HTTP MCP endpoint; a personal access token or a connected app's access token — §19, §23.
 - **`GET /.well-known/oauth-protected-resource[/mcp]`**, **`GET /.well-known/oauth-authorization-server`**, **`POST /oauth/register`**, **`POST /oauth/token`** — the `oauth` function — §23. The token endpoint takes a code, a refresh token, or, where the deployment trusts an issuer, an organisation's identity assertion (§23, ADR 0026).
 - **`POST /oauth/consent`** — the `oauthConsent` function, signed-in account's ID token only — §23.
-- **`GET /sitemap.xml`** — public documents only.
+- **`GET /sitemap.xml`** — the site's own public pages (`/`, `/terms`, `/privacy`, undated), then public documents.
+- **`GET /robots.txt`** — not a function. A static file at `app/public/robots.txt`, because a crawler that gets a 5xx here stops crawling the site, and the build fills in the deployment's address (`tools/stamp-deployment.mjs`). One group for every bot: everything public is open, and a named group would lift every rule for the bots it names. `/content/` stays open, or no crawler could read a document, and a keyed link stays open, because a crawler must fetch it to see its `noindex`.
 
 ---
 
@@ -539,7 +540,7 @@ functions/src/
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,trash,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
-  lib/{head,html,htmltext,http,health,marking,thumbs,shell,scriptlock,transaction-receipts,mcp-transport}.ts
+  lib/{head,html,htmltext,http,health,marking,thumbs,shell,sitemap,scriptlock,transaction-receipts,mcp-transport}.ts
   lib/{versions,latest,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
   lib/accountmove.ts
@@ -564,6 +565,7 @@ functions/src/
 - `lib/html.ts` — escaping for markup the functions emit into the app shell; separate from the Markdown renderer's escaper, whose bytes are part of the content hash.
 - `lib/scriptlock.ts` — whether a document's own script may run in a response: the lock every scriptable content and draft response carries, the run variant that alone can lift it, and who may trust a document for everyone (§2, §6c; ADR 0021).
 - `lib/shell.ts` — the `docShell` decision, the page composed from it, the splice into the shell template, and the runtime fetch of the shell from Hosting; the handler in `index.ts` is glue.
+- `lib/sitemap.ts` — what `/sitemap.xml` says, given the public documents the handler read.
 - Bucket name: `BIKESHED_BUCKET` → `config/deploy.json` → `${projectId}-content`. **The Firebase default bucket is never assumed** (§14 of the risk register: `${projectId}.appspot.com` is wrong for post-2024 projects and `.firebasestorage.app` is wrong for pre-2024 ones).
 - Never leak whether a document exists to a caller who may not read it: 401/404 before 403 on read-only byte paths (§1.4b).
 

@@ -712,6 +712,7 @@ scenario("A3.10 sitemap.xml lists only public documents that have not expired: n
     assert.match(r.headers.get("content-type") ?? "", /^application\/xml/);
     assert.equal(r.headers.get("cache-control"), PUBLIC_300);
     const locs = [...r.text.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
+    assert.deepEqual(locs.slice(0, 3).map((l) => new URL(l).pathname), ["/", "/terms", "/privacy"], "the site's own pages lead the sitemap");
     return locs.map((l) => decodeURIComponent(l.slice(l.lastIndexOf("/d/") + 3))).filter((id) => mine.has(id)).sort();
   };
 

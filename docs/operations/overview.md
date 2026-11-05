@@ -237,6 +237,12 @@ Each `url` it returns must end in the id you asked for. A taken id gets a suffix
 
 To publish a change, `bikeshed update docs content/docs/bundle/index.html`, or the same for `docs-developers`; identical bytes publish nothing. Under `vite` dev there is no redirect, and `/docs` lands on `/`. The Hosting emulator honours it, but only one started after the change: a running one keeps the configuration it started with.
 
+### What crawlers may read
+
+`app/public/robots.txt` is the policy, one group for every bot, and every deployment ships it. By default everything public is open to every crawler, including AI training crawlers, and `/terms` tells authors so. To change it, edit that file and deploy, and change what `/terms` and Share say to match. Give a bot a group of its own only by repeating every rule in it: a bot obeys its own group and ignores the shared one. `tools/robots.test.mjs` holds the paths a crawler must be able to read.
+
+It is a request, not access control. A private document is refused by the server whatever this file says.
+
 ### Withdrawing a version
 
 The one guarded exception to "versions are immutable".

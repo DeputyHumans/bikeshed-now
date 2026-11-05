@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Added
+
+- **`/robots.txt`, and the front page in the sitemap.** `/robots.txt` was answered with the app's HTML, so crawlers got no rules at all, and `/sitemap.xml` listed only documents. Now there is a real file, static so that a function being down cannot stop a site being crawled, with one group for every bot: everything public is open, and signed-in pages, earlier versions, downloads and one-time email links are asked to be left alone. The sitemap also lists `/`, `/terms` and `/privacy`.
+
 ### Fixed
 
 - **The guides no longer break lines well short of their column.** Text in `/docs` and `/docs/developers` was capped at 34 to 64 characters wide inside a wider column, so it stopped short of the panels beside it and left stray last words on their own line. It now wraps against the column, which makes lines longer on a wide screen. The four paragraphs still hard-wrapped in the guides' source are one line each, which changes nothing a reader sees.
