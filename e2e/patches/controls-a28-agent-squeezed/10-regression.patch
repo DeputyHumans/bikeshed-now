@@ -1,0 +1,11 @@
+--- a/app/src/styles/primitives.css
++++ b/app/src/styles/primitives.css
+@@ -222,8 +222,6 @@ button.fork-chip { cursor: pointer; }
+  * title, and its toast on a tap (components/ViaBadge.tsx).
+  */
+ button.badge-automated {
+-  /* It lies in flex rows with long neighbours, and a shrunk one spills its word. */
+-  flex: none;
+   height: 18px;
+   padding: 0 6px;
+   font-size: 0.7rem;

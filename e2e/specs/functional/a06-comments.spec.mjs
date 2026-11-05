@@ -28,9 +28,9 @@
  *        nothing of the kind to a viewer reading the version
  *   A6.8 a comment on SVG text is wrapped in tspan.bshd-hl, never a <mark>,
  *        and the label keeps its painted width
- *   A6.9 an agent's comment carries a badge naming the token it came through
- *        ("via personal token “…”", ADR 0023); a person's reply beside it
- *        carries none
+ *   A6.9 an agent's comment carries a badge reading "agent", with the token it
+ *        came through in its title ("personal token “…”", ADR 0023); a person's
+ *        reply beside it carries none
  *
  * EMAIL. A comment notifies the owner and the thread's earlier participants
  * (onCommentCreated) unless they opted out. Every account here is cast with
@@ -998,9 +998,12 @@ scenario("A6.9 an agent's comment is labelled with the token it came through, se
   await agentComment0.locator(".comment-body", { hasText: body }).waitFor({ state: "visible", timeout: UI_MS });
   const badge = agentComment0.locator(".comment-head .badge-automated");
   assert.equal(await badge.count(), 1, "one automation badge on the agent's comment");
-  const words = (await badge.textContent()).trim();
-  assert.match(words, /^via personal token “e2e a06 .+”$/, "the credential in words, as the server stored it");
-  assert.equal(await badge.getAttribute("title"), `Posted on ${ownerAcct.email.toLowerCase()}'s behalf by ${words.slice("via ".length)}`);
+  assert.equal((await badge.textContent()).trim(), "agent", "one word on the page");
+  assert.match(
+    await badge.getAttribute("title"),
+    new RegExp(`^Posted on ${ownerAcct.email.toLowerCase().replace(/[.+]/g, "\\$&")}'s behalf by personal token “e2e a06 .+”$`),
+    "the credential in words, as the server stored it, behind the badge",
+  );
 
   ctx.step("the viewer replies in the browser: that comment carries no badge");
   const reply = `A6.9 person ${tag()}`;

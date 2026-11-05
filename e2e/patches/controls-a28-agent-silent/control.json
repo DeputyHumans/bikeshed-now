@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.19 on a phone",
+  "what": "a tap on the agent badge says nothing, so a phone has no way to what acted",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.19 a tap on the agent badge says what acted, in a comment and on a list, and does nothing else",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a tap shows the words"
+  }
+}

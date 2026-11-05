@@ -1,0 +1,10 @@
+--- a/app/src/components/ViaBadge.tsx
++++ b/app/src/components/ViaBadge.tsx
+@@ -23,7 +23,6 @@ export function ViaBadge({ via, title }: { via: string | null; title: string })
+       title={title}
+       onClick={(event) => {
+         event.stopPropagation();
+-        toast.show(title);
+       }}
+     >
+       <Icon name="agent" size={12} />

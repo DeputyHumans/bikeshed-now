@@ -192,7 +192,7 @@ nothing that runs.
 | `controls-i3-ready-skipped` | I3 (concurrency canary) | the editor binds without awaiting `log.ready()`, so a late joiner seeds a second copy |
 | `controls-i6-stale-removed` | I6 (concurrency canary, built on `amplify-mint-join`) | `commitDraft`'s transaction no longer checks that its base is still current |
 | `controls-i12-leave-noop` | I12 (concurrency canary) | the presence handle's `leave()` removes nothing |
-| `controls-a28-*` | A28 phone layout | one each: a control over another, one off the screen, a page wider than the phone, a squeezed logo, a small text field, too many actions in the row, bars that never leave, no re-baseline at the bottom, a deck's list left open, a sign-in that loses the passage, a folder drawer that stays |
+| `controls-a28-*` | A28 phone layout | one each: a control over another, one off the screen, a page wider than the phone, a squeezed logo, a small text field, too many actions in the row, bars that never leave, no re-baseline at the bottom, a deck's list left open, a sign-in that loses the passage, a folder drawer that stays, an agent badge silent on a tap, one that also selects its thread, one squeezed until its word spills |
 
 I11 (at most one email per recipient, document and kind in 30 min) is
 controlled by `controls-a23-cooldown`: the window is not checked, so a

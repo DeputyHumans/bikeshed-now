@@ -595,8 +595,9 @@ async function activityRows(dialog, filter) {
     const feed = lists[lists.length - 1];
     return [...(feed?.querySelectorAll("li.activity-row") ?? [])].map((li) => ({
       who: li.querySelector("span")?.textContent.trim() ?? null,
-      // As it is rendered (innerText), not as it is written: the words quote a token's name, and a stylesheet that changes their case misquotes it.
       badge: li.querySelector(".badge-automated")?.innerText.trim() ?? null,
+      // What acted, behind the badge: a title, so no stylesheet can change the case of the token's name it quotes.
+      how: li.querySelector(".badge-automated")?.getAttribute("title") ?? null,
       caption: li.querySelector(".caption")?.textContent.trim() ?? null,
     }));
   });
@@ -642,14 +643,14 @@ scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_
   precondition(panel?.readers, "the owner sees the per-person detail");
   const rows = await activityRows(dialog, "Automation");
   ctx.step(`Automation rows: ${JSON.stringify(rows)}`);
-  // Each badge names the token, in the words the server stored when it acted (ADR 0023).
-  const CLI_BADGE = "via CLI token “e2e a18 feed cli”";
-  const MCP_BADGE = "via personal token “e2e a18 feed mcp”";
+  // Each badge says agent, with the token behind it in the words the server stored when it acted (ADR 0023).
+  const CLI_HOW = "Done through CLI token “e2e a18 feed cli”, not by a person in the browser";
+  const MCP_HOW = "Done through personal token “e2e a18 feed mcp”, not by a person in the browser";
   const shown = rows.map((r) => r.badge).filter(Boolean);
-  assert.ok(shown.every((b) => b.startsWith("via ")), `each badge reads as stored, in its own letters (a token's quoted name is never upper-cased): ${JSON.stringify(shown)}`);
-  precondition(rows.some((r) => r.badge === CLI_BADGE && r.who === email), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
-  assert.ok(rows.some((r) => r.badge === MCP_BADGE && r.who === email), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
-  assert.ok(rows.every((r) => r.badge === MCP_BADGE || r.badge === CLI_BADGE), "Automation excludes human activity");
+  assert.ok(shown.length > 0 && shown.every((b) => b === "agent"), `each badge reads agent, as rendered: ${JSON.stringify(shown)}`);
+  precondition(rows.some((r) => r.how === CLI_HOW && r.who === email), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
+  assert.ok(rows.some((r) => r.how === MCP_HOW && r.who === email), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
+  assert.ok(rows.every((r) => r.how === MCP_HOW || r.how === CLI_HOW), "Automation excludes human activity");
   const apiReads = (await statsOf(D.docId)).apiReads;
   precondition(apiReads === 2, "the two automated reads are recorded before inspecting their tile");
   const automationTile = dialog.locator(".stat-tile").filter({ hasText: "automated reads" });

@@ -1,6 +1,6 @@
 {
-  "oracle": "the automation badge reads, as rendered, the words the server stored (A18.4, SPEC §17): a token's quoted name keeps its owner's letters",
-  "what": "the automation badge is upper-cased again (app/src/styles/primitives.css), so a token its owner named “e2e a18 feed cli” is shown as “E2E A18 FEED CLI”",
+  "oracle": "the automation badge reads agent, as rendered (A18.4, SPEC §17)",
+  "what": "the automation badge is upper-cased (app/src/styles/primitives.css), so the word on the page is no longer the one the spec names",
   "target": {
     "spec": "e2e/specs/functional/a18-stats.spec.mjs",
     "case": "A18.4 (automation filter) the owner's Activity panel lists an MCP get_document under Automation, beside a token's POST /view",
@@ -8,6 +8,6 @@
   },
   "stack": [],
   "expect": {
-    "message": "each badge reads as stored, in its own letters"
+    "message": "each badge reads agent, as rendered"
   }
 }

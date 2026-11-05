@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.19 on a phone",
+  "what": "the badge shrinks beside a long address and its word spills out",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.19 a tap on the agent badge says what acted, in a comment and on a list, and does nothing else",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the word stays inside the badge"
+  }
+}

@@ -1,10 +1,10 @@
 --- a/app/src/styles/primitives.css
 +++ b/app/src/styles/primitives.css
-@@ -212,6 +212,7 @@
-   border: 1px solid var(--color-line);
+@@ -228,6 +228,7 @@ button.badge-automated {
+   padding: 0 6px;
    font-size: 0.7rem;
    font-weight: 600;
 +  text-transform: uppercase;
-   white-space: nowrap;
-   overflow: hidden;
-   text-overflow: ellipsis;
+   vertical-align: middle;
+   cursor: pointer;
+ }

@@ -30,6 +30,7 @@
  *          comments pane, a selection, an open menu; and focus brings them back
  *   A28.17 a new version brings them back to say so
  *   A28.18 a tap beside the folder drawer closes it, and so does going somewhere
+ *   A28.19 a tap on the agent badge says what acted, in a comment and on a list, and does nothing else
  *
  * Set A28_SCREENSHOTS to a directory to keep a picture of every surface at every
  * size, which is how a layout is looked at rather than only measured. Set A28_SIZES
@@ -50,7 +51,7 @@ import { sharedMeasurement } from "../../lib/shared-measurement.mjs";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { browserSession, mintToken } from "../../lib/session.mjs";
-import { createFolder, publish, readSample, updateUpload } from "../../lib/seed.mjs";
+import { createFolder, publish, publishMcp, readSample, updateUpload } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
 import { closeAdmin } from "../../lib/admin.mjs";
 import { authorizeParams, pkce, register } from "../../lib/oauth.mjs";
@@ -177,13 +178,16 @@ async function seed(ctx, n) {
   await mcp.initialize();
   const said = await mcp.call("add_comment", { id: doc, exact: "Paragraph 2 speaks", body: `A thread to read at every width ${t}` });
   precondition(!said.isError, `add_comment: ${said.text?.slice(0, 200)}`);
+  // So every list in the walk has an agent's badge in it.
+  const byToken = await publishMcp(mcp, { title: `A28 by a token ${t}`, content: longHtml(`A28 by a token ${t}`) });
+  precondition(!byToken.isError, `publish_document: ${byToken.text?.slice(0, 200)}`);
 
   const redirectUri = "http://127.0.0.1/a28-callback";
   const reg = await register(ctx.http({ actor: "oauth-app", cutoffError: true }), { redirectUris: [redirectUri], clientName: `E2E A28 app ${t}` });
   precondition(reg.status === 201 && reg.clientId, `registration: ${reg.status}`);
   const connect = new URLSearchParams(authorizeParams({ clientId: reg.clientId, redirectUri, challenge: pkce().challenge }));
 
-  return { owner, reader, anon, visitor, doc, deck, public_, folderId: folder.folderId, linkKey: link.linkToken, connect };
+  return { owner, reader, anon, visitor, doc, deck, public_, byToken: byToken.docId, folderId: folder.folderId, linkKey: link.linkToken, connect };
 }
 
 /** Every surface: its user, how to reach it from a fresh load, and what says it is ready. */
@@ -218,6 +222,9 @@ function surfaces(s) {
     // Beside the document above 860 px, and behind the toggle at or below it.
     { name: "comments", u: s.owner, go: async (u) => { await openDoc(u, s.doc); if (await pane(u, "Comments").isVisible()) await pane(u, "Comments").click(); }, ready: (u) => u.page.locator(".comments-panel .thread") },
     { name: "more-menu", u: s.owner, go: async (u) => { await openDoc(u, s.doc); await button(u, "More actions").click(); }, ready: (u) => u.page.locator(".menu") },
+    // Rows with an agent's badge in them, which does not shrink.
+    { name: "details", u: s.owner, go: async (u) => { await openDoc(u, s.byToken); await button(u, "More actions").click(); await u.page.getByRole("menuitem", { name: "Details" }).click(); }, ready: (u) => u.page.getByRole("dialog").locator(".badge-automated").first() },
+    { name: "activity", u: s.owner, go: async (u) => { await openDoc(u, s.byToken); await button(u, "More actions").click(); await u.page.getByRole("menuitem", { name: "Activity" }).click(); }, ready: (u) => u.page.getByRole("dialog").locator(".badge-automated").first() },
     { name: "share-dialog", u: s.owner, go: async (u) => { await openDoc(u, s.doc); await u.page.locator(".viewer-toolbar").getByRole("button", { name: /^Share/ }).first().click(); }, ready: (u) => dialog(u, /^Share/) },
     { name: "deck-owner", u: s.owner, go: (u) => openDoc(u, s.deck), ready: (u) => u.page.locator("iframe.doc-frame") },
     { name: "deck-reader", u: s.reader, go: (u) => openDoc(u, s.deck), ready: (u) => u.page.locator("iframe.doc-frame") },
@@ -650,3 +657,58 @@ scenario("A28.18 a tap beside the folder drawer closes it, and so does going som
 });
 
 export { E2E_FILE_TIMEOUT_MS };
+
+scenario("A28.19 a tap on the agent badge says what acted, in a comment and on a list, and does nothing else", LOCAL, async (ctx) => {
+  const { u, session, account } = await onPhone(ctx);
+  const name = `e2e a28 badge ${rand4()}`;
+  const { token } = await mintToken(session, { name, channel: "mcp" });
+  const mcp = ctx.mcp({ token, actor: "owner-mcp" });
+  await mcp.initialize();
+  const docId = await publishAs(session, "badge");
+  const said = await mcp.call("add_comment", { id: docId, exact: "Paragraph 2 speaks", body: "From a token." });
+  precondition(!said.isError, `add_comment: ${said.text?.slice(0, 200)}`);
+  const listed = await publishMcp(mcp, { title: `A28 listed ${rand4()}`, content: longHtml("A28 listed") });
+  precondition(!listed.isError, `publish_document: ${listed.text?.slice(0, 200)}`);
+  const toastSays = async (words) => {
+    const toast = u.page.locator(".toast", { hasText: words });
+    await eventually(() => toast.first().isVisible(), { timeout: 5_000, interval: 50, message: `a tap shows the words: ${words}` });
+    await toast.first().getByRole("button", { name: "Dismiss" }).click();
+  };
+
+  await u.open(docId, { timeout: LISTEN_MS });
+  await u.page.locator(".pane-toggle button", { hasText: "Comments" }).click();
+  const chip = u.page.locator(".comments-panel .comment-head .badge-automated");
+  await chip.waitFor({ state: "visible", timeout: LISTEN_MS });
+  assert.equal((await chip.innerText()).trim(), "agent", "one word on the page");
+  const fit = await chip.evaluate((el) => ({ content: el.scrollWidth, box: el.clientWidth, height: el.offsetHeight }));
+  ctx.ev.json("comment-badge", fit);
+  assert.ok(fit.content <= fit.box, `the word stays inside the badge, beside a long address: ${JSON.stringify(fit)}`);
+  assert.ok(fit.height >= 44 && fit.box >= 44, `a finger's hit area: ${JSON.stringify(fit)}`);
+  const words = `Posted on ${account.email.toLowerCase()}'s behalf by personal token “${name}”`;
+  assert.equal(await chip.getAttribute("title"), words, "the same words for a pointer");
+  const thread = u.page.locator(".comments-panel .thread").first();
+  assert.equal(await thread.getAttribute("aria-selected"), "false", "precondition: the thread is not selected");
+  await chip.tap();
+  await toastSays(words);
+  assert.equal(await thread.getAttribute("aria-selected"), "false", "the tap does not also select the thread and jump to its passage");
+
+  await u.goto("/everything");
+  const card = u.page.locator(".doc-card").filter({ has: u.page.locator(".badge-automated") }).first();
+  await card.waitFor({ state: "visible", timeout: LISTEN_MS });
+  await card.locator(".badge-automated").tap();
+  await toastSays(`Published through personal token “${name}”, not by a person in the browser`);
+  assert.equal(new URL(u.page.url()).pathname, "/everything", "and it does not open the document");
+
+  // A row that stays on one line above 600 px. On touch the 44 px floor replaces
+  // the minimum a flex item's content would set, so nothing else stops it shrinking.
+  const suggested = await mcp.call("suggest_edit", { id: docId, exact: "Paragraph 4 speaks", replacement: `Paragraph four, which an agent has reworded at enough length to fill the row of the Activity panel ${rand4()}` });
+  precondition(!suggested.isError, `suggest_edit: ${suggested.text?.slice(0, 200)}`);
+  await u.page.setViewportSize({ width: 768, height: 1024 });
+  await u.open(docId, { timeout: LISTEN_MS });
+  await u.page.getByRole("button", { name: "More actions", exact: true }).click();
+  await u.page.getByRole("menuitem", { name: "Activity" }).first().click();
+  const inRows = u.page.getByRole("dialog").locator(".activity-row .badge-automated");
+  await inRows.first().waitFor({ state: "visible", timeout: LISTEN_MS });
+  const spilled = await inRows.evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.clientWidth));
+  assert.deepEqual(spilled, [], "the word stays inside the badge, in a row that does not wrap");
+});

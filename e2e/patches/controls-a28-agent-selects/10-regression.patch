@@ -1,0 +1,10 @@
+--- a/app/src/components/ViaBadge.tsx
++++ b/app/src/components/ViaBadge.tsx
+@@ -22,7 +22,6 @@ export function ViaBadge({ via, title }: { via: string | null; title: string })
+       className="chip badge-automated"
+       title={title}
+       onClick={(event) => {
+-        event.stopPropagation();
+         toast.show(title);
+       }}
+     >
