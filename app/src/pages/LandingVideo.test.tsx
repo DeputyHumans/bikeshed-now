@@ -53,6 +53,21 @@ describe("the native story player", () => {
     });
   });
 
+  it("sets the video's src before its captions track exists, because iOS refuses the video otherwise", () => {
+    const setAttribute = Element.prototype.setAttribute;
+    const trackPresentWhenSrcWasSet: boolean[] = [];
+    const spy = vi.spyOn(Element.prototype, "setAttribute").mockImplementation(function (this: Element, name, value) {
+      if (this.tagName === "VIDEO" && name === "src") trackPresentWhenSrcWasSet.push(this.querySelector("track") !== null);
+      setAttribute.call(this, name, value);
+    });
+    const { container } = render(<LandingVideo />);
+    spy.mockRestore();
+    expect({
+      trackPresentWhenSrcWasSet,
+      trackAfterEffects: container.querySelector("video > track") !== null,
+    }).toEqual({ trackPresentWhenSrcWasSet: [false], trackAfterEffects: true });
+  });
+
   it("omits the optional media when the deployment has not configured it", () => {
     media.base = "";
     const { container } = render(<LandingVideo />);
