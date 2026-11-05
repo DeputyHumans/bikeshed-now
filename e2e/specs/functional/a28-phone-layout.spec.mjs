@@ -537,22 +537,24 @@ scenario("A28.15 the bars leave on the way down and return on the way up, the fr
   await swipe(u, -60);
   await eventually(async () => !(await bars(u)).hidden, { timeout: 5_000, interval: 50, message: "the bars come back on a small scroll up" });
 
-  ctx.step("to the very end: hiding clamps the scroll, which must not read as a scroll up");
-  await eventually(async () => {
-    await swipe(u, 3000);
-    return (await bars(u)).hidden;
-  }, { timeout: 30_000, interval: 300, message: "the bars leave on the way to the end" });
-  await frame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await sleep(300);
-  const flips = await flipsOver(u, 1000);
-  ctx.ev.json("flips-at-the-bottom", { flips });
-  assert.equal(flips, 0, `the bars flipped ${flips} times at the bottom with nobody touching anything`);
+  ctx.step("hiding at the very end clamps the scroll by the height of the bars, which must not read as a scroll up");
+  await u.open(docId, { timeout: LISTEN_MS });
+  const atEnd = await docFrame(u.page);
+  // Inside the quiet second, so the bars are still up when the reader reaches the end.
+  await atEnd.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 90));
+  await sleep(QUIET_MS);
+  assert.equal((await bars(u)).hidden, false, "the bars are up, 90 px short of the end");
+  const counting = flipsOver(u, 2500);
+  await swipe(u, 400);
+  const flips = await counting;
+  ctx.ev.json("flips-at-the-bottom", { flips, ...(await bars(u)) });
+  assert.equal(flips, 1, `the bars flipped ${flips} times at the bottom with nobody touching anything`);
   assert.equal((await bars(u)).hidden, true, "and are still away");
 
-  await frame.evaluate(() => window.scrollTo(0, 0));
+  await atEnd.evaluate(() => window.scrollTo(0, 0));
   await eventually(async () => !(await bars(u)).hidden, { timeout: 5_000, interval: 50, message: "at the top they are always back" });
 
-  assert.equal(await frame.evaluate(() => document.documentElement.outerHTML), bytes, "not a byte of the document changed");
+  assert.equal(await atEnd.evaluate(() => document.documentElement.outerHTML), bytes, "not a byte of the document changed");
 });
 
 scenario("A28.16 they stay where a reader needs them: a short document, a deck, the comments pane, a selection, an open menu; and focus brings them back", LOCAL, async (ctx) => {
