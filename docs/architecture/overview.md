@@ -103,15 +103,3 @@ The app ships with **no UI kit, no CSS framework, no icon library, no state mana
 The functions side came in **one under** its budget rather than at it. The MCP endpoint was planned around `@modelcontextprotocol/sdk`, which requires `zod` as a peer; the server half of streamable HTTP turned out to be ~200 lines of JSON-RPC, so it is hand-written and the two packages were never added. That is a deliberate deviation from the plan and is recorded in [ADR 0009](adr/0009-hand-written-mcp.md).
 
 Three markdown-related packages are load-bearing and **pinned to exact versions**, not ranges: the rendered bytes are part of the content hash, so a patch release would mint new versions of every Markdown document ([0003](adr/0003-server-side-markdown.md)).
-
-## Cost model
-
-Every byte **and every page** of every document is proxied through a Cloud Function: the bytes through `contentProxy`, and the page that loads them through `docShell`, which serves the app shell with the document's own head for link previews ([ADR 0011](adr/0011-document-page-through-a-function.md)). That is the price of the private bucket, the ACL and a link that unfurls as the document, and it is the thing most likely to surprise you on a bill — and on a stopwatch, since a document opened in a new tab waits on `docShell`, `session` and `contentProxy` in sequence. Those three keep one instance each, about $24 a month whatever the traffic ([ADR 0018](adr/0018-keep-the-document-open-path-warm.md)). An unlisted one opened by someone who is not a member waits on a fourth, still cold: `/unlock` checks the key before the bytes are asked for ([ADR 0012](adr/0012-unlisted-needs-its-link.md)).
-
-Two consequences:
-
-- **Prefer single-file bundles.** A 50-asset deck is 50 function invocations per reader; the same deck inlined is one. `docs/development/authoring-bundles.md` says so at the top.
-- **Public documents are cacheable** (`public, max-age=300` on the immutable version path) precisely because they are where traffic spikes. The trade is five minutes of revocation latency, documented in `docs/operations/overview.md` rather than discovered.
-- **Thumbnails are captured once and kept by the browser.** A workspace card's cover and a published deck's rail are images an editor's browser captured once per version (SPEC §2). A member's browser keeps each for a day, so the workspace costs one function call per card per device per day, and a stored rail one per slide, where a live rail fetched every slide's assets on every visit.
-
-`docs/operations/overview.md` makes setting a GCP budget alert a numbered setup step.

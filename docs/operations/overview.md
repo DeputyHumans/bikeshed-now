@@ -124,7 +124,7 @@ There is no clean CLI for these, so the script prints them as a checklist rather
 - **Add every serving host to Authorized domains**, including any custom domain. `signInWithPopup` rejects an unlisted origin with `auth/unauthorized-domain`, which presents as a sign-in button that does nothing.
 - **Create a Realtime Database** if you want peer presence. Without one, presence degrades to a clean no-op and everything else is unchanged.
 - **Set `RESEND_API_KEY`** if you want transactional email: `firebase functions:secrets:set RESEND_API_KEY`. It is a Firebase secret, not an env file, so it never touches disk. Without it every send is a logged no-op — the path CI exercises.
-- **Set a budget alert.** This is a numbered step, not advice; see [Cost](#cost) below.
+- **Set a budget alert.** This is a numbered step, not advice.
 
 ### 5. Verify the deployment does what the rules say
 
@@ -453,19 +453,6 @@ Three more are read by the `report` job in `deploy.yml` and by `operations.yml`:
 2. The setup above run against it, with `refs/heads/develop` in the binding.
 3. `STAGING_*` secrets.
 4. A second job in `deploy.yml` that runs on `develop` and reads them.
-
----
-
-## Cost
-
-**Every byte of every document is proxied through a Cloud Function.** That is the price of a private bucket plus an ACL, and it is the line item most likely to surprise you.
-
-- **Prefer single-file documents.** A fifty-asset deck is fifty function invocations per reader; the same deck inlined is one. `docs/development/authoring-bundles.md` says so at the top.
-- **Public content, and unlisted content fetched with its key, is cached** `public, max-age=300` on the immutable version path, because public documents are where traffic spikes. Gated content, and a link holder's read on the strength of their account's grant rather than a key in the URL, stays `private, no-store`.
-- **Three functions are always on.** `docShell`, `session` and `contentProxy` keep one instance each so a first open does not wait for them to start ([ADR 0018](../architecture/adr/0018-keep-the-document-open-path-warm.md)): about $24 a month at 2026-10 prices, whatever the traffic. A deployment with almost no readers can set them back to zero in `functions/src/index.ts`.
-- **Set the budget alert.** As of early 2026 a small team's usage, those three instances aside, sits inside the Firebase free tier; a public document that gets attention does not.
-
-There is deliberately **no rate limiter**. CDN caching is the cost defence, and Firebase App Check is the named hook if abuse ever appears.
 
 ---
 

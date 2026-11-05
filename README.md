@@ -96,19 +96,6 @@ bikeshed comments storage-migration
 
 ---
 
-## What it costs
-
-**Every byte of every document is proxied through a Cloud Function.** That is the price of a private bucket plus an ACL, and it is the thing most likely to surprise you on a bill.
-
-Two consequences worth knowing before you deploy:
-
-- **Prefer single-file documents.** A fifty-asset deck is fifty function invocations per reader; the same deck inlined is one.
-- **Public documents are cached** at the CDN for five minutes, because they are where traffic spikes. The trade is five minutes of revocation latency, and it is documented rather than discovered.
-
-`docs/operations/overview.md` makes setting a budget alert a numbered setup step. As of early 2026, a small team's usage sits inside the Firebase free tier; a public document that gets attention does not.
-
----
-
 ## Deliberately not built
 
 Each of these is a decision with a reason in `docs/architecture/overview.md`, not a gap:

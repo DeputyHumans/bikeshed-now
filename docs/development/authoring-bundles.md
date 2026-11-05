@@ -35,14 +35,6 @@ Inline your CSS. Inline your SVG. Base64 a raster image only if you truly need o
 
 ---
 
-## Cost: prefer one file
-
-**Every byte of every document is proxied through a Cloud Function.** A fifty-asset deck is fifty function invocations per reader; the same deck with its CSS and SVG inlined is one.
-
-Multi-file bundles are fully supported — upload a `.zip` and reference `styles.css` or `diagram.svg` normally — but single-file is the default worth reaching for. The samples are all single-file at 5–31 KB.
-
----
-
 ## HTML
 
 ### Structure
