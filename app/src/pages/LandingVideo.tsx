@@ -51,7 +51,9 @@ export function LandingVideo() {
         width="1920"
         height="1080"
         onError={(event) => {
-          if (event.target === event.currentTarget) setVideoError(true);
+          // WebKit fires this for a failed poster too, and the video can still play.
+          // Only the video failing sets video.error.
+          if (event.target === event.currentTarget && event.currentTarget.error) setVideoError(true);
         }}
         onPlaying={() => setVideoError(false)}
       >

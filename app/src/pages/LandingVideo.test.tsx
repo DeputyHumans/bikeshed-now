@@ -15,6 +15,12 @@ beforeEach(() => {
   media.base = "https://media.example.test/story-v1";
 });
 
+/** A real media failure sets `video.error` before it fires the event. */
+function failTheVideo(video: HTMLVideoElement) {
+  Object.defineProperty(video, "error", { configurable: true, value: { code: 4 } });
+  fireEvent.error(video);
+}
+
 describe("the native story player", () => {
   it("requests playback only from the visitor, with sound and inline native controls", () => {
     const { container } = render(<LandingVideo />);
@@ -82,9 +88,19 @@ describe("the native story player", () => {
     expect(screen.getByRole("status").textContent).toMatch(/^Captions couldn’t load/);
     fireEvent.load(track);
     expect(screen.queryByRole("status")).toBeNull();
-    fireEvent.error(video);
+    failTheVideo(video);
     expect(screen.getByRole("status").textContent).toMatch(/^The video couldn’t load/);
     fireEvent.playing(video);
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("says nothing when only the poster failed, and still reports the video failing afterwards", () => {
+    const { container } = render(<LandingVideo />);
+    const video = container.querySelector("video")!;
+    // WebKit fires error on the element for its poster too, leaving video.error null.
+    fireEvent.error(video);
+    expect(screen.queryByRole("status")).toBeNull();
+    failTheVideo(video);
+    expect(screen.getByRole("status").textContent).toMatch(/^The video couldn’t load/);
   });
 });
