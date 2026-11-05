@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Security
+
+- **Patched `undici`, `@grpc/grpc-js`, `uuid`, `node-forge` and `source-map-js` in the root and app trees.** The operator scripts load the root tree with Admin credentials, so its development scope did not make these harmless. `firebase` pins `undici` at 6.19.7 and `@grpc/grpc-js` at `~1.9.0`, and it still pins the second at 13.2, so a firebase upgrade alone would not clear them. They are `overrides` in the root and app `package.json` instead. Neither package is in the browser bundle, and the built app is byte for byte what it was.
+
 ### Added
 
 - **The landing page links to its source.** The footer says Bikeshed is self-hosted and Apache-2.0, and until now it gave no way to find the code. It now links to the repository on GitHub, and so does the text a crawler reads in place of the page.
