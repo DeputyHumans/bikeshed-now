@@ -1,10 +1,8 @@
 # Operations
 
-[Monitoring and manual recovery](monitoring.md) covers dependency health,
-email alerts, hourly audits, runtime maintenance and incident response.
+[Monitoring and manual recovery](monitoring.md) covers dependency health, email alerts, hourly audits, runtime maintenance and incident response.
 
-Deploying a Bikeshed, running it, and taking it down. Every command here is
-copy-pasteable; the ones that can run without a deployment are run by CI.
+Deploying a Bikeshed, running it, and taking it down. Every command here is copy-pasteable; the ones that can run without a deployment are run by CI.
 
 **Placeholders only.** No file in this repository names a real Firebase project, console account or bucket. `your-firebase-project-id` means yours, and `demo-bikeshed` is the emulator-only id Firebase refuses to point at a real backend. The one real address is the public `bikeshed.now`, which is the CLI's default origin and the project's homepage; your own deployment never depends on it.
 
@@ -22,12 +20,7 @@ npm run emulators                      # one terminal
 npm --prefix app run dev               # another → http://localhost:5173
 ```
 
-The emulator suite runs on Auth 9099, Firestore 8088, RTDB 9000, Functions 5001,
-Hosting 5050 and Storage 9199. Firestore and Hosting are **not** on their usual
-8080 and 5000: 8080 is the most contended port on a developer machine and 5000
-is taken by AirPlay Receiver on macOS. The ports live in `firebase.json`, and
-the tests and the Vite dev proxy both read them from there rather than
-hardcoding, so changing one changes all of them.
+The emulator suite runs on Auth 9099, Firestore 8088, RTDB 9000, Functions 5001, Hosting 5050 and Storage 9199. Firestore and Hosting are **not** on their usual 8080 and 5000: 8080 is the most contended port on a developer machine and 5000 is taken by AirPlay Receiver on macOS. The ports live in `firebase.json`, and the tests and the Vite dev proxy both read them from there rather than hardcoding, so changing one changes all of them.
 
 ```bash
 npm run verify              # everything CI runs, in CI's order
@@ -49,23 +42,13 @@ npm run test:rules:emulated # rules tests need the emulators; this starts them
 | Console account | **nowhere** — passed as `--account` | — |
 | Resend API key | Firebase Secret Manager | `functions/.env.example` names it |
 
-All four files are gitignored from the first commit, before any `firebase`
-command runs — which matters, because `firebase use` writes `.firebaserc`
-unprompted.
+All four files are gitignored from the first commit, before any `firebase` command runs — which matters, because `firebase use` writes `.firebaserc` unprompted.
 
-Keep one gitignored `DEPLOYMENT.local.md` holding the project id, account,
-bucket and domain together, so the facts survive outside git without a scavenger
-hunt through four dotfiles.
+Keep one gitignored `DEPLOYMENT.local.md` holding the project id, account, bucket and domain together, so the facts survive outside git without a scavenger hunt through four dotfiles.
 
-**None of this is secret in the cryptographic sense.** Vite inlines every
-`VITE_*` value into the public bundle, and a Firebase web config is designed to
-be public — security comes from the rules, not from hiding the project id.
-What is kept out of the tree is the *binding* between this source and one
-particular deployment. "Never committed" is achievable; "never public" is not.
+**None of this is secret in the cryptographic sense.** Vite inlines every `VITE_*` value into the public bundle, and a Firebase web config is designed to be public — security comes from the rules, not from hiding the project id. What is kept out of the tree is the *binding* between this source and one particular deployment. "Never committed" is achievable; "never public" is not.
 
-The console account is deliberately in no file at all. Every script **requires**
-`--account` for a real run and never defaults it, because a tool that picks up
-whatever identity happens to be active is how the wrong project gets modified.
+The console account is deliberately in no file at all. Every script **requires** `--account` for a real run and never defaults it, because a tool that picks up whatever identity happens to be active is how the wrong project gets modified.
 
 ### 2. Dry-run the setup and read it
 
@@ -73,8 +56,7 @@ whatever identity happens to be active is how the wrong project gets modified.
 node scripts/setup.mjs --account you@example.com --project your-firebase-project-id --dry-run
 ```
 
-It prints ten steps and executes nothing, needing no credentials. Read the
-project id on the first line before you drop `--dry-run`.
+It prints ten steps and executes nothing, needing no credentials. Read the project id on the first line before you drop `--dry-run`.
 
 ### 3. Run it
 
@@ -82,27 +64,15 @@ project id on the first line before you drop `--dry-run`.
 node scripts/setup.mjs --account you@example.com --project your-firebase-project-id
 ```
 
-Steps 1–9 are check-then-act or naturally idempotent, so re-running converges:
-enable services, ensure the Firestore database, ensure the **private** bucket
-(uniform access, public-access prevention), deploy rules and indexes, ensure the
-email secret exists, grant the runtime service account its permissions, deploy
-functions, allow unauthenticated invocation, then build and deploy hosting.
+Steps 1–9 are check-then-act or naturally idempotent, so re-running converges: enable services, ensure the Firestore database, ensure the **private** bucket (uniform access, public-access prevention), deploy rules and indexes, ensure the email secret exists, grant the runtime service account its permissions, deploy functions, allow unauthenticated invocation, then build and deploy hosting.
 
-**The Realtime Database and email are genuinely optional.** Without an RTDB
-instance step 4 skips its rules rather than failing, and the email secret is
-created holding a single space, which the runtime reads as "off".
+**The Realtime Database and email are genuinely optional.** Without an RTDB instance step 4 skips its rules rather than failing, and the email secret is created holding a single space, which the runtime reads as "off".
 
-Operator scripts resolve the optional Realtime Database URL from
-`BIKESHED_DATABASE_URL`, then `databaseURL` in the ignored `config/deploy.json`.
-Set it to the database's HTTPS origin; credentials, paths, queries and fragments
-are rejected. There is no guessed deployment hostname. Without a configured URL,
-operator presence mirrors are unavailable. With `FIREBASE_DATABASE_EMULATOR_HOST`,
-operator scripts require a `demo-` project and ignore deployment database URLs.
+Operator scripts resolve the optional Realtime Database URL from `BIKESHED_DATABASE_URL`, then `databaseURL` in the ignored `config/deploy.json`. Set it to the database's HTTPS origin; credentials, paths, queries and fragments are rejected. There is no guessed deployment hostname. Without a configured URL, operator presence mirrors are unavailable. With `FIREBASE_DATABASE_EMULATOR_HOST`, operator scripts require a `demo-` project and ignore deployment database URLs.
 
 ### 3b. What setup does that is not obvious
 
-Two of its ten steps exist only because a **fresh** Google Cloud project is far
-more locked down than an older one, and every symptom is remote from its cause:
+Two of its ten steps exist only because a **fresh** Google Cloud project is far more locked down than an older one, and every symptom is remote from its cause:
 
 | Missing | What you would see |
 |---|---|
@@ -113,23 +83,9 @@ more locked down than an older one, and every symptom is remote from its cause:
 | `iam.serviceAccountTokenCreator` on itself | `createSessionCookie` cannot sign |
 | `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
 
-Step 6 grants the first five to the runtime service account — Storage scoped to
-the content bucket only, never project-wide — and step 8 makes the 31 HTTP
-functions publicly invokable. "Publicly invokable" is not "public": each
-function authenticates its own caller. The five Firestore triggers
-(`onCommentCreated`, the three `record…Event` triggers that write the change
-log, and `moveAccount`) and the Trash's daily job, `purgeExpiredTrash`, are
-deliberately left private. Eventarc invokes the triggers and Cloud Scheduler
-the job, and a fresh project grants those paths nothing of their own. If comment
-emails already arrive, the triggers' wiring works: all five use the same one. The three log triggers retry
-on failure. A permission they lack therefore shows as the same function failing
-again and again in the logs, and as a `get_changes` that never reports a new
-comment.
+Step 6 grants the first five to the runtime service account — Storage scoped to the content bucket only, never project-wide — and step 8 makes the 31 HTTP functions publicly invokable. "Publicly invokable" is not "public": each function authenticates its own caller. The five Firestore triggers (`onCommentCreated`, the three `record…Event` triggers that write the change log, and `moveAccount`) and the Trash's daily job, `purgeExpiredTrash`, are deliberately left private. Eventarc invokes the triggers and Cloud Scheduler the job, and a fresh project grants those paths nothing of their own. If comment emails already arrive, the triggers' wiring works: all five use the same one. The three log triggers retry on failure. A permission they lack therefore shows as the same function failing again and again in the logs, and as a `get_changes` that never reports a new comment.
 
-**If step 8 fails with `FAILED_PRECONDITION`**, the project's organization has
-Domain Restricted Sharing on (`constraints/iam.allowedPolicyMemberDomains`),
-which forbids `allUsers`. No public web app can run under it. Override it for
-this project alone, leaving every other project in the organization restricted:
+**If step 8 fails with `FAILED_PRECONDITION`**, the project's organization has Domain Restricted Sharing on (`constraints/iam.allowedPolicyMemberDomains`), which forbids `allUsers`. No public web app can run under it. Override it for this project alone, leaving every other project in the organization restricted:
 
 ```bash
 cat > /tmp/policy.yaml <<'YAML'
@@ -140,17 +96,9 @@ YAML
 gcloud resource-manager org-policies set-policy /tmp/policy.yaml --project <id>
 ```
 
-That needs `roles/orgpolicy.policyAdmin`, which can only be granted at
-organization or folder level — not on the project. Grant it, set the override,
-and revoke it again if you would rather not leave it standing.
+That needs `roles/orgpolicy.policyAdmin`, which can only be granted at organization or folder level — not on the project. Grant it, set the override, and revoke it again if you would rather not leave it standing.
 
-The same grant applies to a function created **after** setup. `firebase
-deploy` grants `allUsers` `roles/run.invoker` itself when it creates a new
-function such as `docShell`, `unlockDoc`, `saveThumbs`, `manageSuggestion`, `oauth` or `oauthConsent`; under Domain Restricted Sharing that deploy fails
-at "set invoker" and the function stays private. The symptom of the missing
-grant is a `403` with an HTML body, before any code runs — every document page
-looks broken while being perfectly deployed. The repair, once the policy is
-overridden:
+The same grant applies to a function created **after** setup. `firebase deploy` grants `allUsers` `roles/run.invoker` itself when it creates a new function such as `docShell`, `unlockDoc`, `saveThumbs`, `manageSuggestion`, `oauth` or `oauthConsent`; under Domain Restricted Sharing that deploy fails at "set invoker" and the function stays private. The symptom of the missing grant is a `403` with an HTML body, before any code runs — every document page looks broken while being perfectly deployed. The repair, once the policy is overridden:
 
 ```bash
 gcloud run services add-iam-policy-binding docshell --region=us-central1 --member=allUsers --role=roles/run.invoker
@@ -161,48 +109,22 @@ gcloud run services add-iam-policy-binding oauth --region=us-central1 --member=a
 gcloud run services add-iam-policy-binding oauthconsent --region=us-central1 --member=allUsers --role=roles/run.invoker
 ```
 
-For `unlockDoc` the symptom is narrower and easier to miss: every unlisted
-document reads "Not here" to anyone but its members, key or no key, while
-everything else works. `curl -si https://<deployment>/unlock` answers `405`
-from the function; a `403` with an HTML body is the platform refusing.
-For `manageSuggestion` it is every suggested edit failing to save, and every
-Accept and Reject failing, while comments work; `curl -si
-https://<deployment>/suggestion` answers `405` from the function.
+For `unlockDoc` the symptom is narrower and easier to miss: every unlisted document reads "Not here" to anyone but its members, key or no key, while everything else works. `curl -si https://<deployment>/unlock` answers `405` from the function; a `403` with an HTML body is the platform refusing. For `manageSuggestion` it is every suggested edit failing to save, and every Accept and Reject failing, while comments work; `curl -si https://<deployment>/suggestion` answers `405` from the function.
 
-For `oauth` it is every app that connects by signing in failing to find the
-sign-in. Claude reports "Couldn't reach the MCP server", while personal tokens
-keep working. `curl -si https://<deployment>/.well-known/oauth-authorization-server`
-answers JSON from the function when the grant is in place. For `oauthConsent`
-it is the consent page saying it could not load the request, every time;
-`curl -si -X POST https://<deployment>/oauth/consent` answers `403` JSON from
-the function, and a `403` with an HTML body from the platform.
+For `oauth` it is every app that connects by signing in failing to find the sign-in. Claude reports "Couldn't reach the MCP server", while personal tokens keep working. `curl -si https://<deployment>/.well-known/oauth-authorization-server` answers JSON from the function when the grant is in place. For `oauthConsent` it is the consent page saying it could not load the request, every time; `curl -si -X POST https://<deployment>/oauth/consent` answers `403` JSON from the function, and a `403` with an HTML body from the platform.
 
-For `saveThumbs` nothing looks broken at all: documents read normally, and
-their cards and slide rails simply never gain stored thumbnails, because every
-capture an editor's browser uploads is refused before it arrives.
-`curl -si https://<deployment>/thumb` answers `405` from the function when the
-grant is in place.
+For `saveThumbs` nothing looks broken at all: documents read normally, and their cards and slide rails simply never gain stored thumbnails, because every capture an editor's browser uploads is refused before it arrives. `curl -si https://<deployment>/thumb` answers `405` from the function when the grant is in place.
 
 ### 4. Do step 10 by hand
 
-There is no clean CLI for these, so the script prints them as a checklist rather
-than pretending. Each one has a failure mode that reads as a bug:
+There is no clean CLI for these, so the script prints them as a checklist rather than pretending. Each one has a failure mode that reads as a bug:
 
 - **Enable the Google provider.**
-- **Enable GitHub, and request the `user:email` scope.** Without that scope
-  Firebase receives no address at all for users who keep theirs private, and an
-  email-keyed ACL cannot grant them anything ([ADR 0004](../architecture/adr/0004-email-keyed-acl.md)).
-- **Add every serving host to Authorized domains**, including any custom domain.
-  `signInWithPopup` rejects an unlisted origin with `auth/unauthorized-domain`,
-  which presents as a sign-in button that does nothing.
-- **Create a Realtime Database** if you want peer presence. Without one,
-  presence degrades to a clean no-op and everything else is unchanged.
-- **Set `RESEND_API_KEY`** if you want transactional email:
-  `firebase functions:secrets:set RESEND_API_KEY`. It is a Firebase secret, not
-  an env file, so it never touches disk. Without it every send is a logged
-  no-op — the path CI exercises.
-- **Set a budget alert.** This is a numbered step, not advice; see
-  [Cost](#cost) below.
+- **Enable GitHub, and request the `user:email` scope.** Without that scope Firebase receives no address at all for users who keep theirs private, and an email-keyed ACL cannot grant them anything ([ADR 0004](../architecture/adr/0004-email-keyed-acl.md)).
+- **Add every serving host to Authorized domains**, including any custom domain. `signInWithPopup` rejects an unlisted origin with `auth/unauthorized-domain`, which presents as a sign-in button that does nothing.
+- **Create a Realtime Database** if you want peer presence. Without one, presence degrades to a clean no-op and everything else is unchanged.
+- **Set `RESEND_API_KEY`** if you want transactional email: `firebase functions:secrets:set RESEND_API_KEY`. It is a Firebase secret, not an env file, so it never touches disk. Without it every send is a logged no-op — the path CI exercises.
+- **Set a budget alert.** This is a numbered step, not advice; see [Cost](#cost) below.
 
 ### 5. Verify the deployment does what the rules say
 
@@ -211,11 +133,7 @@ node scripts/publish.mjs --doc bikeshed-tour --account you@example.com   # publi
 node scripts/publish.mjs --doc bikeshed-tour --account you@example.com   # → "already published as v1"
 ```
 
-The second run printing a no-op is the check that content-hash idempotency is
-working end to end. Then sign in as an account that is not a member and confirm
-`/content/bikeshed-tour/v1/index.html` returns **404**, not 403 — read-only byte
-paths collapse "forbidden" into "absent" so a signed-in stranger cannot
-enumerate the slug space.
+The second run printing a no-op is the check that content-hash idempotency is working end to end. Then sign in as an account that is not a member and confirm `/content/bikeshed-tour/v1/index.html` returns **404**, not 403 — read-only byte paths collapse "forbidden" into "absent" so a signed-in stranger cannot enumerate the slug space.
 
 ---
 
@@ -230,12 +148,9 @@ node scripts/set-access.mjs --doc <id> --add ana@example.com,team:design --accou
 node scripts/set-access.mjs --doc <id> --remove bo@example.com --role editor --account you@example.com
 ```
 
-`--dry-run` needs no credentials on either. `--list` does: it reads the document
-from Firestore, which is the point of it.
+`--dry-run` needs no credentials on either. `--list` does: it reads the document from Firestore, which is the point of it.
 
-Membership is recomputed by the same code the server uses, including the parent
-folder's members, and all four membership fields are written together
-([ADR 0006](../architecture/adr/0006-denormalized-members.md)).
+Membership is recomputed by the same code the server uses, including the parent folder's members, and all four membership fields are written together ([ADR 0006](../architecture/adr/0006-denormalized-members.md)).
 
 ### Letting an organisation connect its people's apps
 
@@ -306,10 +221,7 @@ id-jag refused: assertion expires too far ahead { claims: 'aud client_id email e
 
 ### The guides at `/docs` and `/docs/developers`
 
-Every deployment redirects (`302`) `/docs` to `/d/docs` and `/docs/developers`
-to `/d/docs-developers`. Both are ordinary documents whose sources are
-`content/docs` and `content/docs-developers`, so until a deployment publishes
-them, both land on "Not here".
+Every deployment redirects (`302`) `/docs` to `/d/docs` and `/docs/developers` to `/d/docs-developers`. Both are ordinary documents whose sources are `content/docs` and `content/docs-developers`, so until a deployment publishes them, both land on "Not here".
 
 Publish each once, signed in as the person who will own them:
 
@@ -321,17 +233,9 @@ bikeshed get docs-developers     # must fail too
 bikeshed publish content/docs-developers/bundle/index.html --id docs-developers --title "Bikeshed for developers"
 ```
 
-Each `url` it returns must end in the id you asked for. A taken id gets a
-suffix instead, and the redirect would point at nothing. Then, as their owner,
-run `bikeshed visibility docs public` and
-`bikeshed visibility docs-developers public`, or use Share → Who can see it →
-**Public** in the app. A public document takes comments from anyone signed in,
-so the guides collect their own corrections.
+Each `url` it returns must end in the id you asked for. A taken id gets a suffix instead, and the redirect would point at nothing. Then, as their owner, run `bikeshed visibility docs public` and `bikeshed visibility docs-developers public`, or use Share → Who can see it → **Public** in the app. A public document takes comments from anyone signed in, so the guides collect their own corrections.
 
-To publish a change, `bikeshed update docs content/docs/bundle/index.html`, or
-the same for `docs-developers`; identical bytes publish nothing. Under `vite` dev there is no redirect, and
-`/docs` lands on `/`. The Hosting emulator honours it, but only one started
-after the change: a running one keeps the configuration it started with.
+To publish a change, `bikeshed update docs content/docs/bundle/index.html`, or the same for `docs-developers`; identical bytes publish nothing. Under `vite` dev there is no redirect, and `/docs` lands on `/`. The Hosting emulator honours it, but only one started after the change: a running one keeps the configuration it started with.
 
 ### Withdrawing a version
 
@@ -343,15 +247,9 @@ node scripts/delete-version.mjs --doc <id> --version v3 --repoint v2 --dry-run
 node scripts/delete-version.mjs --doc <id> --version v3 --repoint v2 --yes --account you@example.com
 ```
 
-Seven refusals guard it, each with its own override flag, so removing one guard
-never removes the rest. **Unlike every other script here, `--dry-run` reads
-Firestore and Storage and therefore needs credentials** — a destructive preview
-that cannot show you what it would destroy is worthless. It performs no writes.
+Seven refusals guard it, each with its own override flag, so removing one guard never removes the rest. **Unlike every other script here, `--dry-run` reads Firestore and Storage and therefore needs credentials** — a destructive preview that cannot show you what it would destroy is worthless. It performs no writes.
 
-The order is load-bearing: `currentVersion` is repointed **first**, in a
-transaction that aborts if anything published mid-run, because the viewer
-resolves a bare `/d/{docId}` from that field. Then the Storage bytes, then the
-Firestore record.
+The order is load-bearing: `currentVersion` is repointed **first**, in a transaction that aborts if anything published mid-run, because the viewer resolves a bare `/d/{docId}` from that field. Then the Storage bytes, then the Firestore record.
 
 ### Upgrading
 
@@ -361,39 +259,15 @@ firebase deploy --only functions --project <id> --account you@example.com
 npm --prefix app run build && firebase deploy --only hosting --project <id> --account you@example.com
 ```
 
-Deploy **functions before hosting**. The new app may call an endpoint the old
-functions do not have; the reverse is never a problem, because an endpoint
-nobody calls yet is inert.
+Deploy **functions before hosting**. The new app may call an endpoint the old functions do not have; the reverse is never a problem, because an endpoint nobody calls yet is inert.
 
-With [continuous deployment](#continuous-deployment) set up, a push to `main`
-does all of this, and the rules too. These commands are for a deployment
-without it, or for a migration while it is paused.
+With [continuous deployment](#continuous-deployment) set up, a push to `main` does all of this, and the rules too. These commands are for a deployment without it, or for a migration while it is paused.
 
-**The hosting build stamps the agent instructions.** `/llms.txt` and
-`/skills/**` ship with this deployment's own address in place of
-`https://<deployment>`, taken from `domain` in `config/deploy.json` — or from
-`BIKESHED_PUBLIC_ORIGIN` exported in the build's shell, since `functions/.env`
-is not read here. The build prints which one it used, and prints it just as
-plainly when neither is set, in which case every agent that fetches
-`/llms.txt` is told its address is a placeholder. The hosting `predeploy` hook
-runs `node tools/stamp-deployment.mjs --check` and refuses a deploy whose
-`app/dist` was never stamped, which is the case you get by deploying without
-rebuilding.
+**The hosting build stamps the agent instructions.** `/llms.txt` and `/skills/**` ship with this deployment's own address in place of `https://<deployment>`, taken from `domain` in `config/deploy.json` — or from `BIKESHED_PUBLIC_ORIGIN` exported in the build's shell, since `functions/.env` is not read here. The build prints which one it used, and prints it just as plainly when neither is set, in which case every agent that fetches `/llms.txt` is told its address is a placeholder. The hosting `predeploy` hook runs `node tools/stamp-deployment.mjs --check` and refuses a deploy whose `app/dist` was never stamped, which is the case you get by deploying without rebuilding.
 
-**The document page needs both.** `docShell` is a new function *and* a
-`firebase.json` rewrite for `/d/**`, and the rewrite ships with hosting.
-Hosting alone keeps `/d/**` static, so nothing changes; functions alone deploys
-a service nothing routes to, so nothing visible changes either. Deploy
-functions, then hosting, and the first document page after the second deploy
-is the one that carries its own head.
+**The document page needs both.** `docShell` is a new function *and* a `firebase.json` rewrite for `/d/**`, and the rewrite ships with hosting. Hosting alone keeps `/d/**` static, so nothing changes; functions alone deploys a service nothing routes to, so nothing visible changes either. Deploy functions, then hosting, and the first document page after the second deploy is the one that carries its own head.
 
-**Preview channels do not preview `/d/**`.** `docShell` fetches the app shell
-from `BIKESHED_PUBLIC_ORIGIN` — the live site — at runtime, and the shell's
-asset paths are root-relative (`/assets/index-<hash>.js`). So a document page
-opened on a channel makes the browser request the live build's hashed asset
-names from the channel host, which serves a different build and does not have
-them: a blank page. Preview the workspace on a channel; preview the document
-page on the live site.
+**Preview channels do not preview `/d/**`.** `docShell` fetches the app shell from `BIKESHED_PUBLIC_ORIGIN` — the live site — at runtime, and the shell's asset paths are root-relative (`/assets/index-<hash>.js`). So a document page opened on a channel makes the browser request the live build's hashed asset names from the channel host, which serves a different build and does not have them: a blank page. Preview the workspace on a channel; preview the document page on the live site.
 
 **Global trust becoming a superadmin's is a migration** ([ADR 0021](../architecture/adr/0021-a-documents-script-runs-only-with-consent.md)). Set `BIKESHED_SUPERADMINS` in the functions' environment first: the deployer's `functions/.env` and the CI secret it is written from. Unset, nobody may trust a document for everyone, which is the safe default but stops every trusted page's scripts. Then deploy, and bring the stored flags into line with the same list:
 
@@ -404,10 +278,7 @@ node scripts/reconcile-trust.mjs --yes --account you@example.com --project <id> 
 
 The dry run lists every document whose flag would change. A superadmin's document that was trusted, or had no flag, is written `trusted: true`; every other trusted document is withdrawn. Readers' own grants are never touched.
 
-**Unlisted documents needing their link is a migration**
-([ADR 0012](../architecture/adr/0012-unlisted-needs-its-link.md)). Deploy in
-this order, so a link holder never lands between an app and rules that
-disagree:
+**Unlisted documents needing their link is a migration** ([ADR 0012](../architecture/adr/0012-unlisted-needs-its-link.md)). Deploy in this order, so a link holder never lands between an app and rules that disagree:
 
 ```bash
 firebase deploy --only functions --project <id> --account you@example.com
@@ -418,31 +289,18 @@ node scripts/reconcile-visibility.mjs --dry-run --project <id> --database <rtdb-
 node scripts/reconcile-visibility.mjs --yes --account you@example.com --project <id> --database <rtdb-url>
 ```
 
-Functions first, because the new app calls `/unlock`; hosting next, because the
-`/unlock` rewrite ships with it; the rules last, because they stop serving the
-unlisted rows the old app read. The script then deletes those rows and the
-realtime key that let any account edit an unlisted open-editing document.
-**It is not optional.** The Firestore rule already refuses the stale rows, but
-the realtime rules cannot see visibility, only the `*` key, so every key left
-behind keeps that document's live log writable by any signed-in account until
-the script removes it. It is idempotent, and a second run reports nothing. The `--database` URL is the one the console shows
-for the Realtime Database; without it the script reports that step as skipped.
+Functions first, because the new app calls `/unlock`; hosting next, because the `/unlock` rewrite ships with it; the rules last, because they stop serving the unlisted rows the old app read. The script then deletes those rows and the realtime key that let any account edit an unlisted open-editing document. **It is not optional.** The Firestore rule already refuses the stale rows, but the realtime rules cannot see visibility, only the `*` key, so every key left behind keeps that document's live log writable by any signed-in account until the script removes it. It is idempotent, and a second run reports nothing. The `--database` URL is the one the console shows for the Realtime Database; without it the script reports that step as skipped.
 
-**The terminal client is published separately**, to npm as `bikeshed-now`, and
-a deployment is not involved: [`publishing-the-cli.md`](publishing-the-cli.md).
+**The terminal client is published separately**, to npm as `bikeshed-now`, and a deployment is not involved: [`publishing-the-cli.md`](publishing-the-cli.md).
 
-**Legacy last-reader statistics need redaction.** After deploying a version that
-stops writing `stats.lastViewedByEmail`, preview and run the bounded cleanup:
+**Legacy last-reader statistics need redaction.** After deploying a version that stops writing `stats.lastViewedByEmail`, preview and run the bounded cleanup:
 
 ```sh
 node scripts/redact-reader-stats.mjs --dry-run --project <id>
 node scripts/redact-reader-stats.mjs --yes --account you@example.com --project <id>
 ```
 
-It deletes only that member-readable field. Counts, edit provenance and the
-editor-only reading history remain. New human and automated reads also erase
-the field, but cannot clean documents nobody opens again. A source change alone
-does not establish that an existing deployment's records have been redacted.
+It deletes only that member-readable field. Counts, edit provenance and the editor-only reading history remain. New human and automated reads also erase the field, but cannot clean documents nobody opens again. A source change alone does not establish that an existing deployment's records have been redacted.
 
 **Documents published before word counts need summarizing once.** After deploying the version that adds `latest` and `words` (SPEC §4), the version trigger counts and summarizes every new version, but a document whose current version is older shows no reading time, and its card falls back to `updatedAt`. Preview, then ask the trigger to catch them up:
 
@@ -453,74 +311,32 @@ node scripts/summarize-documents.mjs --yes --account you@example.com --project <
 
 It writes one marker field to each such current version and counts nothing itself; the trigger does the counting, within about a minute, as it does for a new version. It is idempotent, and a second run reports nothing. Each marked version costs one trigger run and one read of its entry from Storage.
 
-**A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes
-are part of the content hash, so bumping `markdown-it`, `turndown` or
-`turndown-plugin-gfm` changes every Markdown document's hash and the next save
-mints a new version. That is correct — the rendering is part of the artifact —
-but it is a decision, which is why all three are pinned to exact versions and
-`rendererVersion` is recorded on each version record
-([ADR 0003](../architecture/adr/0003-server-side-markdown.md)).
+**A Markdown renderer upgrade is a migration, not a deploy.** The rendered bytes are part of the content hash, so bumping `markdown-it`, `turndown` or `turndown-plugin-gfm` changes every Markdown document's hash and the next save mints a new version. That is correct — the rendering is part of the artifact — but it is a decision, which is why all three are pinned to exact versions and `rendererVersion` is recorded on each version record ([ADR 0003](../architecture/adr/0003-server-side-markdown.md)).
 
 ### Optional landing-page explainer
 
-Landing media lives in its own **public** bucket. The document-content bucket
-remains private, with public-access prevention enforced. Set `mediaBucket` in
-gitignored `config/deploy.json` to the separate bucket's name. Ordinary setup can
-provision the bucket when configured; publication remains separate, and document
-teardown never deletes it. The dedicated `scripts/media.mjs` command uses the
-installed `gcloud` CLI without adding a runtime dependency to the app or functions.
+Landing media lives in its own **public** bucket. The document-content bucket remains private, with public-access prevention enforced. Set `mediaBucket` in gitignored `config/deploy.json` to the separate bucket's name. Ordinary setup can provision the bucket when configured; publication remains separate, and document teardown never deletes it. The dedicated `scripts/media.mjs` command uses the installed `gcloud` CLI without adding a runtime dependency to the app or functions.
 
-Review the exact MP4, VTT and poster before publication: this path makes them
-public as-is. The uploader preserves their bytes; it does not regenerate the
-story, re-encode the video, validate its claims or repair caption timing. Stage
-exactly `bikeshed-explainer.mp4`, `bikeshed-explainer.vtt` and `poster.webp` in a
-local directory, then preview the operations with emulator-only placeholders:
+Review the exact MP4, VTT and poster before publication: this path makes them public as-is. The uploader preserves their bytes; it does not regenerate the story, re-encode the video, validate its claims or repair caption timing. Stage exactly `bikeshed-explainer.mp4`, `bikeshed-explainer.vtt` and `poster.webp` in a local directory, then preview the operations with emulator-only placeholders:
 
 ```bash
 node scripts/media.mjs setup --account you@example.com --project demo-bikeshed --media-bucket demo-bikeshed-media --origin https://example.com --dry-run
 node scripts/media.mjs publish --account you@example.com --project demo-bikeshed --media-bucket demo-bikeshed-media --directory ./media-release --revision v1 --dry-run
 ```
 
-Both previews are credential-free. For a real run, use the deployment's explicit
-account, project and media bucket, review the output, then remove `--dry-run`.
-Setup gives the separate bucket uniform access, public object reads and CORS for
-the exact landing-page origin. It must refuse to repurpose the content bucket;
-an organization policy that forbids public storage is an operator decision, not
-a reason to relax the private content policy.
+Both previews are credential-free. For a real run, use the deployment's explicit account, project and media bucket, review the output, then remove `--dry-run`. Setup gives the separate bucket uniform access, public object reads and CORS for the exact landing-page origin. It must refuse to repurpose the content bucket; an organization policy that forbids public storage is an operator decision, not a reason to relax the private content policy.
 
-Publishing writes the three objects under `landing/<revision>`, with their
-content types, immutable cache policy and SHA-256 metadata. A revision is one
-short token of letters, digits, underscores or hyphens. Existing objects are
-checked against the source bytes and expected metadata; identical uploads are a
-no-op, and a conflict is refused. Choose a new revision for any change. Retain
-old revisions while an old app build or browser can still reference them.
+Publishing writes the three objects under `landing/<revision>`, with their content types, immutable cache policy and SHA-256 metadata. A revision is one short token of letters, digits, underscores or hyphens. Existing objects are checked against the source bytes and expected metadata; identical uploads are a no-op, and a conflict is refused. Choose a new revision for any change. Retain old revisions while an old app build or browser can still reference them.
 
-After publication, copy the emitted `VITE_LANDING_MEDIA_BASE_URL` into
-gitignored `app/.env.local`. It has the form
-`https://storage.googleapis.com/<media-bucket>/landing/<revision>` and names all
-three fixed files. Copy the corresponding updated configuration to the deploy
-secrets before the next build. Preflight rejects malformed URLs, credentials,
-queries, fragments, missing bucket configuration and a media bucket that differs
-from the URL or is the content bucket. Leave the variable empty to retain the
-written landing page without a player or media requests.
+After publication, copy the emitted `VITE_LANDING_MEDIA_BASE_URL` into gitignored `app/.env.local`. It has the form `https://storage.googleapis.com/<media-bucket>/landing/<revision>` and names all three fixed files. Copy the corresponding updated configuration to the deploy secrets before the next build. Preflight rejects malformed URLs, credentials, queries, fragments, missing bucket configuration and a media bucket that differs from the URL or is the content bucket. Leave the variable empty to retain the written landing page without a player or media requests.
 
-Before pointing production at a revision, verify the three live objects'
-checksums, content types, cache policy and cross-origin access; verify that a
-byte-range request seeks within the MP4. Then verify the deployed page on desktop
-and a phone: poster-only initial loading, user-started playback, captions, seek,
-fullscreen and a useful error state. Local emulators cannot prove bucket IAM,
-production headers or browser cross-origin behavior.
+Before pointing production at a revision, verify the three live objects' checksums, content types, cache policy and cross-origin access; verify that a byte-range request seeks within the MP4. Then verify the deployed page on desktop and a phone: poster-only initial loading, user-started playback, captions, seek, fullscreen and a useful error state. Local emulators cannot prove bucket IAM, production headers or browser cross-origin behavior.
 
-To roll back, rebuild with the previous immutable base URL, or clear the variable
-to hide the player. Removing media or its bucket is a separate, explicitly
-reviewed cloud operation after checking references; document teardown never
-performs it. Public caches may retain already-served media after removal.
+To roll back, rebuild with the previous immutable base URL, or clear the variable to hide the player. Removing media or its bucket is a separate, explicitly reviewed cloud operation after checking references; document teardown never performs it. Public caches may retain already-served media after removal.
 
 ### Continuous deployment
 
-`.github/workflows/deploy.yml` deploys production on every push to `main`
-that passes all three CI jobs. A push to `develop` runs CI and stops there,
-until a staging project exists ([below](#staging-later)).
+`.github/workflows/deploy.yml` deploys production on every push to `main` that passes all three CI jobs. A push to `develop` runs CI and stops there, until a staging project exists ([below](#staging-later)).
 
 **Pushing `main` is deploying.** Nothing asks for approval in between, and CI is the only gate. The repository's credential boundary is the OIDC subject below, not a GitHub setting. A GitHub environment would add an approval step on GitHub's side, but a job that names one presents the subject `repo:<owner>/<repo>:environment:<name>` instead of `…:ref:refs/heads/main`. Bind that subject to the deployer and operations service accounts before the workflow names the environment, and remove the `ref` binding only after a green deploy.
 
@@ -538,9 +354,7 @@ One run, in order:
 | `--only functions --force` | Deletes the functions the release removed, once hosting has dropped their rewrites |
 | Smoke test | The live index references this build's entry script, and `GET /unlock` answers `405` rather than the platform's HTML `403` |
 
-A deploy is never cancelled halfway. Pushes queue, and a burst of them
-collapses to the newest. Every step is idempotent, so a run that failed
-partway is fixed by re-running it: `gh run rerun <id> --failed`.
+A deploy is never cancelled halfway. Pushes queue, and a burst of them collapses to the newest. Every step is idempotent, so a run that failed partway is fixed by re-running it: `gh run rerun <id> --failed`.
 
 **What it does not do:**
 - Data migrations, such as `reconcile-visibility.mjs` above.
@@ -548,29 +362,13 @@ partway is fixed by re-running it: `gh run rerun <id> --failed`.
 - Setting `RESEND_API_KEY`.
 - `npm publish`.
 
-**Pausing it.** Some migrations need a different order: the unlisted-documents
-one above puts the rules last. For those, set
-`gh variable set DEPLOY_PAUSED --body true` and CI keeps running while the
-deploy job is skipped. Deploy by hand, then run `gh variable delete
-DEPLOY_PAUSED`. A push made while paused is not deployed when you unpause, so
-deploy it with `gh workflow run deploy.yml --ref main`.
+**Pausing it.** Some migrations need a different order: the unlisted-documents one above puts the rules last. For those, set `gh variable set DEPLOY_PAUSED --body true` and CI keeps running while the deploy job is skipped. Deploy by hand, then run `gh variable delete DEPLOY_PAUSED`. A push made while paused is not deployed when you unpause, so deploy it with `gh workflow run deploy.yml --ref main`.
 
 #### One-time setup
 
-No key is created, so none can leak. The deployer service account trusts
-GitHub's OIDC token through Workload Identity Federation, and only from **one
-subject**: a workflow running on `refs/heads/main` of this repository. With
-no environment secrets on the free plan, that binding is what stops a
-workflow on another ref from deploying.
+No key is created, so none can leak. The deployer service account trusts GitHub's OIDC token through Workload Identity Federation, and only from **one subject**: a workflow running on `refs/heads/main` of this repository. With no environment secrets on the free plan, that binding is what stops a workflow on another ref from deploying.
 
-**Read the subject from GitHub; do not write it by hand.** A repository with
-immutable subject claims has ids in its prefix,
-`repo:<owner>@<owner-id>/<repo>@<repo-id>`, rather than `repo:<owner>/<repo>`.
-A binding written in the other form matches nothing, and the deploy then fails
-at authentication with an error that never names the subject. The pool admits
-one repository by its numeric id, which a rename or a transfer cannot reuse.
-Keep the braces in `${SUB}:ref`: in zsh, macOS's default shell, `$SUB:r` is
-a modifier, and the binding comes out ending in `…ef:refs/heads/main`.
+**Read the subject from GitHub; do not write it by hand.** A repository with immutable subject claims has ids in its prefix, `repo:<owner>@<owner-id>/<repo>@<repo-id>`, rather than `repo:<owner>/<repo>`. A binding written in the other form matches nothing, and the deploy then fails at authentication with an error that never names the subject. The pool admits one repository by its numeric id, which a rename or a transfer cannot reuse. Keep the braces in `${SUB}:ref`: in zsh, macOS's default shell, `$SUB:r` is a modifier, and the binding comes out ending in `…ef:refs/heads/main`.
 
 ```bash
 P=your-firebase-project-id
@@ -622,20 +420,11 @@ gcloud storage buckets add-iam-policy-binding gs://${DEFAULT_BUCKET} \
 | `iam.serviceAccountUser` | the App Engine default account | firebase-tools refuses every functions deploy without `actAs` on it, even though no function runs as it |
 | `storage.bucketViewer` | the default bucket only | The Storage API reads the bucket as the caller. Without this it answers 404, and firebase-tools reports "Firebase Storage has not been set up" |
 
-The last three were each found by a failed first deploy, and only the first of
-those failures named the permission it lacked. IAM is invisible locally. A
-missing role appears as a failing step, so grant the role, add it to this
-table, and re-run with `gh run rerun <id> --failed`.
+The last three were each found by a failed first deploy, and only the first of those failures named the permission it lacked. IAM is invisible locally. A missing role appears as a failing step, so grant the role, add it to this table, and re-run with `gh run rerun <id> --failed`.
 
-The pipeline deploys Storage rules unconditionally, so a project must have
-Firebase Storage set up: a default bucket must exist. The rules deny
-everything, and the app never reads that bucket; document bytes live in the
-content bucket and go through `contentProxy`.
+The pipeline deploys Storage rules unconditionally, so a project must have Firebase Storage set up: a default bucket must exist. The rules deny everything, and the app never reads that bucket; document bytes live in the content bucket and go through `contentProxy`.
 
-Then the six repository secrets. They are secrets rather than variables so that
-the build log masks them, and these logs become public if the repository does.
-`app/.env.local` must be the production one: the preflight refuses an
-emulator config.
+Then the six repository secrets. They are secrets rather than variables so that the build log masks them, and these logs become public if the repository does. `app/.env.local` must be the production one: the preflight refuses an emulator config.
 
 ```bash
 gh secret set PRODUCTION_FIREBASE_PROJECT --body "$P"
@@ -646,8 +435,7 @@ gh secret set PRODUCTION_FUNCTIONS_ENV < functions/.env
 gh secret set PRODUCTION_DEPLOY_JSON < config/deploy.json
 ```
 
-When one of those files changes, set its secret again. The pipeline reads only
-the secret, never your disk.
+When one of those files changes, set its secret again. The pipeline reads only the secret, never your disk.
 
 Three more are read by the `report` job in `deploy.yml` and by `operations.yml`: `PRODUCTION_OPS_SERVICE_ACCOUNT`, `PRODUCTION_PUBLIC_ORIGIN` and `PRODUCTION_INCIDENT_EMAIL`. [`monitoring.md`](monitoring.md) sets up the account they name. Without them a deploy still ships, but the `report` job fails on every push and the hourly audit fails too.
 
@@ -662,82 +450,39 @@ Three more are read by the `report` job in `deploy.yml` and by `operations.yml`:
 
 ## Cost
 
-**Every byte of every document is proxied through a Cloud Function.** That is
-the price of a private bucket plus an ACL, and it is the line item most likely
-to surprise you.
+**Every byte of every document is proxied through a Cloud Function.** That is the price of a private bucket plus an ACL, and it is the line item most likely to surprise you.
 
-- **Prefer single-file documents.** A fifty-asset deck is fifty function
-  invocations per reader; the same deck inlined is one.
-  `docs/development/authoring-bundles.md` says so at the top.
-- **Public content, and unlisted content fetched with its key, is cached**
-  `public, max-age=300` on the immutable version path, because public documents
-  are where traffic spikes. Gated content, and a link holder's read on the
-  strength of their account's grant rather than a key in the URL, stays
-  `private, no-store`.
-- **Three functions are always on.** `docShell`, `session` and `contentProxy`
-  keep one instance each so a first open does not wait for them to start
-  ([ADR 0018](../architecture/adr/0018-keep-the-document-open-path-warm.md)):
-  about $24 a month at 2026-10 prices, whatever the traffic. A deployment with
-  almost no readers can set them back to zero in `functions/src/index.ts`.
-- **Set the budget alert.** As of early 2026 a small team's usage, those three
-  instances aside, sits inside the Firebase free tier; a public document that
-  gets attention does not.
+- **Prefer single-file documents.** A fifty-asset deck is fifty function invocations per reader; the same deck inlined is one. `docs/development/authoring-bundles.md` says so at the top.
+- **Public content, and unlisted content fetched with its key, is cached** `public, max-age=300` on the immutable version path, because public documents are where traffic spikes. Gated content, and a link holder's read on the strength of their account's grant rather than a key in the URL, stays `private, no-store`.
+- **Three functions are always on.** `docShell`, `session` and `contentProxy` keep one instance each so a first open does not wait for them to start ([ADR 0018](../architecture/adr/0018-keep-the-document-open-path-warm.md)): about $24 a month at 2026-10 prices, whatever the traffic. A deployment with almost no readers can set them back to zero in `functions/src/index.ts`.
+- **Set the budget alert.** As of early 2026 a small team's usage, those three instances aside, sits inside the Firebase free tier; a public document that gets attention does not.
 
-There is deliberately **no rate limiter**. CDN caching is the cost defence, and
-Firebase App Check is the named hook if abuse ever appears.
+There is deliberately **no rate limiter**. CDN caching is the cost defence, and Firebase App Check is the named hook if abuse ever appears.
 
 ---
 
 ## Revoking access, and the five minutes it takes
 
-Making a document private again is immediate in Firestore — the `public/{docId}`
-projection is deleted in the same write — but **content already cached at the
-CDN can still be served for up to five minutes**.
+Making a document private again is immediate in Firestore — the `public/{docId}` projection is deleted in the same write — but **content already cached at the CDN can still be served for up to five minutes**.
 
-That latency is the trade for caching public content at all, and it is stated
-here rather than discovered. If you need it gone now:
+That latency is the trade for caching public content at all, and it is stated here rather than discovered. If you need it gone now:
 
 ```bash
 node scripts/set-access.mjs --doc <id> --list      # confirm who actually has it
 firebase hosting:channel:delete <channel> --project <id>   # only if it is on a preview channel
 ```
 
-For the primary channel there is no purge API. The reliable move is to withdraw
-the version with `delete-version.mjs`, which removes the bytes the cached URL
-points at, and accept that the cached copy expires on its own.
+For the primary channel there is no purge API. The reliable move is to withdraw the version with `delete-version.mjs`, which removes the bytes the cached URL points at, and accept that the cached copy expires on its own.
 
-**The document page is in the same window.** A public or unlisted document's
-`/d/**` page carries its title and an excerpt in its head, cached
-`public, max-age` for the same five minutes as the content. Withdrawing a
-version does not purge it, and neither does making the document private: the
-cached shell can still say what the document was called until it expires on
-its own.
+**The document page is in the same window.** A public or unlisted document's `/d/**` page carries its title and an excerpt in its head, cached `public, max-age` for the same five minutes as the content. Withdrawing a version does not purge it, and neither does making the document private: the cached shell can still say what the document was called until it expires on its own.
 
-The same window applies after a **hosting deploy**. The cached page names the
-previous release's hashed assets. Firebase's documentation says a deploy clears
-cached content across the CDN; if function responses turn out not to be
-included, a CDN-cached shell can go on naming asset files the new release no
-longer serves for up to 300 s. A browser that already holds the page keeps it
-for at most 300 s either way, and a reload after that fetches a fresh one.
+The same window applies after a **hosting deploy**. The cached page names the previous release's hashed assets. Firebase's documentation says a deploy clears cached content across the CDN; if function responses turn out not to be included, a CDN-cached shell can go on naming asset files the new release no longer serves for up to 300 s. A browser that already holds the page keeps it for at most 300 s either way, and a reload after that fetches a fresh one.
 
-If the leak was an ACL mistake rather than a visibility one, no cache is
-involved: gated content was never cacheable, so removing the grant is immediate.
+If the leak was an ACL mistake rather than a visibility one, no cache is involved: gated content was never cacheable, so removing the grant is immediate.
 
-**To withdraw an unlisted link, rotate it.** Make the document private, then
-unlisted again: the new link is the only one that works, and every account that
-opened the old one loses the link grant it held, at once. There is no way to
-withdraw one account's grant alone. Content cached at the old key's URL is in
-the same five-minute window as everything else.
+**To withdraw an unlisted link, rotate it.** Make the document private, then unlisted again: the new link is the only one that works, and every account that opened the old one loses the link grant it held, at once. There is no way to withdraw one account's grant alone. Content cached at the old key's URL is in the same five-minute window as everything else.
 
-**A folder's link works the same way, plus the cascade.** Rotating a folder's
-link, making it private, or letting its date pass closes everything beneath it
-(SPEC §17 "A folder's reach"). Documents directly in the folder stop answering
-to the old key at once. A subfolder's documents follow when the cascade reaches
-that subfolder, usually within seconds, because each folder stores its
-ancestors' reach rather than walking them. The five-minute CDN window applies
-on top, to the content and to the folder's own `/folder/**` page. Before
-widening a folder, list what is beneath it: a document someone else filed there,
-or one private on its own, becomes readable through the folder's link too.
+**A folder's link works the same way, plus the cascade.** Rotating a folder's link, making it private, or letting its date pass closes everything beneath it (SPEC §17 "A folder's reach"). Documents directly in the folder stop answering to the old key at once. A subfolder's documents follow when the cascade reaches that subfolder, usually within seconds, because each folder stores its ancestors' reach rather than walking them. The five-minute CDN window applies on top, to the content and to the folder's own `/folder/**` page. Before widening a folder, list what is beneath it: a document someone else filed there, or one private on its own, becomes readable through the folder's link too.
 
 ---
 
@@ -748,17 +493,9 @@ node scripts/teardown.mjs --yes --account you@example.com --project <id> --dry-r
 node scripts/teardown.mjs --yes --account you@example.com --project <id> --functions
 ```
 
-Deletes `docs/**`, `forks/**`, `folders/**`, `teams/**`, `tokens/**`,
-`public/**` and `users/**`, empties the bucket's `docs/` prefix, and clears both RTDB paths;
-optionally the deployed functions. **Never deletes the project.**
-The separate public landing-media bucket is not part of document teardown; its
-removal is an independent operation described above.
+Deletes `docs/**`, `forks/**`, `folders/**`, `teams/**`, `tokens/**`, `public/**` and `users/**`, empties the bucket's `docs/` prefix, and clears both RTDB paths; optionally the deployed functions. **Never deletes the project.** The separate public landing-media bucket is not part of document teardown; its removal is an independent operation described above.
 
-The function list comes from `scripts/lib/endpoints.mjs`, the same table
-`firebase.json` and the dev proxy derive from, and a wiring test asserts all
-three agree — so a new endpoint cannot be added without teardown learning about
-it. The design this replaces deleted two functions by name, because it was
-written when there were two, and reported success.
+The function list comes from `scripts/lib/endpoints.mjs`, the same table `firebase.json` and the dev proxy derive from, and a wiring test asserts all three agree — so a new endpoint cannot be added without teardown learning about it. The design this replaces deleted two functions by name, because it was written when there were two, and reported success.
 
 ---
 
@@ -783,6 +520,4 @@ written when there were two, and reported success.
 | The Trash never empties: items stay past their "deleted forever on" day | the daily job is not running, or each run fails | Cloud Scheduler's job for `purgeexpiredtrash` shows its last run and result. A 401 or 403 there means the job's identity cannot invoke the function: grant that service account `roles/run.invoker` on the `purgeexpiredtrash` service. A run that ran logs `trash_purge` with its counts (monitoring.md) |
 | Delete forever and Empty trash are missing from the Trash | email is off here: the code has to arrive | set `RESEND_API_KEY`; until then the Trash still empties itself after 30 days |
 
-**Logs.** `firebase functions:log --project <id> --account you@example.com`.
-Presence, email and stats failures are logged and swallowed by design — they
-never fail the request that triggered them. Access control never is.
+**Logs.** `firebase functions:log --project <id> --account you@example.com`. Presence, email and stats failures are logged and swallowed by design — they never fail the request that triggered them. Access control never is.

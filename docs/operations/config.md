@@ -1,11 +1,8 @@
 # Configuration reference
 
-Every setting, where it lives, and what changes when you change it. Nothing here
-is required to run the emulator stack; `app/.env.example` already points at it.
+Every setting, where it lives, and what changes when you change it. Nothing here is required to run the emulator stack; `app/.env.example` already points at it.
 
-**Nothing in this file names a real deployment.** See `docs/operations/overview.md` for
-which values go in which gitignored file, and why the binding is kept out of git
-even though a Firebase web config is public by design.
+**Nothing in this file names a real deployment.** See `docs/operations/overview.md` for which values go in which gitignored file, and why the binding is kept out of git even though a Firebase web config is public by design.
 
 ---
 
@@ -13,8 +10,7 @@ even though a Firebase web config is public by design.
 
 ### `config/access-policy.json`
 
-The **single source of truth** for who this deployment admits. It renders four
-committed artifacts; never hand-edit those.
+The **single source of truth** for who this deployment admits. It renders four committed artifacts; never hand-edit those.
 
 ```json
 { "allowedEmailDomains": [] }
@@ -26,26 +22,18 @@ committed artifacts; never hand-edit those.
 | `["example.com"]` | Only `…@example.com`. Matching is anchored, so `a@evil.example.com` is rejected |
 | `[".example.com"]` | A leading dot is an explicit **subdomain opt-in** |
 
-Signing in is not access. The per-document ACL is the only thing that grants a
-document, so an open policy means "anyone may have an account", never "anyone
-may read anything".
+Signing in is not access. The per-document ACL is the only thing that grants a document, so an open policy means "anyone may have an account", never "anyone may read anything".
 
 ```bash
 npm run build:policy    # rewrite the four artifacts
 npm run check:policy    # re-render in memory and byte-compare — pretest and prebuild
 ```
 
-Renders into `firestore.rules`, `database.rules.json`,
-`functions/src/generated/policy.ts` and `app/src/generated/policy.ts`, each with
-a `GENERATED — DO NOT EDIT` banner and the sha256 of its source
-([ADR 0005](../architecture/adr/0005-generated-rules.md)).
+Renders into `firestore.rules`, `database.rules.json`, `functions/src/generated/policy.ts` and `app/src/generated/policy.ts`, each with a `GENERATED — DO NOT EDIT` banner and the sha256 of its source ([ADR 0005](../architecture/adr/0005-generated-rules.md)).
 
-**Changing it requires deploying both rules and functions.** They are separate
-enforcement layers; updating one is how a gate half-closes.
+**Changing it requires deploying both rules and functions.** They are separate enforcement layers; updating one is how a gate half-closes.
 
-The client artifact is deliberately **list-free** — Vite would inline the
-allowlist into the public bundle. The client gets the shape rules and one
-boolean, and learns policy outcomes from `POST /session`.
+The client artifact is deliberately **list-free** — Vite would inline the allowlist into the public bundle. The client gets the shape rules and one boolean, and learns policy outcomes from `POST /session`.
 
 ---
 
@@ -57,8 +45,7 @@ boolean, and learns policy outcomes from `POST /session`.
 { "projects": { "default": "your-firebase-project-id" } }
 ```
 
-Project id resolution, in order: `--project` → `GCLOUD_PROJECT` → `.firebaserc`.
-No default, and an unresolvable id is a clean error, not a stack trace.
+Project id resolution, in order: `--project` → `GCLOUD_PROJECT` → `.firebaserc`. No default, and an unresolvable id is a clean error, not a stack trace.
 
 ### `config/deploy.json` — gitignored
 
@@ -73,19 +60,13 @@ No default, and an unresolvable id is a clean error, not a stack trace.
 | `mediaBucket` | optional: the separate **public** bucket for the landing-page explainer, for `scripts/media.mjs` and the deploy preflight. `BIKESHED_MEDIA_BUCKET` or `--media-bucket` overrides it for the script |
 | `databaseURL` | optional: the Realtime Database the operator scripts use, as an HTTPS origin. `BIKESHED_DATABASE_URL` overrides it. Unset, they use none |
 
-A bare domain or a full origin, either works: `example.com` and
-`https://example.com/` normalize to the same thing, and anything carrying a
-path, a query or credentials is refused rather than spliced in front of
-`/d/<id>`. It is read at **app build time** by `tools/stamp-deployment.mjs`,
-and it is how `/llms.txt` and `/skills/**` learn the address to print. Unset,
-they serve the placeholder and `npm run build:app` says so.
+A bare domain or a full origin, either works: `example.com` and `https://example.com/` normalize to the same thing, and anything carrying a path, a query or credentials is refused rather than spliced in front of `/d/<id>`. It is read at **app build time** by `tools/stamp-deployment.mjs`, and it is how `/llms.txt` and `/skills/**` learn the address to print. Unset, they serve the placeholder and `npm run build:app` says so.
 
 ---
 
 ## The app — `app/.env.local`, gitignored
 
-Vite inlines every `VITE_*` value into the built bundle. Nothing here can be
-secret; what is kept out of git is the binding.
+Vite inlines every `VITE_*` value into the built bundle. Nothing here can be secret; what is kept out of git is the binding.
 
 | Variable | Required | Effect |
 |---|---|---|
@@ -106,41 +87,24 @@ secret; what is kept out of git is the binding.
 
 ### Analytics is opt-in, and quiet by default
 
-It initializes **only** when `VITE_FIREBASE_MEASUREMENT_ID` is set, never under
-emulators, and behind an `isSupported()` guard with a no-op fallback — a browser
-with third-party storage blocked must not be able to take sign-in down with it.
+It initializes **only** when `VITE_FIREBASE_MEASUREMENT_ID` is set, never under emulators, and behind an `isSupported()` guard with a no-op fallback — a browser with third-party storage blocked must not be able to take sign-in down with it.
 
-The automatic page view is **switched off** (`send_page_view: false`) and route
-changes are logged manually as route **patterns**: `/d/:docId/:versionId`, never
-`/d/q3-acquisition-memo/v3`. Document slugs are frequently the confidential
-part of a URL. No document id, title, slug, folder name or email is ever sent,
-and a test asserts it.
+The automatic page view is **switched off** (`send_page_view: false`) and route changes are logged manually as route **patterns**: `/d/:docId/:versionId`, never `/d/q3-acquisition-memo/v3`. Document slugs are frequently the confidential part of a URL. No document id, title, slug, folder name or email is ever sent, and a test asserts it.
 
-**Consent gates initialization**, per visitor, held in `localStorage`. Until it
-is granted the measurement script is never fetched — not fetched and disabled.
-The banner appears only when a measurement id is configured, so a deployment
-without analytics never asks. Per-account opt-out lives on the user record and
-drives `setAnalyticsCollectionEnabled(false)`; it answers the across-devices
-question that per-device consent cannot.
+**Consent gates initialization**, per visitor, held in `localStorage`. Until it is granted the measurement script is never fetched — not fetched and disabled. The banner appears only when a measurement id is configured, so a deployment without analytics never asks. Per-account opt-out lives on the user record and drives `setAnalyticsCollectionEnabled(false)`; it answers the across-devices question that per-device consent cannot.
 
 ### Export marking
 
-Three layers, each seeding the next. **The document's own value is what is
-authoritative at export time**, resolved at publish time rather than export
-time — otherwise a reader exporting would apply *their* default, when the
-marking is the owner's policy.
+Three layers, each seeding the next. **The document's own value is what is authoritative at export time**, resolved at publish time rather than export time — otherwise a reader exporting would apply *their* default, when the marking is the owner's policy.
 
 ```
 VITE_EXPORT_MARK_*  →  users/{uid}.defaultMarking  →  docs/{docId}.marking
    deployment              account default              authoritative
 ```
 
-`footer` supports `{year}`, `{date}`, `{title}`, `{version}` and `{user}`,
-resolved at export. Values are written with `textContent`, never `innerHTML`.
+`footer` supports `{year}`, `{date}`, `{title}`, `{version}` and `{user}`, resolved at export. Values are written with `textContent`, never `innerHTML`.
 
-When marking is disabled the stamp nodes are simply absent; every other export
-protection — the sandboxed print iframe, the `<script>` scrub, the `on*` scrub,
-the `javascript:` scrub — stays unconditional.
+When marking is disabled the stamp nodes are simply absent; every other export protection — the sandboxed print iframe, the `<script>` scrub, the `on*` scrub, the `javascript:` scrub — stays unconditional.
 
 ---
 
@@ -156,48 +120,23 @@ the `javascript:` scrub — stays unconditional.
 | `BIKESHED_ID_JAG_ISSUERS` | no | Identity issuers trusted to connect an organisation's apps. Unset means the grant is neither accepted nor advertised. Never commit one: its id names the organisation. [`overview.md`](overview.md) walks through it |
 | `BIKESHED_ID_JAG_DOMAINS` | with issuers | The address domains those issuers may vouch for. Unset turns the grant off, because an issuer trusted for every domain could connect any account here |
 
-Set `BIKESHED_PUBLIC_ORIGIN` explicitly. The fallback is the default site's
-`.web.app` host, which is the app only when the site id equals the project id;
-`docShell` fetches the shell from that origin at runtime and **fails closed on
-anything that is not the app** — a 404 page, a stranger's site, the wrong
-site — so a wrong origin means every document page answers `503`
-([ADR 0011](../architecture/adr/0011-document-page-through-a-function.md)).
-Under the emulator it belongs in `functions/.env.local` as
-`http://127.0.0.1:5050`; see `docs/development/verification.md`.
+Set `BIKESHED_PUBLIC_ORIGIN` explicitly. The fallback is the default site's `.web.app` host, which is the app only when the site id equals the project id; `docShell` fetches the shell from that origin at runtime and **fails closed on anything that is not the app** — a 404 page, a stranger's site, the wrong site — so a wrong origin means every document page answers `503` ([ADR 0011](../architecture/adr/0011-document-page-through-a-function.md)). Under the emulator it belongs in `functions/.env.local` as `http://127.0.0.1:5050`; see `docs/development/verification.md`.
 
-**The app build reads this name too, but from the shell, not from this file.**
-`functions/.env` is loaded by the Functions runtime; `npm --prefix app run
-build` is an ordinary Node process and never sees it, and Vite does not put
-non-`VITE_` keys into `process.env` either. So for the stamped `/llms.txt`,
-either export it in the build's own shell or — simpler, and what a deployed
-project already has — set `domain` in `config/deploy.json`.
+**The app build reads this name too, but from the shell, not from this file.** `functions/.env` is loaded by the Functions runtime; `npm --prefix app run build` is an ordinary Node process and never sees it, and Vite does not put non-`VITE_` keys into `process.env` either. So for the stamped `/llms.txt`, either export it in the build's own shell or — simpler, and what a deployed project already has — set `domain` in `config/deploy.json`.
 
 ### The bucket is never guessed
 
-Resolution: `BIKESHED_BUCKET` → `config/deploy.json` → a derived
-`${projectId}-content` that `setup.mjs` actually creates with uniform access and
-public access prevention.
+Resolution: `BIKESHED_BUCKET` → `config/deploy.json` → a derived `${projectId}-content` that `setup.mjs` actually creates with uniform access and public access prevention.
 
-**The Firebase default bucket is deliberately never assumed.** Its name changed:
-`${projectId}.appspot.com` is wrong for projects created after 2024, and
-`.firebasestorage.app` is wrong for those created before. Either guess means
-uploads land where nothing reads, or deletes remove nothing while reporting
-success — the worst class of silent failure an operator tool can have. Using the
-default bucket is fully supported by naming it explicitly, which is the point.
+**The Firebase default bucket is deliberately never assumed.** Its name changed: `${projectId}.appspot.com` is wrong for projects created after 2024, and `.firebasestorage.app` is wrong for those created before. Either guess means uploads land where nothing reads, or deletes remove nothing while reporting success — the worst class of silent failure an operator tool can have. Using the default bucket is fully supported by naming it explicitly, which is the point.
 
-`BIKESHED_SIGN_IN_HINT` is one sentence, never the allowlist. The allowlist is
-never sent to a client.
+`BIKESHED_SIGN_IN_HINT` is one sentence, never the allowlist. The allowlist is never sent to a client.
 
 ### The sending domain is not the serving domain
 
-`BIKESHED_MAIL_FROM` is separate from `BIKESHED_PUBLIC_ORIGIN` on purpose. The
-domain you **serve** from and the one you may **send** from are usually not the
-same, and often cannot be: a default Firebase deployment serves on `*.web.app`,
-which nobody can verify with an email provider.
+`BIKESHED_MAIL_FROM` is separate from `BIKESHED_PUBLIC_ORIGIN` on purpose. The domain you **serve** from and the one you may **send** from are usually not the same, and often cannot be: a default Firebase deployment serves on `*.web.app`, which nobody can verify with an email provider.
 
-Unset, it falls back to `noreply@<public origin host>` — correct only when you
-serve from the domain you have verified. Set it whenever those differ, or every
-send is rejected by the provider for an unverified sender.
+Unset, it falls back to `noreply@<public origin host>` — correct only when you serve from the domain you have verified. Set it whenever those differ, or every send is rejected by the provider for an unverified sender.
 
 ### `RESEND_API_KEY` — a Firebase secret, not an env var
 
@@ -207,16 +146,9 @@ firebase functions:secrets:set RESEND_API_KEY --project <id>
 
 Declared with `defineSecret`, so it never lands on disk.
 
-**The secret must EXIST before functions deploy, even when email is off.**
-`defineSecret` binds it to every mailing function and a non-interactive deploy
-refuses to proceed when it has no version — while Secret Manager refuses to
-store an empty payload. So "off" is expressed as a **single space**, which the
-runtime trims and reads as unconfigured. `setup.mjs` creates it that way, which
-is what keeps the quickstart free of a Resend account.
+**The secret must EXIST before functions deploy, even when email is off.** `defineSecret` binds it to every mailing function and a non-interactive deploy refuses to proceed when it has no version — while Secret Manager refuses to store an empty payload. So "off" is expressed as a **single space**, which the runtime trims and reads as unconfigured. `setup.mjs` creates it that way, which is what keeps the quickstart free of a Resend account.
 
-**Email is optional by construction**: with a blank key every send is a logged
-no-op and the app behaves identically. That is the path CI exercises, and it is why the quickstart does
-not require a Resend account ([ADR 0008](../architecture/adr/0008-runtime-email-rendering.md)).
+**Email is optional by construction**: with a blank key every send is a logged no-op and the app behaves identically. That is the path CI exercises, and it is why the quickstart does not require a Resend account ([ADR 0008](../architecture/adr/0008-runtime-email-rendering.md)).
 
 Sends are wrapped in try/catch and never fail the request that triggered them.
 
@@ -224,8 +156,7 @@ Sends are wrapped in try/catch and never fail the request that triggered them.
 
 ## Compiled-in constants — `functions/src/config.ts`
 
-Not environment variables. Changing one is a code change and a deploy, which is
-the right friction for each of them.
+Not environment variables. Changing one is a code change and a deploy, which is the right friction for each of them.
 
 | Constant | Value | Why that value |
 |---|---|---|
@@ -240,10 +171,7 @@ the right friction for each of them.
 | `COMMENT_EMAIL_COOLDOWN_MS` | 30 min | Minimum gap between two comment notifications to the same person about the same document |
 | `PUBLIC_CACHE_SECONDS` | 300 | Cache lifetime for non-private content — **and therefore the revocation latency** |
 
-`PUBLIC_CACHE_SECONDS` is the one with a visible trade: it is the cost defence
-for public documents and the five minutes a de-published document can still be
-served. Both halves are the same number, which is why it is documented in
-`docs/operations/overview.md` under revocation rather than only here.
+`PUBLIC_CACHE_SECONDS` is the one with a visible trade: it is the cost defence for public documents and the five minutes a de-published document can still be served. Both halves are the same number, which is why it is documented in `docs/operations/overview.md` under revocation rather than only here.
 
 ---
 
@@ -259,12 +187,6 @@ served. Both halves are the same number, which is why it is documented in
 | Storage | 9199 | |
 | Emulator UI | **4040** | not 4000 — Docker Desktop and a dozen dev servers claim it |
 
-`firebase.json` is the source; the rules tests and the Vite dev proxy read the
-ports from it. `app/src/config.ts` mirrors the three the client needs, because
-Vite cannot import outside the app root at runtime — a mismatch surfaces
-immediately, on the first emulator run.
+`firebase.json` is the source; the rules tests and the Vite dev proxy read the ports from it. `app/src/config.ts` mirrors the three the client needs, because Vite cannot import outside the app root at runtime — a mismatch surfaces immediately, on the first emulator run.
 
-The emulator project id is `demo-bikeshed`. Firebase treats any `demo-` prefixed
-id as local-only and **refuses to contact a real backend with it**, so the
-committed examples are not merely fake — they are incapable of touching
-production.
+The emulator project id is `demo-bikeshed`. Firebase treats any `demo-` prefixed id as local-only and **refuses to contact a real backend with it**, so the committed examples are not merely fake — they are incapable of touching production.

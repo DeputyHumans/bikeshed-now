@@ -11,10 +11,7 @@ labels: enhancement
 ## Why the existing shape does not cover it
 
 <!--
-Please check `docs/architecture/overview.md` — **"What this is not"** — first. Most of
-what is missing here is missing on purpose, with a reason written down. If your
-request is on that list, the useful thing is an argument against the reason,
-which is a much better conversation than a feature request.
+Please check `docs/architecture/overview.md` — **"What this is not"** — first. Most of what is missing here is missing on purpose, with a reason written down. If your request is on that list, the useful thing is an argument against the reason, which is a much better conversation than a feature request.
 -->
 
 ## What it would cost
@@ -26,5 +23,4 @@ which is a much better conversation than a feature request.
 
 ---
 
-This is a small tool for small teams. The most valuable thing about it is what
-it does not do, so "no, and here is why" is a real answer and not a brush-off.
+This is a small tool for small teams. The most valuable thing about it is what it does not do, so "no, and here is why" is a real answer and not a brush-off.

@@ -1,13 +1,8 @@
 # Architecture decision records
 
-Twenty-six decisions that a newcomer would otherwise re-argue in a pull request, each
-about thirty lines: what was decided, what it costs, and what would make it
-wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Twenty-six decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
-They are **historical records, not documentation**. `docs/architecture/spec.md` is normative
-and wins over anything here. When a decision is reversed, the ADR is marked
-superseded rather than edited — the point is to preserve the reasoning that was
-actually available at the time.
+They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
 Number 0022 is unused: it was set aside for a decision that has not been made.
 
@@ -42,9 +37,6 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 
 ## Format
 
-**Context** — what forced a choice. **Decision** — what was chosen, stated so it
-can be checked against the code. **Consequences** — including the bad ones.
-**What would change this** — the observation that should make somebody reopen it.
+**Context** — what forced a choice. **Decision** — what was chosen, stated so it can be checked against the code. **Consequences** — including the bad ones. **What would change this** — the observation that should make somebody reopen it.
 
-That last section is the one that matters. A decision with no stated reversal
-condition is a decision nobody can ever revisit honestly.
+That last section is the one that matters. A decision with no stated reversal condition is a decision nobody can ever revisit honestly.

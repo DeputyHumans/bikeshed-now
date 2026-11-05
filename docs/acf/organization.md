@@ -1,8 +1,7 @@
 <!-- Copied from fib7/acf-tools acf-librarian/content/organization-template.md (Apache-2.0, © Fibonacci Seven, LLC). This copy differs from that upstream file. -->
 # ACF Naming & Organization Conventions
 
-> This file defines the naming and organization conventions for this ACF project.
-> The ACF Librarian plugin injects these rules into every session.
+> This file defines the naming and organization conventions for this ACF project. The ACF Librarian plugin injects these rules into every session.
 >
 > **You may customize these conventions for your project** - just edit this file and `/clear` to reload.
 
@@ -185,8 +184,7 @@ These files may use uppercase:
 
 ### Confirmed Exceptions (this project)
 
-These root files are **approved and MUST NOT be moved**. The audit is expected
-to leave them alone; a run that reports them is reporting a stale rule.
+These root files are **approved and MUST NOT be moved**. The audit is expected to leave them alone; a run that reports them is reporting a stale rule.
 
 | File | Why it stays in root |
 |---|---|

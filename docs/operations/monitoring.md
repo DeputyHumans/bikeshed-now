@@ -1,21 +1,10 @@
 # Monitoring and manual recovery
 
-The hourly audit and Cloud Monitoring report problems; neither pauses, rolls
-back nor redeploys production. The normal all-functions deployment remains.
-`/health` reads Firestore and a fixed private Storage marker on every request.
-The exact path `/healthz` returned a front-end 404 on the real deployment,
-while `/health` reached the handler; the production route is therefore `/health`.
-It returns only a status, within five seconds, with `private, no-store` on
-success, failure, HEAD and unsupported methods (SPEC §2). A missing Firestore
-operational document is acceptable; a missing or different Storage marker is
-not. This proves dependency access, not a signed-in user's document workflow.
+The hourly audit and Cloud Monitoring report problems; neither pauses, rolls back nor redeploys production. The normal all-functions deployment remains. `/health` reads Firestore and a fixed private Storage marker on every request. The exact path `/healthz` returned a front-end 404 on the real deployment, while `/health` reached the handler; the production route is therefore `/health`. It returns only a status, within five seconds, with `private, no-store` on success, failure, HEAD and unsupported methods (SPEC §2). A missing Firestore operational document is acceptable; a missing or different Storage marker is not. This proves dependency access, not a signed-in user's document workflow.
 
 ## Bootstrap
 
-Use an explicit operator account and deployment values from gitignored config.
-The operator needs Monitoring administration, log-metric management and Storage
-object creation/read. Enable the Monitoring, Logging and Personalized Service
-Health APIs. Deploy the health function before creating the uptime checks.
+Use an explicit operator account and deployment values from gitignored config. The operator needs Monitoring administration, log-metric management and Storage object creation/read. Enable the Monitoring, Logging and Personalized Service Health APIs. Deploy the health function before creating the uptime checks.
 
 ```sh
 node scripts/ops.mjs marker --project "$PROJECT" --account "$OPERATOR" --bucket "$BUCKET" --apply
@@ -23,40 +12,17 @@ node scripts/ops.mjs provision --project "$PROJECT" --account "$OPERATOR" --orig
 node scripts/ops.mjs provision --project "$PROJECT" --account "$OPERATOR" --origin "$ORIGIN" --email "$INCIDENT_EMAIL" --apply
 ```
 
-Provisioning first shows the diff, then reconciles only resources labeled
-`managed_by=bikeshed-ops-v1`. It refuses duplicates, and deletes a labeled alert
-policy that is no longer defined, so removing a definition removes the live
-alert. Run it a second time: `changes` must be empty. Marker creation uses a
-create-only precondition and never overwrites a different object.
+Provisioning first shows the diff, then reconciles only resources labeled `managed_by=bikeshed-ops-v1`. It refuses duplicates, and deletes a labeled alert policy that is no longer defined, so removing a definition removes the live alert. Run it a second time: `changes` must be empty. Marker creation uses a create-only precondition and never overwrites a different object.
 
-Use a dedicated operations service account with Cloud Functions Viewer, Cloud
-Run Viewer, Cloud Build Builds Viewer, Monitoring Viewer, Logging Viewer,
-Service Usage Viewer and Logs Writer. Its sole write permission is log output;
-it has no deployment, IAM or document-data permissions. Reuse the deployment's
-Workload Identity provider with a separate service-account binding restricted
-to this repository's main branch. Add `PRODUCTION_OPS_SERVICE_ACCOUNT`,
-`PRODUCTION_PUBLIC_ORIGIN` and `PRODUCTION_INCIDENT_EMAIL` as repository secrets. Existing project and provider
-secrets are reused. No JSON service-account keys are needed.
+Use a dedicated operations service account with Cloud Functions Viewer, Cloud Run Viewer, Cloud Build Builds Viewer, Monitoring Viewer, Logging Viewer, Service Usage Viewer and Logs Writer. Its sole write permission is log output; it has no deployment, IAM or document-data permissions. Reuse the deployment's Workload Identity provider with a separate service-account binding restricted to this repository's main branch. Add `PRODUCTION_OPS_SERVICE_ACCOUNT`, `PRODUCTION_PUBLIC_ORIGIN` and `PRODUCTION_INCIDENT_EMAIL` as repository secrets. Existing project and provider secrets are reused. No JSON service-account keys are needed.
 
 **A public repository's schedule can stop.** GitHub disables scheduled workflows in a public repository after 60 days without repository activity, and nothing alerts when the hourly audit stops running. `gh workflow enable operations` turns it back on. The Cloud Monitoring uptime checks run on Google's side and do not depend on it.
 
-The deployer also needs Cloud Build Builds Viewer for evidence and Logs Writer
-for the post-deploy audit. Create the marker once with the operator identity;
-the deployer needs no new private-bucket write access.
+The deployer also needs Cloud Build Builds Viewer for evidence and Logs Writer for the post-deploy audit. Create the marker once with the operator identity; the deployer needs no new private-bucket write access.
 
-Enable GitHub notification settings → Actions → Email → failed workflows only
-for the operator. It is the only path when Google authentication or Logging
-fails. The audit is requested hourly, not guaranteed hourly, and nothing alerts
-when its schedule stops without failing; the workflow's run history is where to
-look. Minute-by-minute uptime checks run independently in Cloud Monitoring and
-remain the application availability signal.
+Enable GitHub notification settings → Actions → Email → failed workflows only for the operator. It is the only path when Google authentication or Logging fails. The audit is requested hourly, not guaranteed hourly, and nothing alerts when its schedule stops without failing; the workflow's run history is where to look. Minute-by-minute uptime checks run independently in Cloud Monitoring and remain the application availability signal.
 
-Every read the deploy evidence and the audit make (one Cloud Run read per
-function, among others) is retried after 1, 2 and 4 s when Google answers 429
-or a 5xx. Writes are never repeated. Without the retry, a single 503 among
-those reads failed the deploy before anything deployed. That happened three
-times on 2026-10-28. So a failure that still reads "HTTP 503" has outlasted
-four tries, about 7 s.
+Every read the deploy evidence and the audit make (one Cloud Run read per function, among others) is retried after 1, 2 and 4 s when Google answers 429 or a 5xx. Writes are never repeated. Without the retry, a single 503 among those reads failed the deploy before anything deployed. That happened three times on 2026-10-28. So a failure that still reads "HTTP 503" has outlasted four tries, about 7 s.
 
 ## Signals
 
@@ -70,31 +36,11 @@ four tries, about 7 s.
 | Provider | New or materially changed, active confirmed incident with `IMPACTED` or `RELATED` relevance |
 | Runtime maintenance | Monday 16 UTC: actual function build older than fourteen days |
 
-All notifications go to the configured email. Availability incidents send
-recovery notifications and repeat after thirty minutes while unresolved.
-Provider warnings exclude resolved/emerging incidents, unrelated locations and
-description-only updates. They alert on a new event or a state/relevance change;
-follow the provider incident for subsequent updates. A provider warning does not
-by itself establish an application outage. The provider filter uses the
-[documented Service Health log fields](https://docs.cloud.google.com/service-health/docs/logs).
-Log-based alerts throttle to thirty minutes; their automatic closure is **not**
-evidence of recovery. The dashboard shows uptime, backend errors, p95 latency
-and event backlog. The audit checks the desired monitoring definitions, enabled
-channel, Service Health API, ready revisions, traffic and runtime policy.
+All notifications go to the configured email. Availability incidents send recovery notifications and repeat after thirty minutes while unresolved. Provider warnings exclude resolved/emerging incidents, unrelated locations and description-only updates. They alert on a new event or a state/relevance change; follow the provider incident for subsequent updates. A provider warning does not by itself establish an application outage. The provider filter uses the [documented Service Health log fields](https://docs.cloud.google.com/service-health/docs/logs). Log-based alerts throttle to thirty minutes; their automatic closure is **not** evidence of recovery. The dashboard shows uptime, backend errors, p95 latency and event backlog. The audit checks the desired monitoring definitions, enabled channel, Service Health API, ready revisions, traffic and runtime policy.
 
-Runtime security updates apply on deployment. `preserveExternalChanges` keeps
-the operator-set policy; the deployment explicitly sets it on new or drifting
-functions. A metadata-only policy patch can rebuild a function, so only the
-deployment/operator identity runs it. The audit never does. A Firebase
-"Skipped (No changes detected)" is not a runtime refresh. When reminded, plan
-and execute an actual rebuild, verify its Cloud Build completion time, and
-observe production. No scheduled production refresh is enabled.
+Runtime security updates apply on deployment. `preserveExternalChanges` keeps the operator-set policy; the deployment explicitly sets it on new or drifting functions. A metadata-only policy patch can rebuild a function, so only the deployment/operator identity runs it. The audit never does. A Firebase "Skipped (No changes detected)" is not a runtime refresh. When reminded, plan and execute an actual rebuild, verify its Cloud Build completion time, and observe production. No scheduled production refresh is enabled.
 
-There is no missing-audit alert. GitHub delivered the hourly schedule about six
-times a day, every run successful, with gaps up to 6.9 hours, so a two-hour and
-then a six-hour absence alert each fired on normal delivery. If reliably hourly
-metadata inspection becomes necessary, move the trigger to a scheduler with a delivery
-guarantee instead of alerting on GitHub scheduling delays.
+There is no missing-audit alert. GitHub delivered the hourly schedule about six times a day, every run successful, with gaps up to 6.9 hours, so a two-hour and then a six-hour absence alert each fired on normal delivery. If reliably hourly metadata inspection becomes necessary, move the trigger to a scheduler with a delivery guarantee instead of alerting on GitHub scheduling delays.
 
 ### The Trash's daily job
 
@@ -102,37 +48,12 @@ guarantee instead of alerting on GitHub scheduling delays.
 
 ## Incident response
 
-1. Check the three probes and dashboard. A healthy landing with failing health
-   probes points to backend/dependencies. Hosted-only failure suggests routing;
-   direct failure removes Hosting from the path. Inspect affected revisions and
-   provider health before deciding the cause.
-2. Preserve the previous successful workflow's evidence and the failing run's
-   `deployment-evidence` artifact. These allowlisted metadata snapshots contain
-   revision, build, runtime, source-reference/config hashes and traffic, plus
-   the checked-out commit and file hashes. Compare the previous successful
-   deployment's manifest with the new one; a source-reference hash alone does
-   not establish equal archive contents. Artifacts contain no environment
-   values, credentials, user content or raw request logs. Artifacts expire in
-   thirty days; retain selected incident evidence privately before expiry.
-3. If deployment is worsening the incident, an operator may set
-   `DEPLOY_PAUSED=true`. Record its prior value and restore that value afterward.
-   No alert changes this switch. A traffic rollback helps only when its target
-   revision can actually start; test it before routing users to it.
-4. Compare application source and actual build/runtime evidence. Shared startup
-   failure across unchanged old and new revisions can be a platform/runtime
-   failure. Do not call that hypothesis a confirmed provider root cause without
-   provider evidence. Preserve logs and operation IDs for escalation.
-5. Apply a reviewed fix, runtime rebuild or known-good release manually. Verify
-   every function active, latest revision ready, traffic at 100%, and on-deploy
-   runtime policy. Verify fresh public and direct health and one authenticated
-   private document in a normal browser. Observe at least fifteen clean minutes
-   (startup errors, backend errors, health and event backlog) before closure.
+1. Check the three probes and dashboard. A healthy landing with failing health probes points to backend/dependencies. Hosted-only failure suggests routing; direct failure removes Hosting from the path. Inspect affected revisions and provider health before deciding the cause.
+2. Preserve the previous successful workflow's evidence and the failing run's `deployment-evidence` artifact. These allowlisted metadata snapshots contain revision, build, runtime, source-reference/config hashes and traffic, plus the checked-out commit and file hashes. Compare the previous successful deployment's manifest with the new one; a source-reference hash alone does not establish equal archive contents. Artifacts contain no environment values, credentials, user content or raw request logs. Artifacts expire in thirty days; retain selected incident evidence privately before expiry.
+3. If deployment is worsening the incident, an operator may set `DEPLOY_PAUSED=true`. Record its prior value and restore that value afterward. No alert changes this switch. A traffic rollback helps only when its target revision can actually start; test it before routing users to it.
+4. Compare application source and actual build/runtime evidence. Shared startup failure across unchanged old and new revisions can be a platform/runtime failure. Do not call that hypothesis a confirmed provider root cause without provider evidence. Preserve logs and operation IDs for escalation.
+5. Apply a reviewed fix, runtime rebuild or known-good release manually. Verify every function active, latest revision ready, traffic at 100%, and on-deploy runtime policy. Verify fresh public and direct health and one authenticated private document in a normal browser. Observe at least fifteen clean minutes (startup errors, backend errors, health and event backlog) before closure.
 
 ## Delivery drill
 
-Create a temporary copy of an uptime check with a deliberately impossible body
-matcher and a dedicated alert pointing to the real email channel. Do not break
-an application dependency. Wait for the incident and confirm the email actually
-arrives. Restore the correct matcher; wait for recovery and its email. Delete
-only the temporary check and policy. A successful API response alone does not
-prove email delivery. Repeat after changing recipients and periodically.
+Create a temporary copy of an uptime check with a deliberately impossible body matcher and a dedicated alert pointing to the real email channel. Do not break an application dependency. Wait for the incident and confirm the email actually arrives. Restore the correct matcher; wait for recovery and its email. Delete only the temporary check and policy. A successful API response alone does not prove email delivery. Repeat after changing recipients and periodically.

@@ -1,56 +1,15 @@
 # Local RTDB coverage retention
 
-The N20 authoring invocation `20261015T085726Z-p7849-wmdt` on local run
-`2610150146-d4pm` stopped when the Database JVM exhausted its 1024 MiB heap.
-Its OOM marker named Database, not Firestore. Firestore exited during the
-suite shutdown. The host still had about 35 GiB available with normal memory
-pressure and no new swap. Browser pools had closed between cases; the retained
-fixture inventory was only 26 documents. Raising the JVM or host budget would
-hide the accumulation rather than remove it.
+The N20 authoring invocation `20261015T085726Z-p7849-wmdt` on local run `2610150146-d4pm` stopped when the Database JVM exhausted its 1024 MiB heap. Its OOM marker named Database, not Firestore. Firestore exited during the suite shutdown. The host still had about 35 GiB available with normal memory pressure and no new swap. Browser pools had closed between cases; the retained fixture inventory was only 26 documents. Raising the JVM or host budget would hide the accumulation rather than remove it.
 
-The audited installation is firebase-tools 15.25.1 and Database emulator
-4.11.2, JAR SHA-256
-`b70d99344caf17c98b6f910fa8f6edf32a7c016cb1035e8915f70d38901eb97f`.
-`App` installs `LiveRuleTrackerFactory`. Its `ExpressionRuleTracker` retains
-all distinct expression outputs and their counts in an unbounded map. Rule
-expressions such as `newData.val()` therefore retain complete CRDT payloads,
-even after their database entries are compacted or deleted.
+The audited installation is firebase-tools 15.25.1 and Database emulator 4.11.2, JAR SHA-256 `b70d99344caf17c98b6f910fa8f6edf32a7c016cb1035e8915f70d38901eb97f`. `App` installs `LiveRuleTrackerFactory`. Its `ExpressionRuleTracker` retains all distinct expression outputs and their counts in an unbounded map. Rule expressions such as `newData.val()` therefore retain complete CRDT payloads, even after their database entries are compacted or deleted.
 
-`node tools/probe-e2e-rtdb-coverage.mjs` checks that exact installation without
-starting a service. A bounded Java probe invokes the installed tracker:
-1,000 distinct 4 KiB strings retain 4,096,000 characters after GC, a repeated
-string retains one value, and a replacement tracker starts empty. Bytecode
-checks bind that mechanism to the emulator's live tracker, its fresh-engine
-replacement, and its raw-string equality guard.
+`node tools/probe-e2e-rtdb-coverage.mjs` checks that exact installation without starting a service. A bounded Java probe invokes the installed tracker: 1,000 distinct 4 KiB strings retain 4,096,000 characters after GC, a repeated string retains one value, and a replacement tracker starts empty. Bytecode checks bind that mechanism to the emulator's live tracker, its fresh-engine replacement, and its raw-string equality guard.
 
-An actual local API probe caught a further constraint: PUT of identical rule
-text returns success but keeps the old tracker. The namespace metadata observer
-skips replacement when old and new strings are equal. The harness instead adds
-one trailing newline and restores the exact original bytes in `finally`.
-Whitespace changes no rule expression. Both writes are checked, as are the
-restored byte digest and a fresh report with zero evaluated values.
+An actual local API probe caught a further constraint: PUT of identical rule text returns success but keeps the old tracker. The namespace metadata observer skips replacement when old and new strings are equal. The harness instead adds one trailing newline and restores the exact original bytes in `finally`. Whitespace changes no rule expression. Both writes are checked, as are the restored byte digest and a fresh report with zero evaluated values.
 
-Before either write, the harness streams the full old report into a gzip
-archive and records its SHA-256, size, rule digest and toolchain in the
-invocation's `maintenance.jsonl`. The reset requires the actual exclusive
-concurrency lock, one file at a time, no remaining marked harness browser,
-and completed prior body, requests and browser cleanup. It runs before the
-first body or after a browser case closes, never inside the measured work.
-Read-only measurement judges do not request another reset. A timed-out or
-abandoned body poisons subsequent reset eligibility. Shared authoring does not
-reset diagnostics. Unknown installations refuse instead of assuming the same
-internal behavior.
+Before either write, the harness streams the full old report into a gzip archive and records its SHA-256, size, rule digest and toolchain in the invocation's `maintenance.jsonl`. The reset requires the actual exclusive concurrency lock, one file at a time, no remaining marked harness browser, and completed prior body, requests and browser cleanup. It runs before the first body or after a browser case closes, never inside the measured work. Read-only measurement judges do not request another reset. A timed-out or abandoned body poisons subsequent reset eligibility. Shared authoring does not reset diagnostics. Unknown installations refuse instead of assuming the same internal behavior.
 
-The live proof preserved the exact data and rule digests, retained all 64
-distinct 4 KiB probe values in the archive, and found none in the replacement
-tracker. The permitted member's write remained HTTP 200; the stranger's write
-remained HTTP 401. Only the probe's own temporary data was removed afterward.
-The failed identical-PUT attempt remains negative evidence. Artifacts are in
-`e2e/.out/rtdb-heap-diagnosis/`, including `installed-retention-proof.json`,
-`identical-put-observed-red.log`, `actual-recycle-proof.json`, and the
-`source-controls/proof.json` mutation results.
+The live proof preserved the exact data and rule digests, retained all 64 distinct 4 KiB probe values in the archive, and found none in the replacement tracker. The permitted member's write remained HTTP 200; the stranger's write remained HTTP 401. Only the probe's own temporary data was removed afterward. The failed identical-PUT attempt remains negative evidence. Artifacts are in `e2e/.out/rtdb-heap-diagnosis/`, including `installed-retention-proof.json`, `identical-put-observed-red.log`, `actual-recycle-proof.json`, and the `source-controls/proof.json` mutation results.
 
-These checks establish the maintenance mechanism, not a successful N20
-campaign. A fresh full N20 invocation must still finish with its ordinary
-product assertions and resource gates intact. Database remains capped at
-1024 MiB, Firestore at 2048 MiB; no timeout or case was relaxed.
+These checks establish the maintenance mechanism, not a successful N20 campaign. A fresh full N20 invocation must still finish with its ordinary product assertions and resource gates intact. Database remains capped at 1024 MiB, Firestore at 2048 MiB; no timeout or case was relaxed.

@@ -1,36 +1,19 @@
 # bikeshed
 
-Publish a document to a [Bikeshed](https://bikeshed.now) deployment, then read
-the comments people left on it — each one with the exact sentence it is about.
+Publish a document to a [Bikeshed](https://bikeshed.now) deployment, then read the comments people left on it — each one with the exact sentence it is about.
 
-It talks to [bikeshed.now](https://bikeshed.now) over HTTPS, with a personal
-access token that carries exactly your own permissions. Bikeshed is also
-self-hostable: point the client at your own deployment and everything below
-works the same, with your address in place of `https://bikeshed.now`.
+It talks to [bikeshed.now](https://bikeshed.now) over HTTPS, with a personal access token that carries exactly your own permissions. Bikeshed is also self-hostable: point the client at your own deployment and everything below works the same, with your address in place of `https://bikeshed.now`.
 
 ```bash
 npm i -g bikeshed-now
 bikeshed login            # signs you in through your browser
 ```
 
-`login` opens your browser at the deployment. Sign in if you need to, click
-Approve, and the terminal saves a token that only you can read. It prints the
-link as well, for when no browser opens. Pass `--origin <url>` for your own
-deployment, or `--no-browser` to open the link yourself. An agent can run
-`npx -y bikeshed-now login` for you: you approve in your browser, and the token
-never appears in its output.
+`login` opens your browser at the deployment. Sign in if you need to, click Approve, and the terminal saves a token that only you can read. It prints the link as well, for when no browser opens. Pass `--origin <url>` for your own deployment, or `--no-browser` to open the link yourself. An agent can run `npx -y bikeshed-now login` for you: you approve in your browser, and the token never appears in its output.
 
-The browser has to be on the same computer as the terminal, because it hands
-the sign-in back to a port on `127.0.0.1`. Over SSH, or against a deployment
-too old to offer browser sign-in, create a token at
-[bikeshed.now/account](https://bikeshed.now/account), choose **Command line**,
-and run `bikeshed login --paste`. The token is shown once. In CI, set
-`BIKESHED_ORIGIN` and `BIKESHED_TOKEN` instead of running `login` at all; they
-outrank whatever `login` saved.
+The browser has to be on the same computer as the terminal, because it hands the sign-in back to a port on `127.0.0.1`. Over SSH, or against a deployment too old to offer browser sign-in, create a token at [bikeshed.now/account](https://bikeshed.now/account), choose **Command line**, and run `bikeshed login --paste`. The token is shown once. In CI, set `BIKESHED_ORIGIN` and `BIKESHED_TOKEN` instead of running `login` at all; they outrank whatever `login` saved.
 
-`bikeshed logout` signs this computer out. It revokes a token from browser
-sign-in as well as deleting it. A pasted token is only deleted, because CI may
-be using the same one: revoke it at `/account` once nothing needs it.
+`bikeshed logout` signs this computer out. It revokes a token from browser sign-in as well as deleting it. A pasted token is only deleted, because CI may be using the same one: revoke it at `/account` once nothing needs it.
 
 ## The loop
 
@@ -64,13 +47,9 @@ bikeshed commit storage-migration
 bikeshed comment storage-migration "a single weekend" --body "Is the dual-write fortnight in this?"
 ```
 
-Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash
-mints no new version. So `update` is safe in a loop, in CI, or after a change you
-are not sure you made.
+Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash mints no new version. So `update` is safe in a loop, in CI, or after a change you are not sure you made.
 
-A document of several files is a `.zip` with `index.html` or `index.md` at its
-root. `update` with a `.zip` replaces every file; `update` with one `.md` or
-`.html` replaces the entry and keeps the images and stylesheets beside it.
+A document of several files is a `.zip` with `index.html` or `index.md` at its root. `update` with a `.zip` replaces every file; `update` with one `.md` or `.html` replaces the entry and keeps the images and stylesheets beside it.
 
 The address comes from the title. To choose it, pass `--id`:
 
@@ -79,51 +58,31 @@ bikeshed publish platform.md --id 01-platform
 # published 01-platform v1 — https://bikeshed.now/d/01-platform
 ```
 
-`publish` says where it filed the document and who can read it there.
-`bikeshed folders` counts who can read each folder, and `bikeshed folder <id>`
-names them: filing a document in a folder shares it with all of them, and
-nobody is emailed. Under a folder shared by link or made public it is readable
-by anyone holding the link, or anyone, and the output says through which
-folder. Given a folder's link, `bikeshed folder <link>` lists what that link
-opens, to read only.
+`publish` says where it filed the document and who can read it there. `bikeshed folders` counts who can read each folder, and `bikeshed folder <id>` names them: filing a document in a folder shares it with all of them, and nobody is emailed. Under a folder shared by link or made public it is readable by anyone holding the link, or anyone, and the output says through which folder. Given a folder's link, `bikeshed folder <link>` lists what that link opens, to read only.
 
-Ids are shared by the whole deployment and never change, so choose one every
-time: put the date first on something time-bound
-(`2026-10-09-storage-migration-review`), and the project on something that
-lives on (`billing-storage-migration`, not `migration`). If the id is taken, the
-document is still published, at the id plus a few random characters, and the
-CLI says so on stderr.
+Ids are shared by the whole deployment and never change, so choose one every time: put the date first on something time-bound (`2026-10-09-storage-migration-review`), and the project on something that lives on (`billing-storage-migration`, not `migration`). If the id is taken, the document is still published, at the id plus a few random characters, and the CLI says so on stderr.
 
-`bikeshed open <link>` opens a document in your browser, an unlisted one's key
-included. It opens the browser on the machine that runs it, so an agent in CI
-or a container should hand you the link instead.
+`bikeshed open <link>` opens a document in your browser, an unlisted one's key included. It opens the browser on the machine that runs it, so an agent in CI or a container should hand you the link instead.
 
-A rename changes the title and leaves the address alone, so links already sent
-keep working:
+A rename changes the title and leaves the address alone, so links already sent keep working:
 
 ```bash
 bikeshed rename 01-platform Platform review, second pass
 ```
 
-Wherever a command takes an id, it also takes the link you were sent. An
-unlisted document you are not a member of needs the link, because its key is in
-it; without the key the document answers as an id that does not exist.
+Wherever a command takes an id, it also takes the link you were sent. An unlisted document you are not a member of needs the link, because its key is in it; without the key the document answers as an id that does not exist.
 
 ```bash
 bikeshed comments 'https://bikeshed.now/d/build-estimate?k=…'
 ```
 
-`bikeshed --help` lists the rest — listing documents, folders, and installing the
-agent skills a deployment serves.
+`bikeshed --help` lists the rest — listing documents, folders, and installing the agent skills a deployment serves.
 
-With `publish --watch --json` or `update --watch --json`, stdout contains one
-JSON result per completed upload. Watch status and errors go to stderr.
+With `publish --watch --json` or `update --watch --json`, stdout contains one JSON result per completed upload. Watch status and errors go to stderr.
 
 ## Forking
 
-To revise a document you can read but do not own, fork it. You get your own
-private copy, at the version you name or the current one, and it remembers what
-it was forked from.
+To revise a document you can read but do not own, fork it. You get your own private copy, at the version you name or the current one, and it remembers what it was forked from.
 
 ```bash
 bikeshed fork 'https://bikeshed.now/d/build-estimate?k=…'
@@ -132,35 +91,17 @@ bikeshed lineage build-estimate-x7k2p9
 # forked from  build-estimate v3  Build estimate   (changed since)
 ```
 
-`lineage` shows each original you can open, nearest first, and whether the
-nearest has changed since you forked it. On a document you own it also counts
-its forks. The author of what you fork sees that it was forked — a count, never
-who.
+`lineage` shows each original you can open, nearest first, and whether the nearest has changed since you forked it. On a document you own it also counts its forks. The author of what you fork sees that it was forked — a count, never who.
 
 ## Manage access and folders
 
-`bikeshed access document <id>` and `bikeshed access folder <id>` show the
-owner, direct grants, inherited grants and effective membership. Add or change
-a direct role with `--add email@example.com,team:design --role editor`; revoke
-with `--remove email@example.com`. All four roles are supported. The owner
-cannot be removed, and inherited grants must be changed at their source.
-Newly effective readers receive an invitation when email is enabled.
+`bikeshed access document <id>` and `bikeshed access folder <id>` show the owner, direct grants, inherited grants and effective membership. Add or change a direct role with `--add email@example.com,team:design --role editor`; revoke with `--remove email@example.com`. All four roles are supported. The owner cannot be removed, and inherited grants must be changed at their source. Newly effective readers receive an invitation when email is enabled.
 
-`bikeshed visibility <id>` shows settings. Add `private`, `unlisted` or `public`
-to change visibility, `--public-edit true|false` to change open editing, or
-`--expires <ISO-8601 timestamp with timezone|none>` to set or clear expiry.
-Omitted settings stay unchanged. These commands are owner-only, including on
-expired documents; the returned URL includes an unlisted key when needed.
+`bikeshed visibility <id>` shows settings. Add `private`, `unlisted` or `public` to change visibility, `--public-edit true|false` to change open editing, or `--expires <ISO-8601 timestamp with timezone|none>` to set or clear expiry. Omitted settings stay unchanged. These commands are owner-only, including on expired documents; the returned URL includes an unlisted key when needed.
 
-`bikeshed visibility folder <id|link>` does the same for a folder, without
-`--public-edit`. A folder's link or public level opens everything beneath it to
-read, without an account: its subfolders, documents filed later, and documents
-that are private on their own. Its expiry ends only that; the people it is
-shared with keep their access. `bikeshed visibility document <id>` names a
-document explicitly, for one whose id is `folder`.
+`bikeshed visibility folder <id|link>` does the same for a folder, without `--public-edit`. A folder's link or public level opens everything beneath it to read, without an account: its subfolders, documents filed later, and documents that are private on their own. Its expiry ends only that; the people it is shared with keep their access. `bikeshed visibility document <id>` names a document explicitly, for one whose id is `folder`.
 
-`bikeshed rename-folder <id> <name>` and
-`bikeshed move-folder <id> <folder|root>` require edit rights.
+`bikeshed rename-folder <id> <name>` and `bikeshed move-folder <id> <folder|root>` require edit rights.
 
 `bikeshed trash <id>` moves a document you own to your Trash, and `bikeshed trash folder <id>` moves a folder you own there with everything in it, other people's documents included (`bikeshed delete-folder <id>` is the older name, and now does the same). In the Trash it is yours alone and read-only: links, folder links, its public page and every grant stop working. `bikeshed restore [folder] <id>` brings it back with its sharing, into the folder it was in while that is still there, otherwise to the root. Bare `bikeshed trash` lists what is in your Trash. Nothing the CLI does deletes anything permanently.
 
@@ -168,44 +109,20 @@ All commands support `--json`. Existing sign-ins work without reconnecting.
 
 ## For agents
 
-A deployment serves its own instructions at
-[`https://bikeshed.now/llms.txt`](https://bikeshed.now/llms.txt), and the skills
-behind them at `/skills/index.json`. `bikeshed skills install <dir>`
-writes them where your harness reads skills from.
+A deployment serves its own instructions at [`https://bikeshed.now/llms.txt`](https://bikeshed.now/llms.txt), and the skills behind them at `/skills/index.json`. `bikeshed skills install <dir>` writes them where your harness reads skills from.
 
-Everything done with a token is stamped with the channel it came through, so a
-reviewer can always tell which feedback came from a person.
+Everything done with a token is stamped with the channel it came through, so a reviewer can always tell which feedback came from a person.
 
 ## Licence
 
-Apache-2.0. The deployment it talks to is the same repository:
-[DeputyHumans/bikeshed-now](https://github.com/DeputyHumans/bikeshed-now).
+Apache-2.0. The deployment it talks to is the same repository: [DeputyHumans/bikeshed-now](https://github.com/DeputyHumans/bikeshed-now).
 
 ### Previous versions and write guards
 
-Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link>
---all --json` to discover published history. Pages are newest first, default 20,
-maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL.
-History uses the document's current access rules and expiry. A missing or
-withdrawn version is an error, never a request for the latest version.
+Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link> --all --json` to discover published history. Pages are newest first, default 20, maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL. History uses the document's current access rules and expiry. A missing or withdrawn version is an error, never a request for the latest version.
 
-Read a chosen version with `get_document({id, version:"v2"})` and
-`get_comments({id, version:"v2", includeResolved:true})`, or
-`bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`.
-Read results name `currentVersion` and `isCurrent`; historical write capabilities
-are false. Existing comments and suggestions remain readable as an archive.
-Older versions cannot be edited or receive, revise, delete, reply to, resolve,
-reopen, accept, reject, claim or withdraw feedback. Fork one to make a new,
-independent document with `fork_document({id, version:"v2"})`.
+Read a chosen version with `get_document({id, version:"v2"})` and `get_comments({id, version:"v2", includeResolved:true})`, or `bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`. Read results name `currentVersion` and `isCurrent`; historical write capabilities are false. Existing comments and suggestions remain readable as an archive. Older versions cannot be edited or receive, revise, delete, reply to, resolve, reopen, accept, reject, claim or withdraw feedback. Fork one to make a new, independent document with `fork_document({id, version:"v2"})`.
 
-CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted
-`/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write
-guard. `--version` must agree with the URL; conflicts fail. Keys are retained.
-Document-wide sharing, folder and lineage operations still address the document.
+CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted `/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write guard. `--version` must agree with the URL; conflicts fail. Keys are retained. Document-wide sharing, folder and lineage operations still address the document.
 
-Before changing feedback, read the latest version and its feedback, then pass
-that `version` to every feedback tool (`--version` in the CLI). Pass
-`baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed
-update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
-If the head changes, the server refuses the write. Read the new head and
-reassess the request; never silently redirect a historical request to it.
+Before changing feedback, read the latest version and its feedback, then pass that `version` to every feedback tool (`--version` in the CLI). Pass `baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed update` and `bikeshed commit`). A versioned URL supplies the CLI base too. If the head changes, the server refuses the write. Read the new head and reassess the request; never silently redirect a historical request to it.
