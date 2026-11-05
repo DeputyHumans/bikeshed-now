@@ -567,6 +567,71 @@
   .viewer-title .breadcrumb .breadcrumb-sep[data-folder] {
     display: none;
   }
+  /* And the one link left stays whole: the document's name shortens, not it. */
+  .viewer-title .breadcrumb a:first-of-type { flex: none; }
+}
+
+/*
+ * A phone: two rows, and the app header folded into them.
+ *
+ * Mark, title and menu; then Document/Comments and what fits beside it. The header
+ * goes because the bars above a document took a quarter of the screen, and the
+ * toolbar's own first row does its job here. Only while a toolbar is on the page:
+ * loading, "Not here" and the editor all keep the header. `useHeaderHeightVar`
+ * sees it go and writes 0, so the viewer takes the height with no other change.
+ *
+ * Someone else in the document adds a third row for as long as they stay, because
+ * row one has no room to name them (SPEC §16).
+ *
+ * Same condition as CONDENSED_QUERY in hooks/breakpoints.ts; a test holds them equal.
+ */
+@media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+  .app-shell:has(.viewer-toolbar) .app-header { display: none; }
+  .viewer-toolbar {
+    flex-wrap: wrap;
+    gap: var(--s-1);
+    padding: var(--s-1) var(--s-2);
+    overflow-x: visible;
+  }
+  .viewer-home {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--tap);
+    height: var(--tap);
+  }
+  .viewer-title { flex: 1 1 0; max-width: none; }
+  .viewer-title .breadcrumb a,
+  .viewer-title .breadcrumb .breadcrumb-sep { display: none; }
+  .viewer-account { flex: none; }
+  .viewer-toolbar .presence-bar { flex-basis: 100%; order: 2; }
+  .viewer-toolbar-actions {
+    flex: 1 0 100%;
+    flex-wrap: nowrap;
+    order: 1;
+    margin-left: 0;
+    max-width: none;
+  }
+  .viewer-action { flex: none; }
+  /* Takes what the actions leave, so the row can never run off the screen. */
+  .viewer-toolbar-actions .pane-toggle { flex: 1 1 auto; min-width: 0; margin-right: var(--s-1); }
+  .viewer-toolbar-actions .pane-toggle button { flex: 1 1 0; min-width: 0; padding: 0 var(--s-1); }
+  .viewer-toolbar .btn-label,
+  .viewer-toolbar .btn-keep-label .btn-label { display: none; }
+  /* The urgent date: a coloured clock rather than a pill, its words in its name. */
+  .viewer-toolbar .expiry-chip { justify-content: center; padding: 0; }
+  .viewer-toolbar .expiry-chip::before { display: none; }
+  .viewer-toolbar .expiry-chip .chip-label { display: none; }
+}
+
+/* On its side a phone is under 300 CSS px tall in Safari, and wide enough for one row. */
+@media (max-height: 500px) and (min-width: 601px) and (pointer: coarse) {
+  .viewer-toolbar-actions { flex: none; margin-left: auto; }
+  .viewer-toolbar-actions .pane-toggle { flex: none; }
+  .viewer-toolbar-actions .pane-toggle button { padding: 0 var(--s-2); }
+  .viewer-account { order: 2; }
+  .viewer-toolbar .presence-bar { order: 3; }
 }
 
 @media (max-width: 400px) {
@@ -576,25 +641,4 @@
   .details-list dd { margin-bottom: var(--s-2); }
   .details-versions .activity-row { flex-wrap: wrap; }
   .details-versions .activity-row > .details-how { flex-basis: 100%; order: 1; }
-  .viewer-title { display: none; }
-
-  /* The narrowest tier drops the keep-label exception too.
-     Trust and Edit keep their labels at every other width because both change
-     what the document does — but at 400px FITTING outranks that, and the bar
-     overflowed by 69px on an untrusted document even before a Share button
-     existed. Nothing is lost that a screen reader or a tooltip cannot say:
-     aria-label stays on every one of them. */
-  .viewer-toolbar .btn-keep-label .btn-label { display: none; }
-
-  /* A backstop, so no future action can reintroduce the overflow: the row
-     wraps to a second line rather than running off the screen. */
-  .viewer-toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
-
-  /* The expiry chip goes icon-only like the secondary actions: its words
-     are hidden, its accessible name and tooltip are not. With the title
-     gone, a "Expires Oct 3, 2027" beside the version chip is what tipped the
-     actions onto that second row. */
-  .viewer-toolbar .expiry-chip .chip-label { display: none; }
-  /* The fork chip too, for the same reason; its icon and dot stay. */
-  .viewer-toolbar .fork-chip .chip-label { display: none; }
 }

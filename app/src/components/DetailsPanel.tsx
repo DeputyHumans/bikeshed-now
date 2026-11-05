@@ -3,6 +3,7 @@
 
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
+import { expiryMs, formatDay, isExpired } from "../expiry";
 import { formatTimestamp } from "../firestore";
 import { originOfVersion, viaOf } from "../provenance";
 import { readingTime } from "../readingTime";
@@ -72,6 +73,8 @@ export function DetailsPanel({
   const updatedAt = summary ? summary.at : publicDoc?.updatedAt ?? null;
   const draft = showDraft ? meta?.draft : null;
   const keyed = linkKey ? `?k=${encodeURIComponent(linkKey)}` : "";
+  // On a phone the toolbar has no room for the chip that says this.
+  const expiresAt = expiryMs(meta?.expiresAt ?? publicDoc?.expiresAt ?? null);
 
   return (
     <Modal title={`Details of “${title}”`} onClose={onClose}>
@@ -102,6 +105,13 @@ export function DetailsPanel({
             </>
           ) : null}
         </dd>
+
+        {expiresAt !== null ? (
+          <>
+            <dt>{isExpired(expiresAt) ? "Expired" : "Expires"}</dt>
+            <dd>{formatDay(expiresAt)}</dd>
+          </>
+        ) : null}
 
         {draft ? (
           <>

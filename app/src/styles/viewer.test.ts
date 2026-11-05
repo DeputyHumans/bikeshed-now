@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CONDENSED_QUERY } from "../hooks/breakpoints";
 
 const VIEWER_CSS = readFileSync(join(__dirname, "viewer.css"), "utf8");
 
@@ -94,14 +95,39 @@ const selectorsWith = (css: string, property: string, value: string) =>
 describe("the expiry chip on a narrow toolbar", () => {
   const LABEL = ".viewer-toolbar .expiry-chip .chip-label";
 
-  it("hides its words at 400px", () => {
-    expect(selectorsWith(mediaBlock("(max-width: 400px)"), "display", "none")).toContain(LABEL);
+  it("hides its words on a phone", () => {
+    expect(selectorsWith(mediaBlock(CONDENSED_QUERY), "display", "none")).toContain(LABEL);
   });
 
   it("keeps them a tier up", () => {
     expect(selectorsWith(mediaBlock("(max-width: 860px)"), "display", "none")).not.toContain(
       LABEL,
     );
+  });
+});
+
+/**
+ * jsdom applies no stylesheet and a query cannot read a variable, so the condition
+ * exists twice. If they disagree, ViewerToolbar draws the phone's markup into the
+ * desktop's layout, or the reverse.
+ */
+describe("the two rows on a phone", () => {
+  it("are decided by the same condition in the stylesheet as in the code", () => {
+    expect(mediaBlock(CONDENSED_QUERY)).not.toBe("");
+  });
+
+  it("fold the app header in, but only while a toolbar is on the page", () => {
+    expect(selectorsWith(mediaBlock(CONDENSED_QUERY), "display", "none")).toContain(
+      ".app-shell:has(.viewer-toolbar) .app-header",
+    );
+  });
+
+  it("let the toggle take the slack, so the actions can never run off the screen", () => {
+    expect(mediaBlock(CONDENSED_QUERY)).toMatch(/\.pane-toggle\s*\{[^}]*min-width:\s*0/);
+  });
+
+  it("keep the first folder whole a tier up, where the title shortens instead", () => {
+    expect(mediaBlock("(max-width: 860px)")).toMatch(/breadcrumb a:first-of-type\s*\{\s*flex:\s*none/);
   });
 });
 

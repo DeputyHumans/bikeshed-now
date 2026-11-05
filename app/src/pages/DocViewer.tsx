@@ -15,7 +15,7 @@ import { commitVersion, publishSaved, UnresolvedCommentsError, StaleVersionError
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
 import { printDoc } from "../export/pdf";
 import { MARKING_OFF } from "../export/labels";
-import { useCoarsePointer, useIsPhone, useIsSingleColumn } from "../hooks/useMediaQuery";
+import { useCoarsePointer, useIsCondensed, useIsSingleColumn } from "../hooks/useMediaQuery";
 
 import { useDocument } from "../viewer/useDocument";
 import { useDocumentTitle } from "../viewer/useDocumentTitle";
@@ -134,7 +134,7 @@ export function DocViewer() {
   const toast = useToast();
   const { user, emailLower, gate, movingTo } = useAuth();
   const singleColumn = useIsSingleColumn();
-  const phone = useIsPhone();
+  const condensed = useIsCondensed();
   // Touch: the selection controls and the suggestion form dock at the bottom (SelectionFab).
   const coarsePointer = useCoarsePointer();
   const signedIn = gate === "ready" && Boolean(user);
@@ -891,7 +891,7 @@ export function DocViewer() {
     // On a phone Print is listed here instead of on the toolbar: the bar
     // already fills 400px, and printing from a phone is rare enough to sit one
     // tap further away. Anywhere wider it is a button and is not listed twice.
-    if (phone) entries.push({ id: "pdf", label: "Print or save as PDF", onSelect: printCurrent });
+    if (condensed) entries.push({ id: "pdf", label: "Print or save as PDF", onSelect: printCurrent });
     entries.push(
       { id: "image", label: "Export an image…", onSelect: () => setDialog("image") },
       { id: "sep1", separator: true },
@@ -949,7 +949,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, phone, printCurrent, trashed, trashThis, restoreTrashed]);
+  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, condensed, printCurrent, trashed, trashThis, restoreTrashed]);
 
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again
@@ -1071,7 +1071,7 @@ export function DocViewer() {
           onToggleRail={() => setRailOpen((open) => !open)}
           onOverview={() => deck.setOverviewOpen(true)}
           onPresent={startPresenting}
-          onPrint={phone ? undefined : printCurrent}
+          onPrint={condensed ? undefined : printCurrent}
           menuEntries={menuEntries}
           pane={pane}
           onPane={(next) => {

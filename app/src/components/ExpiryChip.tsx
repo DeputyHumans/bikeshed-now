@@ -28,6 +28,27 @@ import type { DocMeta } from "../types";
  * reader looking at an empty frame is that nothing was deleted and who can
  * restore it.
  */
+/**
+ * What the chip says and explains, for anywhere else that has to say it: on a phone
+ * an expiry with time left is listed in the menu rather than taking room in the bar.
+ */
+export function expiryWords(
+  expiresAt: Parameters<typeof expiryLabel>[0],
+  of: "document" | "folder" | "folder-link",
+  canChange: boolean,
+): { label: string; explanation: string } | null {
+  const label = of === "document" ? expiryLabel(expiresAt) : sharingLabel(expiresAt);
+  if (!label) return null;
+  const explanation = (
+    of === "folder"
+      ? sharingExplanation(expiresAt, canChange)
+      : of === "folder-link"
+        ? throughFolderExplanation(expiresAt)
+        : expiryExplanation(expiresAt, canChange)
+  ) as string;
+  return { label, explanation };
+}
+
 export function ExpiryChip({
   expiresAt,
   onOpen,
@@ -44,15 +65,9 @@ export function ExpiryChip({
   of?: "document" | "folder" | "folder-link";
 }) {
   const toast = useToast();
-  const label = of === "document" ? expiryLabel(expiresAt) : sharingLabel(expiresAt);
-  if (!label) return null;
-  const explanation = (
-    of === "folder"
-      ? sharingExplanation(expiresAt, onOpen !== undefined)
-      : of === "folder-link"
-        ? throughFolderExplanation(expiresAt)
-        : expiryExplanation(expiresAt, onOpen !== undefined)
-  ) as string;
+  const words = expiryWords(expiresAt, of, onOpen !== undefined);
+  if (!words) return null;
+  const { label, explanation } = words;
 
   return (
     <button
@@ -65,7 +80,7 @@ export function ExpiryChip({
       onClick={onOpen ?? (() => toast.show(explanation))}
     >
       <Icon name="clock" size={12} />
-      {/* Hidden on the narrowest screens; the accessible name above is not. */}
+      {/* Hidden on a phone; the accessible name above is not. */}
       <span className="chip-label">{label}</span>
     </button>
   );

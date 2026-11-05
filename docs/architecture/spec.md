@@ -1286,6 +1286,15 @@ forced colours. Brand chrome only — **never restyle embedded document content.
 
 **On a phone the header is the wordmark and one menu.** At 600 px and below the address, Account, Docs and Sign out need more room than there is, so they fold behind one button (`AccountMenu`). A signed-out visitor finds Docs and Sign in there, and Sign in comes back to the same place through `next`.
 
+**On a phone the bars above a document are two rows.** At 600 px and below, or on a phone on its side (`(max-height: 500px) and (pointer: coarse)`, `CONDENSED_QUERY`), the app header folds into the toolbar, whose first row holds the mark, the document's title and that one menu, and whose second holds Document/Comments and what fits beside it. On its side, where Safari leaves under 300 px of height, it is one row.
+
+| Width | A document | A deck |
+|---|---|---|
+| Under 360 px | Edit, Share or Fork, More | Slides, Present, More |
+| 360 px and up | Edit, Share or Fork, Present, More | Slides, Present, Share or Fork, More |
+
+Whatever has no slot is in the ⋮ menu, with the version and length as its heading, All slides, and an expiry with time left in it. An expiry in its last week, or past, stays in the first row as a coloured clock with its words in its accessible name. The trail back to the folder is in the first row's menu. Scripts blocked leaves the toolbar for the banner that says the same thing in words on the same condition. Someone else in the document adds a third row for as long as they stay (§16). The editor is unchanged: it keeps the app header and its own toolbar.
+
 `viewport-fit=cover` stays out. On its side Safari insets the page itself and `env(safe-area-inset-bottom)` still reports the home indicator, so the only thing it would buy is a cosmetic full bleed, at the price of about twenty inset rules, and it would make the layout width wider than the 860 px tier.
 
 
@@ -2054,7 +2063,7 @@ persisted highlight. It is derived from the email, so it is stable between
 sessions. **Colour is never the only signal**: carets carry name labels, rail
 markers label on hover, presence chips encode mode by dot shape.
 
-The presence bar is one line that never scrolls. Each chip shows the person's whole name on one line. As many chips as fit beside the rest of the toolbar are shown, and the rest fold into a "+N" button that lists them, each with their dot, and follows whoever is chosen. A folded chip stays in the page, invisible and out of the tab order, so the fold is measured against widths that do not change with it and cannot oscillate.
+The presence bar is one line that never scrolls, and on a phone it is a row of its own, there only while someone else is (§7). Each chip shows the person's whole name on one line. As many chips as fit beside the rest of the toolbar are shown, and the rest fold into a "+N" button that lists them, each with their dot, and follows whoever is chosen. A folded chip stays in the page, invisible and out of the tab order, so the fold is measured against widths that do not change with it and cannot oscillate.
 
 ### Ephemeral presence is an overlay, never inline DOM
 
@@ -2345,7 +2354,7 @@ Two details that are decisions rather than implementation:
   milliseconds) and the reader is told rather than shown an empty frame. A
   title outliving its content is the honest cost of expiry having no job.
 
-How the viewer says it: a chip beside the version badge — the same one the
+How the viewer says it, above a phone's width: a chip beside the version badge — the same one the
 workspace card shows — for every future date, escalating in wording and colour
 through the last week and past the date, read from `docs/{docId}` for a member
 and from the projection, or `/unlock`, for anyone else. Its tooltip, and a tap for anyone who
@@ -3346,7 +3355,7 @@ answers:
 | Surface | |
 |---|---|
 | Workspace card | "Fork", one click, into the folder being viewed, then opens it |
-| Viewer toolbar | "Fork", for a reader who is not the owner, in the slot Share takes for an owner — so no toolbar is wider than an owner's. Its tooltip says the author will see that it was forked. |
+| Viewer toolbar | "Fork", for a reader who is not the owner, in the slot Share takes for an owner — so no toolbar is wider than an owner's. Its tooltip says the author will see that it was forked. On a phone it holds that slot or waits in the menu, as Share does (§7) |
 | Viewer menu | "Fork", or "Fork this version" on an old one, for every reader; "Forks…" for the owner |
 | Signed out | sign in, then the fork completes: the intent travels as `?fork=1` through `/signup?next=`, runs once the document has resolved as the account, and is removed before the request so a reload cannot fork twice. `next` is honoured only as a path on this origin |
 | MCP / CLI | `fork_document`; `bikeshed fork <id|link> [--version] [--folder] [--title]`. Lineage is `get_lineage` and `bikeshed lineage <id|link>`, the same answer as the panel; `list_documents` and `get_document` carry `forked`, and `list_documents` the fork count, off the record |

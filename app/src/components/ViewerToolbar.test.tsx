@@ -3,9 +3,12 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, test, vi } from "vitest";
-import { ViewerToolbar } from "./ViewerToolbar";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { phoneActions, ViewerToolbar } from "./ViewerToolbar";
 import { ToastProvider } from "./Toast";
+
+const auth = vi.hoisted(() => ({ user: { uid: "u" }, emailLower: "someone@example.com", gate: "ready", signOut: async () => {} }));
+vi.mock("../auth", () => ({ useAuth: () => auth }));
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -170,5 +173,129 @@ describe("the trail back out of a document", () => {
     signedIn.unmount();
     renderToolbar({ signedIn: false });
     expect(screen.getByRole("link", { name: "Everything" }).getAttribute("href")).toBe("/");
+  });
+});
+
+describe("phoneActions", () => {
+  const base = { canEdit: true, canShare: true, canFork: true, hasSlides: false };
+  test.each([
+    // A document: Present is the rarest thing to do on a phone, so it gives first.
+    [4, base, ["edit", "share", "present"], []],
+    [3, base, ["edit", "share"], ["present"]],
+    // A reader forks where an owner shares, so no reader's row is wider.
+    [4, { ...base, canShare: false }, ["edit", "fork", "present"], []],
+    [4, { ...base, canShare: false, canEdit: false }, ["fork", "present"], []],
+    [3, { ...base, canShare: false, canEdit: false }, ["fork", "present"], []],
+    // Nothing to offer but presenting.
+    [3, { canEdit: false, canShare: false, canFork: false, hasSlides: false }, ["present"], []],
+    // A deck: moving between slides and presenting them is what it is for.
+    [4, { ...base, hasSlides: true }, ["slides", "present", "share"], ["edit"]],
+    [3, { ...base, hasSlides: true }, ["slides", "present"], ["share", "edit"]],
+    [4, { ...base, hasSlides: true, canShare: false, canEdit: false }, ["slides", "present", "fork"], []],
+    // On its side a phone has room for all of it.
+    [6, { ...base, hasSlides: true }, ["slides", "present", "share", "edit"], []],
+  ])("%i slots, %j", (slots, flags, row, menu) => {
+    expect(phoneActions({ slots: slots as number, ...(flags as typeof base) })).toEqual({ row, menu });
+  });
+});
+
+describe("on a phone", () => {
+  const phone = (width: number) =>
+    vi.stubGlobal("matchMedia", (query: string) => {
+      const max = query.match(/^\(max-width: (\d+)px\)/);
+      const min = query.match(/^\(min-width: (\d+)px\)/);
+      return {
+        matches: max ? width <= Number(max[1]) : min ? width >= Number(min[1]) : false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      };
+    });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const owner = {
+    canEdit: true,
+    canShare: true,
+    onFork: () => {},
+    onOpenForks: () => {},
+    singleColumn: true,
+    signedIn: true,
+    versionLabel: "v3 · 4 min",
+  };
+  const openMore = () => fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+
+  test("the first row is the way home, the title and one menu, with no version chip", () => {
+    phone(402);
+    const { container } = renderToolbar(owner);
+    expect(screen.getByRole("link", { name: "Bikeshed home" })).toBeTruthy();
+    expect(screen.getByText("Quarterly review")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Menu" })).toBeTruthy();
+    expect(container.querySelector(".version-chip")).toBeNull();
+  });
+
+  test("the version moves to the menu, and so does a date with time left in it", () => {
+    phone(402);
+    renderToolbar({ ...owner, expiresAt: Date.now() + 60 * DAY });
+    expect(screen.queryByRole("button", { name: /^Expires/ })).toBeNull();
+    openMore();
+    expect(screen.getByText("v3 · 4 min").className).toBe("menu-label");
+    expect(screen.getByRole("menuitem", { name: /^Expires/ })).toBeTruthy();
+  });
+
+  test("a date in its last week stays in view, and is not listed twice", () => {
+    phone(402);
+    renderToolbar({ ...owner, expiresAt: Date.now() + 3 * DAY });
+    expect(screen.getByRole("button", { name: /^Expires/ })).toBeTruthy();
+    openMore();
+    expect(screen.queryByRole("menuitem", { name: /^Expires/ })).toBeNull();
+  });
+
+  test("at 320 px Present waits in the menu; at 360 px it has a slot", () => {
+    phone(320);
+    const { unmount } = renderToolbar(owner);
+    expect(screen.queryByRole("button", { name: "Present" })).toBeNull();
+    openMore();
+    expect(screen.getByRole("menuitem", { name: "Present" })).toBeTruthy();
+    unmount();
+
+    phone(360);
+    renderToolbar(owner);
+    expect(screen.getByRole("button", { name: "Present" })).toBeTruthy();
+    openMore();
+    expect(screen.queryByRole("menuitem", { name: "Present" })).toBeNull();
+  });
+
+  test("the trust offer is left to the banner, which says it in words", () => {
+    phone(402);
+    renderToolbar({ ...owner, offerTrust: true });
+    expect(screen.queryByRole("button", { name: "Scripts blocked" })).toBeNull();
+  });
+
+  test("a deck lists All slides and whatever had no slot", () => {
+    phone(402);
+    renderToolbar({ ...owner, hasSlides: true });
+    expect(screen.getByRole("button", { name: "Slides" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Present" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    openMore();
+    expect(screen.getByRole("menuitem", { name: "All slides" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeTruthy();
+  });
+
+  test("the folder holding the document is one tap into the first row's menu", () => {
+    phone(402);
+    const folders = [{ folderId: "f1", name: "Board papers", ancestors: [] }] as never;
+    renderToolbar({ ...owner, folderId: "f1", folders });
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    expect(screen.getByRole("menuitem", { name: "Everything" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Board papers" })).toBeTruthy();
+  });
+
+  test("beyond a phone the toolbar is as it was", () => {
+    phone(768);
+    const { container } = renderToolbar({ ...owner, onDetails: () => {} });
+    expect(container.querySelector(".version-chip")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Bikeshed home" })).toBeNull();
   });
 });
