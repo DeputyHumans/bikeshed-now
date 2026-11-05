@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Added
+
+- **The landing page links to its source.** The footer says Bikeshed is self-hosted and Apache-2.0, and until now it gave no way to find the code. It now links to the repository on GitHub, and so does the text a crawler reads in place of the page.
+
 ### Fixed
 
 - **The end-to-end check that a viewer never sees someone's draft works again.** A9.5 expected the version chip to read exactly `v1`, and the chip has also shown reading time since October, so the case failed for everyone without saying anything about drafts. It now accepts the reading time and still fails on the word draft, which a new control proves.

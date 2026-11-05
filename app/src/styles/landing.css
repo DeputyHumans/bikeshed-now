@@ -234,6 +234,7 @@
 .landing-footer-nav a {
   display: inline-flex;
   align-items: center;
+  gap: var(--s-1);
   min-height: var(--tap);
 }
 

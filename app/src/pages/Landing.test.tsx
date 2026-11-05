@@ -354,6 +354,18 @@ describe("the landing entry points", () => {
   });
 });
 
+/** The repository every package already names, so the links cannot drift from it. */
+const REPOSITORY: string = JSON.parse(readFileSync(join(__dirname, "..", "..", "..", "package.json"), "utf8"))
+  .repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
+
+describe("the link to the source", () => {
+  it("is in the footer, named for what it opens", () => {
+    auth.gate = "signed_out";
+    renderAt("/");
+    expect(screen.getByRole("link", { name: "GitHub" }).getAttribute("href")).toBe(REPOSITORY);
+  });
+});
+
 describe("what a crawler reads in place of this page", () => {
   /** No spaces at all: the heading's second line is a span of its own, with none between. */
   const squeezed = (text: string | null) => (text ?? "").replace(/\s/g, "");
@@ -378,6 +390,6 @@ describe("what a crawler reads in place of this page", () => {
 
   it("links to what a crawler that stops here should read next", () => {
     const links = Array.from(block?.querySelectorAll("a") ?? []).map((a) => a.getAttribute("href"));
-    expect(links).toEqual(["/docs", "/docs/developers", "/llms.txt", "/terms", "/privacy"]);
+    expect(links).toEqual(["/docs", "/docs/developers", "/llms.txt", "/terms", "/privacy", REPOSITORY]);
   });
 });
