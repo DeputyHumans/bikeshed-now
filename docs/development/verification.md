@@ -476,6 +476,22 @@ Chrome delivers every event from the document's frame, so nothing above can fail
 
 The same steps can be driven from a script with the system WebKit: a `WKWebView` signed in through the sign-in form, the gestures replaced by the parent selecting, focusing and clicking inside the frame. That is how 0.26.2 was checked, and it found every step above but one: a link clicked from script opened no tab, because a click from script is not a user's gesture, so step 4 with a real tap is checked by hand on a phone. It has no committed harness yet.
 
+### 19 · On a phone, in Safari
+
+`a28-phone-layout` measures fourteen sizes in Chromium. What only WebKit can tell you is below, on an iOS Simulator with Safari (`xcodebuild -downloadPlatform iOS`) or an iPhone, in portrait and then on its side. The Simulator shares this machine's network, so `http://127.0.0.1:<hosting port>` reaches a kept stack. Realistic flicks need real gestures: an XCUITest driving `XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")` with `swipeUp(velocity: .fast)` produces them, in a throwaway project in a scratch directory.
+
+1. A long untrusted document: about 105 px of bars, the title and the menu button in the first row.
+2. Flick down: the bars go and the page keeps moving. Flick up: they come back. Nudge at the very bottom: nothing flickers.
+3. Press and hold a word: the buttons dock at the bottom. Drag the handles: nothing moves under them.
+4. Comment and reply: the page does not zoom, and the box stays visible above the keyboard.
+5. Suggest edit: the form is at the top, and Suggest can be reached with the keyboard up.
+6. Tap a highlight, then Document: back on the passage.
+7. Signed out: select, Comment, Sign in, sign in. You are back on the document, with your thread on the passage.
+8. A deck: the slide list starts closed, Slides opens it, a tap beside it closes it, and the bars never hide.
+9. A short document: the bars stay. Then Everything, Folders, pick a folder: the drawer closes.
+10. Share, Trash, Account: nothing cut off.
+
+
 ## Automated: `npm run test:e2e`
 
 The suite in `e2e/` runs most of this walkthrough by itself. It builds a copy
@@ -521,6 +537,7 @@ Specs are under `e2e/specs/`; the `A` cases are `functional/`, the `C` cases
 | 19 | a01-identity | A1.10 | an account Google renamed, over the Auth emulator's Google sign-in: the old address still in Firebase's token, `moving` with no cookie, the `moveAccount` job `done`, the next Google sign-in the new address, which reads what was shared with it and shares its own document; its ACL log says `address-moved`; the old address's `__session` and personal token refused | the browser's "Moving your account to …" screen and the drift notice (unit-tested in `app/src/auth.test.tsx`), a real Google token's signature (unit-tested in `functions/test/accountmove.test.js`), and a real account's move in production |
 | 20 | a26-trash, a14-workspace | A26.1–A26.5, A14.5, A14.5b | a trashed document refused as an absent id to a viewer, its key, a link grant, a folder's link, MCP and a direct Firestore read, and every one open again on Restore; every write refused with the Trash's 409, the owner's too; a team change while it is trashed handing it to nobody; the owner's banner with Restore and no Edit; another owner's document in a trashed folder restored at their own root; Move to Trash with Undo, a folder's question, and Trash restoring a whole subtree | how the Trash page reads on a phone, and Undo reached from a screen reader |
 | 21 | a27-purge | A27.1–A27.5 | the emailed code deleting a trashed document forever: a tombstone with only `purgedAt`, no version, no log entry written after, no object under `docs/{id}/`, its link the absent id's 404, its id never given again; a CLI and an MCP token refused; five wrong codes burning the code; a folder's early purge leaving another owner's document in their Trash, restored at their root; email off refusing with its reason and sending nothing; the Trash page's day, dialog and code | the daily job, which the Functions emulator loads and never runs (purge.test.js calls it as a library); the deploy's Cloud Scheduler role, which only a real deploy can show |
+| 22 | a28-phone-layout | A28.0–A28.18 | fourteen sizes, every surface: no sideways scroll, overlap, clipped control, squeezed icon, cut word or target under 44 px, and no text field under 16 px on touch; two rows of bars, gone on the way down and back on the way up; a comment started signed out on its passage after signing in; a deck and the folder drawer out of the way | what WebKit alone decides: momentum, the keyboard, selection handles |
 
 **What stays by hand, and why.**
 
