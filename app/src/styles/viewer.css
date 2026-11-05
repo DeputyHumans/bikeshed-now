@@ -590,6 +590,21 @@
  */
 @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
   .app-shell:has(.viewer-toolbar) .app-header { display: none; }
+  /*
+   * While a reader scrolls down (viewer/useChromeAutoHide.ts). Out of the grid's flow,
+   * so its `auto` rows collapse and the frame really grows; `display: none` would take
+   * the controls from a screen reader and from Tab, and focus landing in them brings
+   * them back with no script at all. An element that moves the frame cannot wait on a
+   * transition: base.css's reduced-motion block would give it one, on every property.
+   */
+  .viewer { position: relative; }
+  .viewer-toolbar,
+  .viewer-banners { transition: none; }
+  .viewer[data-chrome="hidden"] :is(.viewer-toolbar, .viewer-banners):not(:focus-within) {
+    position: absolute;
+    inset: 0 0 auto 0;
+    clip-path: inset(100%);
+  }
   .viewer-toolbar {
     flex-wrap: wrap;
     gap: var(--s-1);

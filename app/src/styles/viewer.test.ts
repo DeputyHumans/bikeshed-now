@@ -132,6 +132,32 @@ describe("the two rows on a phone", () => {
 });
 
 /**
+ * The bars leave while a reader scrolls down, and three things about how they leave
+ * are what make it safe. jsdom lays out nothing, so the stylesheet is what can be read.
+ */
+describe("the bars while a reader scrolls down", () => {
+  const rule = () =>
+    mediaBlock(CONDENSED_QUERY).match(/\.viewer\[data-chrome="hidden"\][^{]*\{([^}]*)\}/) ?? [];
+
+  it("leave the grid's flow, so its rows collapse and the frame really grows", () => {
+    expect(rule()[1]).toMatch(/position:\s*absolute/);
+  });
+
+  it("stay in the page, for a screen reader and for Tab", () => {
+    expect(rule()[1]).not.toMatch(/display:\s*none/);
+    expect(rule()[1]).not.toMatch(/visibility:\s*hidden/);
+  });
+
+  it("come back when focus lands in them, with no script", () => {
+    expect(rule()[0]).toContain(":not(:focus-within)");
+  });
+
+  it("take no transition, which would leave the frame's size stale for a moment", () => {
+    expect(selectorsWith(mediaBlock(CONDENSED_QUERY), "transition", "none").join()).toContain(".viewer-toolbar");
+  });
+});
+
+/**
  * The docked selection bar and the suggestion sheet are what the reader is using at
  * that moment, so nothing may lie over them; and iOS draws its keyboard over the page
  * without moving anything, so a form anchored to the bottom would open behind it.

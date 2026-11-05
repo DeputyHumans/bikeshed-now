@@ -836,7 +836,7 @@ comment. MCP `add_comment` selects the current head and rechecks it atomically
 | Typing in the editor | the shared binding's local edits (`onLocalChange`), else a frame-realm observer that ignores our own decoration |
 | A tap on a highlight | highlights are focusable (`tabindex="-1"`, never in the tab order); focus opens the thread and is given back |
 | A link that leaves the document | it is pointed at a new tab (`target="_blank" rel="noopener noreferrer"`), the author's own values saved in `data-bshd-link` and restored by every strip; the reading sandbox allows popups that escape it, which the script lock makes safe (§2) |
-| Scroll and resize (the deck rail, presence, read tracking) | sampled |
+| Scroll and resize (the deck rail, presence, read tracking, a phone's bars) | sampled |
 | Arrow keys with focus inside a slide, a file dropped onto the document | **not recovered**: the deck's own controls and the upload dialog remain |
 
 - On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
@@ -1296,6 +1296,16 @@ forced colours. Brand chrome only — **never restyle embedded document content.
 | 360 px and up | Edit, Share or Fork, Present, More | Slides, Present, Share or Fork, More |
 
 Whatever has no slot is in the ⋮ menu, with the version and length as its heading, All slides, and an expiry with time left in it. An expiry in its last week, or past, stays in the first row as a coloured clock with its words in its accessible name. The trail back to the folder is in the first row's menu. Scripts blocked leaves the toolbar for the banner that says the same thing in words on the same condition. Someone else in the document adds a third row for as long as they stay (§16). The editor is unchanged: it keeps the app header and its own toolbar.
+
+**While a reader scrolls down those bars leave.** They leave after 48 px down and return after 24 px up, and within 8 px of the top they are always there. The rows leave the viewer's grid, so the frame really grows; laying them over a full-height frame instead would hide the bottom of a document that scrolls an inner element for good, because such a document never reports a scroll. Measured in iOS Safari, a flick keeps its momentum across the resize. `useChromeAutoHide` reads the frame's scroll, size and selection, and writes only an attribute on the parent's `.viewer`.
+
+| State | What the bars do |
+|---|---|
+| A document too short to scroll them back; a deck; editing; the comments pane; presenting; a dialog; the suggestion form; a comment being created; a frame that failed to load | stay |
+| Content that moves with the frame's height: more than one screen's worth of sections in `vh`, measured once when the document opens, inside one task so nothing is painted | stay, for that load, because a paragraph would jump |
+| An active selection; following a peer; the first second after a document opens or the state around it changes | hold still in either direction |
+| Focus inside them, as an open menu or a Tab gives them | return, with no script |
+| A new banner | return, once |
 
 `viewport-fit=cover` stays out. On its side Safari insets the page itself and `env(safe-area-inset-bottom)` still reports the home indicator, so the only thing it would buy is a cosmetic full bleed, at the price of about twenty inset rules, and it would make the layout width wider than the 860 px tier.
 

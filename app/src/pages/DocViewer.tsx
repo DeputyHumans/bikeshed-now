@@ -22,6 +22,7 @@ import { useDocumentTitle } from "../viewer/useDocumentTitle";
 import { useDocFrame } from "../viewer/useDocFrame";
 import { clearPendingComment, readPendingComment, savePendingComment, type PendingComment } from "../viewer/pendingComment";
 import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
+import { useChromeAutoHide } from "../viewer/useChromeAutoHide";
 import { useInlineEditor } from "../viewer/useInlineEditor";
 import { useSharedDocument } from "../viewer/useSharedDocument";
 import { useEditSession } from "../viewer/useEditSession";
@@ -115,6 +116,9 @@ import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf, offersSuggest,
  * Nor is `useVersionDrop`. It listens to the document for a file dragged into
  * it and writes nothing there: the target it raises is the page's, over the
  * frame, never in it.
+ *
+ * Nor is `useChromeAutoHide`, which reads the document's scroll, size and selection
+ * and sets an attribute on the parent's `.viewer`.
  */
 
 type Dialog =
@@ -985,6 +989,40 @@ export function DocViewer() {
 
   const showComments = commentsOpen && Boolean(doc.currentVersion) && !throughFolder;
 
+  // On a phone the bars leave while the reader scrolls down, wherever nothing else
+  // needs them. A list rather than a guess at what else might: the last term of
+  // `enabled` is the kill switch, should this ever have to go.
+  const chromeHidden = useChromeAutoHide({
+    enabled:
+      condensed &&
+      mode.kind === "reading" &&
+      pane === "doc" &&
+      // Beside the document, as a tablet or a phone on its side has it, it is in use too.
+      (singleColumn || !showComments) &&
+      !isDeck &&
+      !presenting &&
+      dialog === null &&
+      suggesting === null &&
+      !commenting &&
+      !frame.loadError,
+    doc: frame.doc,
+    epoch: frame.epoch,
+    // A banner is news, and a followed peer's chip is in those bars.
+    revealKey: [
+      draftOnScreen ? "draft" : "",
+      live.newVersion ?? "",
+      live.conflict ? "conflict" : "",
+      liveTrust.shouldOffer ? "trust" : "",
+      annotationLayer.orphaned.length,
+      trashed ? "trashed" : "",
+      presence.following ?? "",
+    ].join("|"),
+    frozen: () => {
+      const selection = frame.doc?.getSelection();
+      return Boolean(presence.following) || Boolean(selection && !selection.isCollapsed);
+    },
+  });
+
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again
   // reloads the page: a stalled sign-in or Listen does not recover in place.
@@ -1031,7 +1069,7 @@ export function DocViewer() {
   };
 
   return (
-    <div className="viewer" data-pane={pane}>
+    <div className="viewer" data-pane={pane} data-chrome={chromeHidden ? "hidden" : undefined}>
       {editingNow ? (
         <EditToolbar
           format={doc.formatReady ? doc.format : null}
