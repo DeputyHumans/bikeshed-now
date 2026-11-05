@@ -39,7 +39,7 @@
     "pretest:tools": "node tools/ensure-rtdb-test-fixture.mjs",
     "test:tools": "node --test tools/*.test.mjs",
     "test:functions": "npm --prefix functions test",
-    "test:app": "npm --prefix app test",
+    "test:app": "npm --prefix app run coverage",
     "test:cli": "npm --prefix cli test",
     "test:rules": "node --test rules-tests/*.test.mjs",
     "test:e2e": "node e2e/run.mjs",
