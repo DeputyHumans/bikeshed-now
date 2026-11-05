@@ -26,6 +26,12 @@ function beats(): Beat[] {
   );
 }
 
+/** The tab changes state, and tells the page, as a browser does. */
+function setVisibility(state: "visible" | "hidden"): void {
+  Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
 describe("trackView", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -39,6 +45,7 @@ describe("trackView", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    Reflect.deleteProperty(document, "visibilityState");
   });
 
   it("records NOTHING before the grace period", () => {
@@ -182,5 +189,155 @@ describe("trackView", () => {
     // fetch is killed during pagehide; sendBeacon survives it and carries the
     // same-origin session cookie, so it passes the identity gate identically.
     expect(sendBeacon).toHaveBeenCalledWith("/view", expect.any(Blob));
+  });
+
+  /**
+   * Every beat that reports new time is a read: it lifts the document in Recent
+   * and clears "New since you read it". So a tab nobody is looking at must say
+   * nothing. Each case is one tracker going through states in order, because the
+   * order is what a real tab does and what a per-state check would never see.
+   */
+  describe("a tab nobody is looking at", () => {
+    const show = () => setVisibility("visible");
+    const hide = () => setVisibility("hidden");
+
+    it("sends nothing when opened in the background and never shown", () => {
+      hide();
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(10 * 60_000);
+      tracker.stop();
+      expect(beats()).toHaveLength(0);
+    });
+
+    it("registers two seconds after it is shown, not after it was opened", () => {
+      hide();
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(60_000);
+
+      show();
+      vi.advanceTimersByTime(OPEN_DELAY_MS - 1);
+      expect(beats()).toHaveLength(0);
+
+      vi.advanceTimersByTime(1);
+      expect(beats().map((b) => b.ms)).toEqual([0]);
+
+      // The minute it sat in the background is not reading time.
+      tracker.stop();
+      expect(beats().at(-1)!.ms).toBe(OPEN_DELAY_MS);
+    });
+
+    it("sends nothing for a new session shown for less than the grace period", () => {
+      hide();
+      const tracker = trackView("d1", "v1");
+      show();
+      vi.advanceTimersByTime(OPEN_DELAY_MS - 1);
+      hide();
+      vi.advanceTimersByTime(60_000);
+      tracker.stop();
+      expect(beats()).toHaveLength(0);
+    });
+
+    it("sends its final beat when it goes to the background, then nothing", () => {
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(OPEN_DELAY_MS + 1_000);
+      hide();
+      expect(beats().map((b) => b.ms)).toEqual([0, OPEN_DELAY_MS + 1_000]);
+
+      vi.advanceTimersByTime(10 * 60_000);
+      tracker.stop();
+      expect(beats()).toHaveLength(2);
+    });
+
+    it("passes over a registered tab without a beat, and counts none of that time", () => {
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(OPEN_DELAY_MS + 1_000);
+      hide();
+      const atHide = beats().at(-1)!.ms;
+      const sent = beats().length;
+
+      // Ctrl+Tab through it on the way to another tab.
+      vi.advanceTimersByTime(60_000);
+      show();
+      vi.advanceTimersByTime(OPEN_DELAY_MS - 1);
+      hide();
+      expect(beats()).toHaveLength(sent);
+
+      // Back for real: the time reported is the earlier stretch plus this one.
+      vi.advanceTimersByTime(60_000);
+      show();
+      vi.advanceTimersByTime(OPEN_DELAY_MS);
+      expect(beats().at(-1)!.ms).toBe(atHide + OPEN_DELAY_MS);
+      tracker.stop();
+    });
+
+    it("sends nothing when a registered tab is closed within the grace period of coming back", () => {
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(OPEN_DELAY_MS + 1_000);
+      hide();
+      const sent = beats().length;
+
+      vi.advanceTimersByTime(60_000);
+      show();
+      vi.advanceTimersByTime(OPEN_DELAY_MS - 1);
+      tracker.stop();
+      expect(beats()).toHaveLength(sent);
+    });
+
+    it("counts bringing a tab forward as activity, however long it was away", () => {
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(OPEN_DELAY_MS);
+      hide();
+      const atHide = beats().at(-1)!.ms;
+
+      vi.advanceTimersByTime(30 * 60_000); // well past the idle window
+      show();
+      // No pointer and no key: the reader only switched to the tab.
+      vi.advanceTimersByTime(OPEN_DELAY_MS);
+      expect(beats().at(-1)!.ms).toBe(atHide + OPEN_DELAY_MS);
+
+      // And the clock goes on running, with still no input.
+      vi.advanceTimersByTime(60_000);
+      expect(beats().at(-1)!.ms).toBeGreaterThan(atHide + OPEN_DELAY_MS);
+      tracker.stop();
+    });
+
+    it("goes silent when idle on screen, and speaks again after an interaction", () => {
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(30 * 60_000); // well past the idle window
+      const sent = beats().length;
+      const idle = beats().at(-1)!.ms;
+
+      // The clock has stopped, so another half hour has nothing new to report.
+      vi.advanceTimersByTime(30 * 60_000);
+      expect(beats()).toHaveLength(sent);
+
+      tracker.markActive();
+      vi.advanceTimersByTime(60_000);
+      expect(beats().length).toBeGreaterThan(sent);
+      expect(beats().at(-1)!.ms).toBeGreaterThan(idle);
+      tracker.stop();
+    });
+
+    it("sends one final beat when going hidden and leaving both fire", () => {
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(OPEN_DELAY_MS + 1_000);
+
+      hide();
+      window.dispatchEvent(new Event("pagehide"));
+      expect(beats()).toHaveLength(2);
+      tracker.stop();
+      expect(beats()).toHaveLength(2);
+    });
+
+    it("sends one final beat when leaving fires before going hidden", () => {
+      const tracker = trackView("d1", "v1");
+      vi.advanceTimersByTime(OPEN_DELAY_MS + 1_000);
+
+      window.dispatchEvent(new Event("pagehide"));
+      hide();
+      expect(beats()).toHaveLength(2);
+      tracker.stop();
+      expect(beats()).toHaveLength(2);
+    });
   });
 });

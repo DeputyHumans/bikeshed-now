@@ -1,6 +1,6 @@
 --- a/functions/src/index.ts
 +++ b/functions/src/index.ts
-@@ -2269,9 +2269,9 @@
+@@ -2210,9 +2210,9 @@
            ...(automated
            ? { apiReads: FieldValue.increment(isNewSession ? 1 : 0) }
            : {
@@ -9,6 +9,6 @@
                viewers: FieldValue.increment(isNewViewer ? 1 : 0),
 -              totalMs: FieldValue.increment(delta),
 +              totalMs: Number((docData as unknown as { stats?: { totalMs?: unknown } }).stats?.totalMs ?? 0) + delta,
-               lastViewedAt: now(),
+               ...(read ? { lastViewedAt: now() } : {}),
              }),
          },

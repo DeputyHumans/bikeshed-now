@@ -2162,6 +2162,11 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     beatCeiling ??= storedMs + MAX_BEAT_MS;
     const delta = Math.max(0, Math.min(claimedMs, beatCeiling) - storedMs);
     const sessionMs = storedMs + delta;
+    // A read is reading: a beat reporting no new time is a tab nobody is looking
+    // at, which must not lift a document in Recent or clear "New since you read
+    // it". Measured against what was claimed, not `delta`, because a session past
+    // its ceiling adds nothing and its reader is still there (SPEC §4).
+    const read = isNewSession || isNewViewer || rawMs > storedMs;
 
     tx.set(
       sessionRef,
@@ -2189,7 +2194,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
           views: FieldValue.increment(isNewSession ? 1 : 0),
           totalMs: FieldValue.increment(delta),
           ...(isNewViewer ? { firstViewedAt: now() } : {}),
-          lastViewedAt: now(),
+          ...(read ? { lastViewedAt: now() } : {}),
         },
         { merge: true },
       );
@@ -2208,7 +2213,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
               views: FieldValue.increment(isNewSession ? 1 : 0),
               viewers: FieldValue.increment(isNewViewer ? 1 : 0),
               totalMs: FieldValue.increment(delta),
-              lastViewedAt: now(),
+              ...(read ? { lastViewedAt: now() } : {}),
             }),
         },
         // `updatedAt` is deliberately NOT touched: it means "bumped on every

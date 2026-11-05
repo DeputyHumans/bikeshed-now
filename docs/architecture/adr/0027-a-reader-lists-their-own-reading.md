@@ -21,7 +21,7 @@ Three ways in were weighed. A server route on the stats function would have filt
 - A recursive match cannot name its parent. The rule holds only while `viewers` names exactly one collection, which `tools/viewers-collection.test.mjs` pins by listing every place the source names one. A second collection called `viewers`, anywhere, would be listable by its `uid` field.
 - The same match answers a list of one document's readers filtered to the caller, on a document they cannot open too. It returns only their own row.
 - The index builds after a deploy. Until it is ready the query fails, so Recent falls back to updates alone and says why. The emulator never enforces indexes, so this shows only on a real deployment.
-- Rows are written for reads that last past the two-second open delay, and never for an agent's. Recent's "you read it" means what the statistics already mean.
+- Rows are written for reads that last two seconds on screen, and never for an agent's. A background tab used to count as well, and every open tab moved its row each minute, until reads came to mean time on screen (SPEC §4). Recent's "you read it" means what the statistics already mean.
 
 ## What would change this
 

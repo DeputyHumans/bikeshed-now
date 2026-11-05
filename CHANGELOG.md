@@ -16,6 +16,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ### Fixed
 
+- **Background tabs no longer count as reading.** Every open tab told the server once a minute that it was being read, hidden or not, so Recent said "You read it just now" about documents nobody was looking at, and cleared their "New since you read it". A document now counts as read once it has been on screen for two seconds, and stops counting when its tab is hidden or has gone five minutes without a scroll, click or key. A document on screen beside another window still counts. A tab opened in the background and never shown is no longer a view, so "Last read by anyone" and view counts follow the same rule. Tabs already open stop lifting their documents as soon as the server has this release, without a reload.
 - **The end-to-end check that a viewer never sees someone's draft works again.** A9.5 expected the version chip to read exactly `v1`, and the chip has also shown reading time since October, so the case failed for everyone without saying anything about drafts. It now accepts the reading time and still fails on the word draft, which a new control proves.
 
 ## 0.34.0 — 2026-11-04

@@ -165,7 +165,7 @@ Not environment variables. Changing one is a code change and a deploy, which is 
 | `SESSION_COOKIE_NAME` | `__session` | The only cookie Firebase Hosting forwards to a function |
 | `MAX_BUNDLE_BYTES` | 25 MB | Upper bound on a bundle held in memory at upload or commit |
 | `MAX_BUNDLE_FILES` | 2,000 | Upper bound on the files in one bundle, counted before any is decompressed: each is a Storage write at publish |
-| `MAX_BEAT_MS` | 5 min | Largest active-time delta one heartbeat may contribute. The client beats every 60 s, so more is a stale tab, a clock jump, or a forged payload — clamped, not trusted |
+| `MAX_BEAT_MS` | 5 min | Largest active-time delta one heartbeat may contribute. The client beats at most every 60 s, and only with new time to report, so more is a stale tab, a clock jump, or a forged payload — clamped, not trusted |
 | `MAX_SESSION_MS` | 8 h | Ceiling on one reading session, so a pinned tab cannot inflate totals |
 | `VERIFY_TTL_MS` | 15 min | Verification code lifetime. Short, because it is re-issuable |
 | `COMMENT_EMAIL_COOLDOWN_MS` | 30 min | Minimum gap between two comment notifications to the same person about the same document |

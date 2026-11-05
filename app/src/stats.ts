@@ -12,6 +12,11 @@
  * delta, so a retried or duplicated beat is a server-side no-op. A dropped final
  * beacon costs at most one beat interval.
  *
+ * A beat with new time is also a read: it lifts the document in the reader's
+ * Recent and clears "New since you read it". So a tab reports only time somebody
+ * could have been reading. Hidden or idle, it stays silent, and a tab that is
+ * never shown sends nothing at all.
+ *
  * This module owns the clock. The viewer just calls markActive() from the
  * interaction listeners it already attaches to the document.
  */
@@ -20,12 +25,14 @@ const BEAT_MS = 60_000;
 const IDLE_MS = 5 * 60_000;
 
 /**
- * Grace period before a session is registered at all.
+ * How long a tab must stay on screen before that stretch counts for anything.
  *
- * Two reasons, and both are load-bearing. Opening the wrong document and
- * closing it immediately is not a "view", so the count means something. And it
- * makes the tracker inert under React StrictMode's mount/unmount/remount probe
- * in development, which would otherwise log two views for every open.
+ * Three reasons, and all are load-bearing. Opening the wrong document and
+ * closing it immediately is not a "view", so the count means something. A tab
+ * opened in the background, or passed over on the way to another, is not being
+ * read. And it makes the tracker inert under React StrictMode's
+ * mount/unmount/remount probe in development, which would otherwise log two
+ * views for every open.
  */
 export const OPEN_DELAY_MS = 2_000;
 
@@ -90,6 +97,9 @@ export function trackView(docId: string, versionId: string, k?: string): ViewTra
   let lastActivity = Date.now();
   let stopped = false;
   let registered = false;
+  let looking = false; // this stretch on screen has outlasted the grace period
+  let sentMs = 0; // the time the server last heard
+  let graceTimer: number | undefined;
 
   const isVisible = () => document.visibilityState === "visible";
   const isIdle = () => Date.now() - lastActivity > IDLE_MS;
@@ -115,34 +125,58 @@ export function trackView(docId: string, versionId: string, k?: string): ViewTra
     sync();
   };
 
-  sync();
+  /** Tell the server the session's time, if this stretch counts and it has moved. */
+  const report = (final: boolean) => {
+    if (!looking) return;
+    const ms =
+      final ? settle() : runningSince != null ? accruedMs + (Date.now() - runningSince) : accruedMs;
+    if (ms === sentMs) return;
+    sentMs = ms;
+    beat(docId, versionId, sessionId, ms, final, k);
+  };
 
-  const openTimer = window.setTimeout(() => {
-    registered = true;
-    // Registers the session — and so the +1 view — well before the first
-    // heartbeat, so a reader who leaves after thirty seconds is still counted.
-    beat(docId, versionId, sessionId, 0, false, k);
-  }, OPEN_DELAY_MS);
+  /** The tab is on screen. Switching to it is the reader doing something. */
+  const enter = () => {
+    if (looking) return;
+    markActive();
+    window.clearTimeout(graceTimer);
+    graceTimer = window.setTimeout(() => {
+      looking = true;
+      if (registered) {
+        report(false);
+        return;
+      }
+      registered = true;
+      // Registers the session — and so the +1 view — well before the first
+      // heartbeat, so a reader who leaves after thirty seconds is still counted.
+      beat(docId, versionId, sessionId, 0, false, k);
+    }, OPEN_DELAY_MS);
+  };
+
+  /** The tab has left the screen, or the document has. A glance counts for nothing. */
+  const leave = () => {
+    window.clearTimeout(graceTimer);
+    report(true);
+    looking = false;
+    runningSince = null;
+  };
+
+  if (isVisible()) enter();
 
   const timer = window.setInterval(() => {
-    if (!registered) return;
+    if (!looking) return;
     sync();
-    const ms =
-      runningSince != null ? accruedMs + (Date.now() - runningSince) : accruedMs;
-    beat(docId, versionId, sessionId, ms, false, k);
+    report(false);
   }, BEAT_MS);
 
   const onVisibility = () => {
-    sync();
-    // Going hidden may precede the tab being discarded, so flush what we have.
-    if (!isVisible() && registered) {
-      beat(docId, versionId, sessionId, settle(), true, k);
-    }
+    // Going hidden may precede the tab being discarded, so leave() flushes.
+    if (isVisible()) enter();
+    else leave();
   };
-  const onPageHide = () => {
-    if (stopped || !registered) return;
-    beat(docId, versionId, sessionId, settle(), true, k);
-  };
+  // Going hidden is not always announced before this, and a page restored from
+  // the back/forward cache carries on where it was, so this only flushes.
+  const onPageHide = () => report(true);
 
   document.addEventListener("visibilitychange", onVisibility);
   window.addEventListener("pagehide", onPageHide);
@@ -152,13 +186,13 @@ export function trackView(docId: string, versionId: string, k?: string): ViewTra
     stop() {
       if (stopped) return;
       stopped = true;
-      window.clearTimeout(openTimer);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
-      // Never registered means the session does not exist server-side. Beating
-      // now would CREATE it, turning a two-second glance into a recorded view.
-      if (registered) beat(docId, versionId, sessionId, settle(), true, k);
+      // Not looking means nothing is owed. A session that never registered does
+      // not exist server-side, and beating now would CREATE it, turning a
+      // two-second glance into a recorded view.
+      leave();
     },
   };
 }

@@ -190,6 +190,7 @@ Publish `deck-animated` and sign in as its owner.
 3. Turn on "Opened by me", then "New since I read": each narrows the list, and a reload keeps them. With both on and nothing left, "Clear filters" brings everything back.
 4. In the Firestore emulator's request log, the visit made one query on the `viewers` collection group, filtered to the reader's uid. A read of someone else's rows the same way is refused.
 5. Shared with me, in the rail, lists the documents the owner shared with the reviewer, each with its folder; Everything is at `/everything`, and a document's trail leads there.
+6. Cmd-click a document you have not read, so it opens in a background tab, wait a few seconds and reload Recent: it is still listed by its version. Switch to that tab for two seconds, come back and reload: it says "You read it just now". Leave the tab behind for two minutes and reload again: the time reads "2m ago" and does not catch up.
 
 What this cannot show: the collection-group index, which the emulator never enforces. After a deploy, confirm it is READY, and until it is, that Recent says it is showing new versions only rather than an error (ADR 0027).
 
