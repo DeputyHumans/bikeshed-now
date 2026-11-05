@@ -51,6 +51,51 @@ test('spoken words exclude hidden, CSS-hidden and aria-hidden descendants but re
   assert.notEqual(await spokenText(u.page.locator('#words')), 'Replace old with new', 'negative: hidden spoken words are not counted');
 });
 
+test('two controls in one layer may not overlap; a floating layer may cover the page, and a control may hold another', async () => {
+  await u.page.setContent(html('<div style="display:flex;width:300px"><a href="#" style="width:120px;flex:none">Home</a><a href="#" style="width:60px;margin-left:-40px;flex:none">Docs</a></div>'));
+  const hit = (await inspectUi(u.page)).issues.overlap;
+  assert.equal(hit.length, 1, 'negative: a wordmark over the link beside it');
+  await u.page.setContent(html('<div style="position:relative"><button>Page</button><div style="position:absolute;top:0;left:0"><button>Menu item</button></div></div><summary><a href="#">Inside</a></summary>'));
+  assert.deepEqual((await inspectUi(u.page)).issues.overlap, []);
+  // A field scrolled out of a dialog's body is not under the dialog's footer.
+  await u.page.setContent(html('<div style="height:60px;overflow:auto"><input aria-label="Body field" style="display:block;margin-top:50px;height:44px"></div><button style="display:block">Footer</button>'));
+  assert.deepEqual((await inspectUi(u.page)).issues.overlap, []);
+});
+
+test('a control past the screen or cut by a box is clipped; one inside a scroller is not', async () => {
+  await u.page.setContent(html('<div style="width:600px"><button style="margin-left:380px">Sign out</button></div>'));
+  assert.equal((await inspectUi(u.page)).issues.clipped[0]?.by, 'the viewport', 'negative: an action off the edge of the screen');
+  await u.page.setContent(html('<div style="width:100px;height:60px;overflow:hidden"><button style="margin-left:80px">Cut</button></div>'));
+  assert.ok((await inspectUi(u.page)).issues.clipped[0]?.by.startsWith('div'), 'negative: an action cut by its box');
+  await u.page.setContent(html('<div style="width:100px;overflow:auto"><button style="margin-left:300px">Scrolled</button></div><button>Fine</button>'));
+  assert.deepEqual((await inspectUi(u.page)).issues.clipped, []);
+});
+
+test('an icon flexed below its declared size is caught, at its declared size it is not', async () => {
+  const svg = '<svg width="22" height="22" viewBox="0 0 22 22"><rect width="22" height="22"/></svg>';
+  await u.page.setContent(html(`<a href="#" style="display:flex;width:44px;height:44px;overflow:visible">${svg.replace("<svg ", "<svg style=\"max-width:100%\" ")}<span style="flex:none;width:60px">bikeshed</span></a>`));
+  assert.equal((await inspectUi(u.page)).issues.mark[0]?.declared, 22, 'negative: the logo flexed away');
+  await u.page.setContent(html(`<a href="#" style="display:flex;width:144px;height:44px">${svg}<span style="flex:none;width:60px">bikeshed</span></a>`));
+  assert.deepEqual((await inspectUi(u.page)).issues.mark, []);
+});
+
+test('on touch, a text field or select below 16px is caught; a checkbox and a 16px field are not', async () => {
+  await u.page.setContent(html('<input aria-label="Small" style="font-size:13.76px"><textarea aria-label="Note" style="font-size:15px"></textarea><select aria-label="Mode" style="font-size:12px"><option>View</option></select>'));
+  assert.equal((await inspectUi(u.page)).issues.inputFont.length, 3, 'negative: iOS would zoom on each');
+  await u.page.setContent(html('<input aria-label="Big" style="font-size:16px"><label><input type="checkbox" style="font-size:10px">Check</label>'));
+  assert.deepEqual((await inspectUi(u.page)).issues.inputFont, []);
+});
+
+test('words cut by their box need an ellipsis, and a flex box cannot draw one', async () => {
+  const box = 'width:40px;overflow:hidden;white-space:nowrap';
+  await u.page.setContent(html(`<p style="${box}">Everything</p>`));
+  assert.equal((await inspectUi(u.page)).issues.cutText.length, 1, 'negative: cut with no ellipsis');
+  await u.page.setContent(html(`<p style="${box};text-overflow:ellipsis;display:inline-flex">Everything</p>`));
+  assert.equal((await inspectUi(u.page)).issues.cutText.length, 1, 'negative: an ellipsis a flex box never draws');
+  await u.page.setContent(html(`<p style="${box};text-overflow:ellipsis">Everything</p><p style="width:300px;overflow:hidden">Fits</p>`));
+  assert.deepEqual((await inspectUi(u.page)).issues.cutText, []);
+});
+
 test('nested scrollports, fixed overlays and non-button targets have independent negative controls', async () => {
   await u.page.setContent(html('<div style="width:100px;overflow:auto"><div style="width:600px">Wide content</div></div><aside style="position:fixed;left:350px;width:100px">Overlay</aside><a href="#">Link</a><select aria-label="Mode"><option>View</option></select><label style="display:inline-block;width:80px;height:44px"><input type="checkbox">Check</label>', 'a,select{min-width:0;min-height:0}'));
   const { issues } = await inspectUi(u.page);

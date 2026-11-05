@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Inspect app UI contrast, names, target geometry and focus paint in real Chrome, without touching authored frames (SPEC §7, §10).
+// Inspect app UI contrast, names, target geometry, phone layout and focus paint in real Chrome, without touching authored frames (SPEC §7, §10).
 
 /** Interactive targets, including native controls whose label can supply the hit area. */
 export const TARGET_SELECTOR = 'button, [role="button"], [role="menuitem"], [role="tab"], [role="switch"], a[href], input:not([type="hidden"]), select, textarea, summary';
 
 /** Runs in the main document only. No traversal into the author's iframe. */
 export function inspectUiInPage({ tap = 44 } = {}) {
-  const issues = { contrast: [], names: [], focusPaint: [], small: [], horizontal: [] };
+  const issues = { contrast: [], names: [], focusPaint: [], small: [], horizontal: [], overlap: [], clipped: [], mark: [], inputFont: [], cutText: [] };
   const checked = { text: 0, targets: 0 };
   const modal = [...document.querySelectorAll('[aria-modal="true"]')].at(-1);
   const scope = modal ?? document.body;
@@ -103,6 +103,88 @@ export function inspectUiInPage({ tap = 44 } = {}) {
     const r = hit.getBoundingClientRect();
     checked.targets += 1;
     if (r.width < tap - 0.5 || r.height < tap - 0.5) issues.small.push({ element: label(el), width: r.width, height: r.height, hitArea: label(hit) });
+  }
+
+  // --- Phone layout. Each of these has shipped: a wordmark over the links beside
+  // it, an action off the edge of the screen, a logo flexed to zero width, the
+  // zoom iOS applies to a small input, and a word cut with no ellipsis.
+  const vw = document.documentElement.clientWidth;
+  // A control floating in its own layer (a menu, a drawer, the consent card) may
+  // cover the page: that is what a layer is for. Two controls in ONE layer may not.
+  const layerOf = (el) => {
+    for (let p = el; p; p = p.parentElement) {
+      if (['fixed', 'absolute', 'sticky'].includes(getComputedStyle(p).position)) return p;
+    }
+    return null;
+  };
+  // What can be seen of a control: a field scrolled out of a dialog's body is not
+  // under the dialog's footer, however its box reads.
+  const seenBox = (el) => {
+    const r = el.getBoundingClientRect();
+    const box = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    for (let p = el; p.parentElement && getComputedStyle(p).position !== 'fixed'; p = p.parentElement) {
+      const cs = getComputedStyle(p.parentElement);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const c = p.parentElement.getBoundingClientRect();
+      box.left = Math.max(box.left, c.left);
+      box.right = Math.min(box.right, c.right);
+      box.top = Math.max(box.top, c.top);
+      box.bottom = Math.min(box.bottom, c.bottom);
+    }
+    return box;
+  };
+  const targets = [...scope.querySelectorAll(selector)].filter((el) => !hidden(el) && !(el.matches('.skip-link') && !el.matches(':focus')));
+  const boxes = targets.map((el) => ({ el, r: el.getBoundingClientRect(), seen: seenBox(el), layer: layerOf(el) }));
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const a = boxes[i];
+      const b = boxes[j];
+      if (a.layer !== b.layer || a.el.contains(b.el) || b.el.contains(a.el)) continue;
+      // A link running on in a sentence: its box spans lines it does not fill.
+      if ([a.el, b.el].some((el) => el.matches('a') && el.closest('p, .legal li, .field-hint, .caption'))) continue;
+      const w = Math.min(a.seen.right, b.seen.right) - Math.max(a.seen.left, b.seen.left);
+      const h = Math.min(a.seen.bottom, b.seen.bottom) - Math.max(a.seen.top, b.seen.top);
+      if (w > 1 && h > 1) issues.overlap.push({ a: label(a.el), b: label(b.el), width: Math.round(w), height: Math.round(h) });
+    }
+  }
+  for (const { el, r } of boxes) {
+    let scrolls = false;
+    let cut = null;
+    for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (['auto', 'scroll'].includes(cs.overflowX) || ['auto', 'scroll'].includes(cs.overflowY)) { scrolls = true; break; }
+      if (['hidden', 'clip'].includes(cs.overflowX) || ['hidden', 'clip'].includes(cs.overflowY)) {
+        const c = p.getBoundingClientRect();
+        if (r.left < c.left - 1 || r.right > c.right + 1 || r.top < c.top - 1 || r.bottom > c.bottom + 1) { cut = label(p); break; }
+      }
+    }
+    if (cut) issues.clipped.push({ element: label(el), by: cut, left: Math.round(r.left), right: Math.round(r.right) });
+    else if (!scrolls && (r.left < -1 || r.right > vw + 1)) issues.clipped.push({ element: label(el), by: 'the viewport', left: Math.round(r.left), right: Math.round(r.right), viewport: vw });
+  }
+  for (const svg of scope.querySelectorAll('svg[width]')) {
+    const declared = parseFloat(svg.getAttribute('width'));
+    // Asked of its parent: hidden() counts a zero-width box as hidden, and a logo
+    // flexed to zero width is the very thing this looks for.
+    if (!Number.isFinite(declared) || hidden(svg.parentElement, false)) continue;
+    const r = svg.getBoundingClientRect();
+    if (r.width < declared - 0.5) issues.mark.push({ element: label(svg), declared, width: r.width, in: label(svg.parentElement) });
+  }
+  // Below 16px iOS zooms the page when the field takes focus, and stays zoomed.
+  if (matchMedia('(pointer: coarse)').matches) {
+    const textEntry = 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea';
+    for (const el of scope.querySelectorAll(textEntry)) {
+      if (hidden(el)) continue;
+      const size = parseFloat(getComputedStyle(el).fontSize);
+      if (size < 16 - 0.01) issues.inputFont.push({ element: label(el), fontSize: size });
+    }
+  }
+  // Words that overflow a box that clips them read as a typo unless an ellipsis
+  // says so, and a flex or grid box never draws one, whatever text-overflow says.
+  for (const el of [scope, ...scope.querySelectorAll('*')]) {
+    if (hidden(el) || !['hidden', 'clip'].includes(getComputedStyle(el).overflowX)) continue;
+    if (![...el.childNodes].some((n) => n.nodeType === 3 && n.data.trim()) || el.scrollWidth <= el.clientWidth + 1) continue;
+    const cs = getComputedStyle(el);
+    if (cs.textOverflow !== 'ellipsis' || /flex|grid/.test(cs.display)) issues.cutText.push({ element: label(el), text: el.textContent.trim().slice(0, 40), display: cs.display, textOverflow: cs.textOverflow });
   }
   return { issues, checked };
 }
