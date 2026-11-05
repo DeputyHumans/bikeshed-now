@@ -10,6 +10,11 @@
 # Every job is credential-free. Nothing here can reach a real backend:
 # `demo-bikeshed` is an emulator-only project id.
 #
+# The build and rules jobs each end by writing a summary on the run's page
+# (tools/ci-summary.mjs). It reports and never gates, so nothing below that point
+# can fail a job. A step that runs a command needs an `id`, and
+# tools/ci-summary.test.mjs fails until the summary knows it.
+#
 # A push to main or develop runs this through deploy.yml, which calls it and
 # deploys only once all three jobs pass. That is why there is no `push` trigger
 # here: one would run the same checks twice for every push.
@@ -55,6 +60,7 @@ jobs:
       # zero dependencies, so there is nothing to install and no lockfile to
       # commit.
       - name: Install
+        id: install
         run: |
           npm ci
           npm --prefix app ci
@@ -64,15 +70,18 @@ jobs:
       # identity policy that was not re-rendered has to fail before anything
       # else runs — otherwise the tests pass against rules nobody deployed.
       - name: Generated artifacts are up to date
+        id: generated
         run: |
           npm run check:policy
           npm run check:agents
           git diff --exit-code
 
       - name: Typecheck the app
+        id: typecheck
         run: npm --prefix app run typecheck
 
       - name: Build
+        id: build
         run: npm run build
 
       # The build writes app/dist, which is gitignored — but a build that
@@ -80,9 +89,16 @@ jobs:
       # tree, and check-secrets matches by shape, so a custom domain would not
       # be caught. Cheap, and it covers every future build step too.
       - name: The build changed no tracked file
+        id: clean-build
         run: git diff --exit-code
 
       - name: Tools tests
+        id: tools-tests
+        env:
+          BIKESHED_NODE_TEST_FLAGS: >-
+            --test-reporter=spec --test-reporter-destination=stdout
+            --test-reporter=${{ github.workspace }}/tools/ci-test-reporter.mjs
+            --test-reporter-destination=${{ runner.temp }}/ci-report-tools.jsonl
         run: npm run test:tools
 
       # The unit tests prove the substitution; only a real build proves the
@@ -90,6 +106,7 @@ jobs:
       # runs AFTER Vite copies app/public into app/dist. The Build step above
       # is the unconfigured path — this is the configured one.
       - name: The served agent instructions carry this build's origin
+        id: stamped-build
         run: |
           # The Build step's output, unconfigured: a deployment with no custom
           # domain serves the placeholder on purpose, never the repo's address.
@@ -113,19 +130,40 @@ jobs:
           fi
           git diff --exit-code
 
+      # Both include patterns are needed, and either alone measures nothing:
+      # node:test filters the compiled file, then the source it maps back to.
       - name: Functions tests
+        id: functions-tests
+        env:
+          BIKESHED_NODE_TEST_FLAGS: >-
+            --test-reporter=spec --test-reporter-destination=stdout
+            --test-reporter=${{ github.workspace }}/tools/ci-test-reporter.mjs
+            --test-reporter-destination=${{ runner.temp }}/ci-report-functions.jsonl
+            --experimental-test-coverage --enable-source-maps
+            --test-coverage-include=lib/** --test-coverage-include=src/**
         run: npm --prefix functions test
 
       - name: App tests and coverage
+        id: app-tests
+        env:
+          BIKESHED_CI_REPORT_DIR: ${{ runner.temp }}
         run: npm --prefix app run coverage
 
       - name: CLI tests
-        run: npm --prefix cli test
+        id: cli-tests
+        env:
+          BIKESHED_NODE_TEST_FLAGS: >-
+            --test-reporter=spec --test-reporter-destination=stdout
+            --test-reporter=${{ github.workspace }}/tools/ci-test-reporter.mjs
+            --test-reporter-destination=${{ runner.temp }}/ci-report-cli.jsonl
+            --experimental-test-coverage --test-coverage-include=src/**
+        run: npm run test:cli
 
       # The dry runs are the assertion that firebase-admin is initialized
       # lazily. If an import ever moves to module scope this fails here, rather
       # than the day an operator tries to preview a teardown without gcloud.
       - name: Operator scripts run without credentials
+        id: dry-runs
         run: |
           node scripts/setup.mjs --account you@example.com --project demo-bikeshed --dry-run
           BIKESHED_PUBLIC_ORIGIN=https://example.com node scripts/setup.mjs --account you@example.com --project demo-bikeshed --media-bucket demo-bikeshed-media --dry-run
@@ -140,6 +178,48 @@ jobs:
             printf 'dry-run fixture\n' > "$MEDIA_FIXTURE/$name"
           done
           node scripts/media.mjs publish --directory "$MEDIA_FIXTURE" --revision v1 --media-bucket demo-bikeshed-media --project demo-bikeshed --dry-run
+
+      # Everything below reports. None of it can fail the job, so a broken
+      # report never holds back a deploy. The baseline is a cache entry rather
+      # than an artifact because reading one needs no permission beyond
+      # `contents: read`, and it is saved only from a green run on main, so
+      # neither a red run nor a fork's pull request can become what later runs
+      # compare with.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: coverage-artifact
+        if: ${{ !cancelled() && steps.app-tests.outcome != 'skipped' }}
+        continue-on-error: true
+        with:
+          name: app-coverage
+          path: app/coverage
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/ci-baseline
+          key: ci-summary-build-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ci-summary-build-
+
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          BIKESHED_CI_REPORT_DIR: ${{ runner.temp }}
+          BIKESHED_CI_BASELINE: ${{ runner.temp }}/ci-baseline/snapshot.json
+          BIKESHED_CI_STEPS: ${{ toJSON(steps) }}
+          BIKESHED_CI_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BIKESHED_CI_COVERAGE_URL: ${{ steps.coverage-artifact.outputs.artifact-url }}
+        run: node tools/ci-summary.mjs --job build
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/ci-baseline
+          key: ci-summary-build-${{ github.run_id }}-${{ github.run_attempt }}
 
   rules:
     name: security rules
@@ -160,15 +240,49 @@ jobs:
           java-version: 21
 
       - name: Install
+        id: install
         run: npm ci
 
       # The version deploy.yml deploys with, so a CLI release that changes the
       # emulators arrives as a reviewed diff here too.
       - name: Install the Firebase CLI
+        id: firebase-cli
         run: npm install --no-save firebase-tools@15.25.1
 
       - name: Rules tests against the emulators
+        id: rules-tests
+        env:
+          BIKESHED_NODE_TEST_FLAGS: >-
+            --test-reporter=spec --test-reporter-destination=stdout
+            --test-reporter=${{ github.workspace }}/tools/ci-test-reporter.mjs
+            --test-reporter-destination=${{ runner.temp }}/ci-report-rules.jsonl
         run: npx firebase emulators:exec --only firestore,database --project demo-bikeshed "npm run test:rules"
+
+      # Reporting only, as at the end of the build job.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/ci-baseline
+          key: ci-summary-rules-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ci-summary-rules-
+
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          BIKESHED_CI_REPORT_DIR: ${{ runner.temp }}
+          BIKESHED_CI_BASELINE: ${{ runner.temp }}/ci-baseline/snapshot.json
+          BIKESHED_CI_STEPS: ${{ toJSON(steps) }}
+          BIKESHED_CI_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node tools/ci-summary.mjs --job rules
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/ci-baseline
+          key: ci-summary-rules-${{ github.run_id }}-${{ github.run_attempt }}
 
   guards:
     name: secrets, headers, content, licences

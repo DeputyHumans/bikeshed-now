@@ -3,7 +3,7 @@
 
 // `defineConfig` comes from vitest/config, not vite, so the `test` block below
 // type-checks. Vitest is a dev dependency and this file never ships.
-import { defineConfig } from "vitest/config";
+import { defineConfig, type ViteUserConfig } from "vitest/config";
 import type { ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
@@ -42,6 +42,25 @@ const FUNCTIONS_ORIGIN =
 const { version: APP_VERSION } = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ) as { version: string };
+
+/**
+ * Set by CI, where tools/ci-summary.mjs writes the job summary. Vitest's own
+ * summary would sit above that one saying less, so it is off, and its
+ * annotations on the failing lines stay.
+ */
+const CI_REPORT_DIR = process.env.BIKESHED_CI_REPORT_DIR;
+
+/** Absent rather than undefined when not in CI: Vitest crashes on `reporters: undefined`. */
+const CI_REPORTING: NonNullable<ViteUserConfig["test"]> = CI_REPORT_DIR
+  ? {
+      includeTaskLocation: true,
+      reporters: [
+        "default",
+        ["github-actions", { jobSummary: { enabled: false } }],
+        ["json", { outputFile: `${CI_REPORT_DIR}/ci-report-app.json` }],
+      ],
+    }
+  : {};
 
 function devProxy(): Record<string, ProxyOptions> {
   const target: ProxyOptions = { target: FUNCTIONS_ORIGIN, changeOrigin: true };
@@ -89,6 +108,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    ...CI_REPORTING,
 
     /**
      * Pinned, because Vitest loads app/.env.local and that file is gitignored.
@@ -118,6 +138,10 @@ export default defineConfig({
     },
     coverage: {
       provider: "v8",
+      // The defaults, plus the totals tools/ci-summary.mjs reads. A red run is
+      // the one that most needs its coverage, so it still gets reported.
+      reporter: ["text", "html", "clover", "json", "json-summary"],
+      reportOnFailure: true,
       include: [
         "src/annotation/**",
         "src/export/**",
@@ -150,8 +174,11 @@ export default defineConfig({
         "src/brand/Wordmark.tsx",
       ],
       // Set just under the current figures, so an ordinary change does not
-      // fail the build, and a real drop does.
-      thresholds: { lines: 90, functions: 90, statements: 90, branches: 80 },
+      // fail the build, and a real drop does. In a file of their own because
+      // the job summary shows the margin to them.
+      thresholds: JSON.parse(
+        readFileSync(new URL("./coverage-thresholds.json", import.meta.url), "utf8"),
+      ) as { lines: number; functions: number; statements: number; branches: number },
     },
   },
 });

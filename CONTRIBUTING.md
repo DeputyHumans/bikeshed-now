@@ -47,6 +47,12 @@ The table above proves the code is self-consistent. It does not prove the produc
 
 Most of that walkthrough also runs by itself, as row 14. `npm run test:e2e` builds a copy of the product from the tree, starts it on its own ports with its own emulators and mail catcher, and drives it with real browsers, MCP and the CLI. It is opt-in because a run takes minutes and gigabytes, and needs Java, Mailpit and system Chrome. Run it when a change touches what the walkthrough covers: the editor and live editing, sharing, publishing and versions, MCP, the CLI, OAuth or email. Then run the specs for that area against a kept stack. The verification doc's **Automated** section maps each walkthrough step to its specs, and [`e2e/README.md`](e2e/README.md) is the guide, including what the suite does not yet prove.
 
+### What CI reports
+
+The `typecheck, build, test` and `security rules` jobs each end by writing a summary on the run's page, drawn by `tools/ci-summary.mjs`: every step's result, each suite's counts, failures with links to their source, coverage, the slowest tests, anything skipped, the bundle's size, and what changed since the last green run on `main`. It reports and never gates, so a bug in it cannot fail a job.
+
+The App's coverage thresholds live in `app/coverage-thresholds.json`, which both Vitest and the summary read. Functions and CLI coverage is measured for the report, with no threshold. CI passes its reporters to the `node:test` suites through `BIKESHED_NODE_TEST_FLAGS`, because a flag placed after the file list is ignored. Unset, as it is locally, that variable changes nothing.
+
 ## House rules
 
 These are the ones that actually get enforced in review.
