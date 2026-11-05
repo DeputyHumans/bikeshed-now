@@ -1,0 +1,11 @@
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -2166,7 +2166,7 @@
+     // at, which must not lift a document in Recent or clear "New since you read
+     // it". Measured against what was claimed, not `delta`, because a session past
+     // its ceiling adds nothing and its reader is still there (SPEC §4).
+-    const read = isNewSession || isNewViewer || rawMs > storedMs;
++    const read = true;
+ 
+     tx.set(
+       sessionRef,

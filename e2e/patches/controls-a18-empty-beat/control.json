@@ -1,0 +1,13 @@
+{
+  "oracle": "a beat reporting no new time moves no read time (A18.6)",
+  "what": "recordView moves lastViewedAt on every beat (functions/src/index.ts), so a tab on an older client lifts its document each minute",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.6 a tab in the background is not reading: opened there it counts nothing, brought forward it is a read, hidden again it sends nothing, and an empty beat moves no read time",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "an empty beat moves no viewers/\\{uid\\}\\.lastViewedAt"
+  }
+}

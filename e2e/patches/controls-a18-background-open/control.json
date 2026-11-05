@@ -1,0 +1,13 @@
+{
+  "oracle": "a tab opened in the background and never shown counts nothing (A18.6)",
+  "what": "the clock's grace period runs whether or not the tab is on screen (app/src/stats.ts), so a background tab registers a view and a read",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.6 a tab in the background is not reading: opened there it counts nothing, brought forward it is a read, hidden again it sends nothing, and an empty beat moves no read time",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a tab never shown opens no session"
+  }
+}

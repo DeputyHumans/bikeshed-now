@@ -1,0 +1,13 @@
+{
+  "oracle": "a hidden tab sends no beat (A18.6)",
+  "what": "a registered tab keeps beating each minute while hidden (app/src/stats.ts), which is what lifted background tabs in Recent",
+  "target": {
+    "spec": "e2e/specs/functional/a18-stats.spec.mjs",
+    "case": "A18.6 a tab in the background is not reading: opened there it counts nothing, brought forward it is a read, hidden again it sends nothing, and an empty beat moves no read time",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a hidden tab sends no beat"
+  }
+}

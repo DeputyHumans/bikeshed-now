@@ -39,10 +39,16 @@
  *         it takes 96 real beats, seconds each on a shared emulator, so the
  *         Admin SDK sets a product-made session's stored time to 8 h − 2 min
  *         and the next beat must add only the 2 min left
+ *   A18.6 a tab in the background (told so, see tellVisibility): opened there
+ *         it counts nothing, brought forward it is a read and Recent says so,
+ *         hidden again it sends nothing for a whole heartbeat, and the empty
+ *         beat an older client still sends moves no read time
  *
  * The only waits on time are the product's: a session registers
- * OPEN_DELAY_MS (2 s) after the document opens (app/src/stats.ts), which is
+ * OPEN_DELAY_MS (2 s) after a tab comes on screen (app/src/stats.ts), which is
  * waited on as the condition it produces (stats.views moving), never slept.
+ * A18.6 is the exception, because what it shows is an absence: it sleeps through
+ * three open delays and through one BEAT_MS.
  *
  * When the stack itself did not answer (the Hosting emulator's own 504 at its
  * 60 s cut-off, a client's deadline, the Admin SDK's), nothing was measured
@@ -55,6 +61,7 @@
 import assert from "node:assert/strict";
 import { after } from "node:test";
 import { randomBytes } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { answered, currentTarget, precondition, scenario, stackDidNotAnswer } from "../../lib/test.mjs";
 import { treeConstant } from "../../lib/target.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
@@ -145,6 +152,8 @@ const span = (ms) => (ms % HOUR === 0 ? `${ms / HOUR} h` : `${ms / 60_000} min`)
 
 /** app/src/stats.ts OPEN_DELAY_MS: how long after the open a session registers. */
 const OPEN_DELAY_MS = target ? Number(treeConstant(target, "app/src/stats.ts", "OPEN_DELAY_MS")) : 2_000;
+/** The clock's heartbeat (app/src/stats.ts). */
+const BEAT_MS = target ? Number(treeConstant(target, "app/src/stats.ts", "BEAT_MS")) : 60_000;
 
 /** The hint StatsPanel shows anyone who is not the owner or an editor. */
 const DETAIL_HINT = "Only the owner and its editors can see who read this document.";
@@ -776,4 +785,103 @@ scenario("A18.5 (session ceiling) a session's time stops at MAX_SESSION_MS (8 h)
   s = await statsOf(D.docId);
   assert.deepEqual(pick(s, ["views", "totalMs"]), { views: s0.views, totalMs: s0.totalMs + LEFT }, "stats did not move past the ceiling");
   assert.equal((await readDoc(target, `docs/${D.docId}/views/${sidX}`)).ms, MAX_SESSION_MS, `the session record holds ${span(MAX_SESSION_MS)}`);
+});
+
+// --- A18.6 --------------------------------------------------------------------
+
+const VISIBILITY_KEY = "e2e-tab-visibility";
+
+/**
+ * Tell a tab it is hidden or on screen, as a browser tells it. A truly hidden
+ * tab cannot be had here: Playwright's own CDP session holds focus emulation on
+ * every page, which keeps visibilityState "visible" whatever another session
+ * asks, with the tab behind another, the window minimized, or the tab created in
+ * the background (measured in Chrome, headless and headed). So the page reads
+ * the state from here and hears the event; the clock, the server and Recent
+ * behind them are the real ones. Install before the document loads.
+ */
+async function tellVisibility(u, initial) {
+  await u.page.addInitScript(([key, state]) => {
+    const name = Symbol.for(key);
+    window[name] = state;
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => window[name] });
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => window[name] === "hidden" });
+  }, [VISIBILITY_KEY, initial]);
+  const set = (state) => u.page.evaluate(([key, value]) => {
+    window[Symbol.for(key)] = value;
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, [VISIBILITY_KEY, state]);
+  return { hide: () => set("hidden"), show: () => set("visible") };
+}
+
+/** What Recent says about one document, on a fresh visit (its reads are fetched per visit). */
+async function recentWhy(u, docId) {
+  await u.goto("/", { timeout: PAGE_MS });
+  await u.page.getByRole("heading", { level: 1, name: "Recent" }).waitFor({ timeout: PAGE_MS });
+  return eventually(() => u.page.$$eval('[role="table"] [role="rowgroup"]:not(.doc-table-head) [role="row"]', (rows, id) => {
+    const row = rows.find((r) => decodeURIComponent((r.querySelector("a.doc-row-title")?.getAttribute("href") ?? "").slice(3)) === id);
+    return row?.querySelector('[data-col="why"]')?.textContent?.trim() ?? false;
+  }, docId), { timeout: PAGE_MS, interval: 250, message: `Recent lists ${docId}` });
+}
+
+scenario("A18.6 a tab in the background is not reading: opened there it counts nothing, brought forward it is a read, hidden again it sends nothing, and an empty beat moves no read time", { tiers: ["local"], timeoutMs: 420_000, inconclusiveOnPageStall: true }, async (ctx) => {
+  ctx.step("cast an owner and a viewer; the owner shares a page with the viewer");
+  const [owner, viewer] = await castSessions(["owner", "viewer"]);
+  const D = await publishPage(owner, "background");
+  await share(target, { owner, doc: D.docId, account: viewer.account, role: "viewer" });
+  const rowPath = `docs/${D.docId}/viewers/${viewer.uid}`;
+
+  ctx.step("the viewer signs in, and opens the document in a second tab that is told it is behind the first");
+  const front = await ctx.users.user({ name: "viewer" });
+  await front.signInUi(viewer.account.email, viewer.account.password, { timeout: PAGE_MS });
+  const back = await front.newTab({ name: "background" });
+  const tab = await tellVisibility(back, "hidden");
+  await back.open(D.docId, { timeout: PAGE_MS });
+
+  ctx.step(`nothing is counted through ${OPEN_DELAY_MS * 3} ms, three open delays`);
+  await sleep(OPEN_DELAY_MS * 3);
+  assert.deepEqual((await readCollection(target, `docs/${D.docId}/views`)).map((r) => r.id), [], "a tab never shown opens no session");
+  assert.equal((await statsOf(D.docId)).views ?? 0, 0, "a tab never shown is no view");
+  assert.equal(await readDoc(target, rowPath), null, "a tab never shown makes no read row");
+  const unread = await recentWhy(front, D.docId);
+  assert.ok(unread.startsWith("New version"), `Recent lists it by its version, not as read: ${unread}`);
+
+  ctx.step("the reader brings the tab forward: a read, and Recent says so");
+  await tab.show();
+  await statsWhen(D.docId, (s) => s.views === 1, "the tab brought forward registered a view");
+  const [session] = await readCollection(target, `docs/${D.docId}/views`);
+  assert.ok(stamp((await readDoc(target, rowPath))?.lastViewedAt), "the read has a time");
+  const read = await recentWhy(front, D.docId);
+  assert.ok(read.startsWith("You read it"), `Recent says it was read: ${read}`);
+
+  ctx.step("hidden again: the final beat lands, then a whole heartbeat passes with nothing");
+  await tab.hide();
+  const settled = await eventually(async () => {
+    const s = await readDoc(target, `docs/${D.docId}/views/${session.id}`);
+    return s?.ms > 0 ? s : false;
+  }, { timeout: SETTLE_MS, interval: 250, stableSamples: 3, message: "the final beat reported the time on screen" });
+  const before = {
+    ms: settled.ms,
+    beat: stamp(settled.lastBeatAt),
+    row: stamp((await readDoc(target, rowPath)).lastViewedAt),
+    stats: stamp((await statsOf(D.docId)).lastViewedAt),
+  };
+  await sleep(BEAT_MS + 5_000);
+  const quiet = await readDoc(target, `docs/${D.docId}/views/${session.id}`);
+  assert.equal(stamp(quiet.lastBeatAt), before.beat, "a hidden tab sends no beat");
+  assert.equal(quiet.ms, before.ms, "a hidden tab accrues no time");
+
+  ctx.step("the empty beat a client from before this rule still sends: answered, written to the session, and no read");
+  const empty = await view(viewer.http, beatBody(D.docId, session.id, before.ms));
+  assert.deepEqual([empty.status, empty.json], [200, { ms: before.ms }], "the beat is answered as before");
+  assert.notEqual(stamp((await readDoc(target, `docs/${D.docId}/views/${session.id}`)).lastBeatAt), before.beat, "the beat reached the session");
+  assert.equal(stamp((await readDoc(target, rowPath)).lastViewedAt), before.row, "an empty beat moves no viewers/{uid}.lastViewedAt");
+  assert.equal(stamp((await statsOf(D.docId)).lastViewedAt), before.stats, "an empty beat moves no stats.lastViewedAt");
+
+  ctx.step("brought forward once more: the read moves, on the same session");
+  await tab.show();
+  await eventually(async () => stamp((await readDoc(target, rowPath))?.lastViewedAt) !== before.row, { timeout: SETTLE_MS, interval: 250, message: "coming back to the tab moved the read" });
+  const end = await statsOf(D.docId);
+  assert.equal(end.views, 1, "the same session, so still one view");
+  assert.notEqual(stamp(end.lastViewedAt), before.stats, "stats.lastViewedAt moved with it");
 });

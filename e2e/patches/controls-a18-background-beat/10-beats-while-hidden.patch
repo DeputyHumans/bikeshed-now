@@ -1,0 +1,10 @@
+--- a/app/src/stats.ts
++++ b/app/src/stats.ts
+@@ -164,6 +164,7 @@
+   if (isVisible()) enter();
+ 
+   const timer = window.setInterval(() => {
++    if (registered && !looking) beat(docId, versionId, sessionId, accruedMs, false, k);
+     if (!looking) return;
+     sync();
+     report(false);
