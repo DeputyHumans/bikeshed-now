@@ -221,6 +221,22 @@ describe("useChromeAutoHide", () => {
     expect(result.current).toBe(false);
   });
 
+  it("counts the first small scroll up after the frame has grown, however the engine reports it", () => {
+    // Sampled, a frame that had just grown went unseen until the next scroll, which
+    // was then spent noticing it: a nudge up did not bring the bars back.
+    const { doc, page } = deafFrame();
+    const { result } = mount({ doc });
+    settle();
+    page.y = 900;
+    sample();
+    expect(result.current).toBe(true);
+    page.viewH = 705;
+    sample();
+    page.y = 870;
+    sample();
+    expect(result.current).toBe(false);
+  });
+
   it("takes the first second's scrolling for the page's own: a restore is not a reader", () => {
     const { doc, page } = deafFrame();
     const { result } = mount({ doc });

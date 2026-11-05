@@ -2,7 +2,7 @@
 // On a phone, the bars above a document get out of the way while it is being read (SPEC §6, §7).
 
 import { useEffect, useRef, useState } from "react";
-import { watchScroll } from "./frameWatch";
+import { watchResize, watchScroll } from "./frameWatch";
 
 /**
  * Two rows of controls are an eighth of a phone's screen, and a reader scrolling
@@ -146,9 +146,14 @@ export function useChromeAutoHide({
       setHidden(state.hidden);
     };
     step();
-    const stop = watchScroll(doc, step);
+    const stopScroll = watchScroll(doc, step);
+    // Its own size too. Where the scroll is sampled, a frame that has just grown goes
+    // unseen until the next scroll, which would then be spent noticing, not counted:
+    // a small nudge up would not bring the bars back.
+    const stopResize = watchResize(doc, step);
     return () => {
-      stop();
+      stopScroll();
+      stopResize();
       setHidden(false);
     };
   }, [enabled, doc, epoch, revealKey]);
