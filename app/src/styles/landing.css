@@ -238,6 +238,18 @@
   min-height: var(--tap);
 }
 
+/* The one link that leaves for another site, in the plain black that site's own
+   mark is drawn in. An accent-coloured logo reads as a logo someone recoloured. */
+.landing-footer-source {
+  color: var(--color-ink);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.landing-footer-source:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 860px) {
   .landing-hero {
     grid-template-columns: minmax(0, 1fr);

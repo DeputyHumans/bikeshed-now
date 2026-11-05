@@ -159,7 +159,7 @@ export function Landing() {
           <a href="/docs">Docs</a>
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>
-          <a href={REPOSITORY}><GitHubMark />GitHub</a>
+          <a className="landing-footer-source" href={REPOSITORY}><GitHubMark />GitHub</a>
         </p>
       </footer>
     </div>
