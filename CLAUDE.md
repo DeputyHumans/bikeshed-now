@@ -92,7 +92,7 @@ A fix, a feature, or **any** change that touches more than documentation is not 
 - **What moves, together.** `version` in `package.json`, `app/package.json` and `functions/package.json`, plus their three lockfiles. Running `npm version X.Y.Z --no-git-tag-version` in each directory changes both. Also move `SERVER_INFO` in `functions/src/mcp/server.ts`.
 - **The changelog.** The change's own commit adds its entry under `## Unreleased`, and the release commit renames that heading to `## X.Y.Z — YYYY-MM-DD`.
 - **The CLI versions on its own**, and only when `cli/` changed: bump `cli/package.json` and commit `chore(cli): release bikeshed-now X.Y.Z`.
-- **Tag the release commit** `vX.Y.Z` (`cli-vX.Y.Z` for the CLI). **Pushing `main` is deploying production**: `.github/workflows/deploy.yml` ships every push that passes CI, so ask for a push as you would for a deploy. `npm publish` stays a separate decision, also asked for.
+- **Tag the release commit** `vX.Y.Z` (`cli-vX.Y.Z` for the CLI). **Pushing `main` is deploying production**: `.github/workflows/deploy.yml` ships every push that passes CI, unless nothing production serves has changed since the last deploy (`tools/deploy-needed.mjs`). A push of documents can still ship code an earlier run left behind, so ask for any push as you would for a deploy. `npm publish` stays a separate decision, also asked for.
 
 ## Deployment facts stay out of the tree
 

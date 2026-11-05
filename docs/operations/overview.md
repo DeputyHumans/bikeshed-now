@@ -336,9 +336,11 @@ To roll back, rebuild with the previous immutable base URL, or clear the variabl
 
 ### Continuous deployment
 
-`.github/workflows/deploy.yml` deploys production on every push to `main` that passes all three CI jobs. A push to `develop` runs CI and stops there, until a staging project exists ([below](#staging-later)).
+`.github/workflows/deploy.yml` deploys production on every push to `main` that passes all three CI jobs and changes something production serves. A push to `develop` runs CI and stops there, until a staging project exists ([below](#staging-later)).
 
 **Pushing `main` is deploying.** Nothing asks for approval in between, and CI is the only gate. The repository's credential boundary is the OIDC subject below, not a GitHub setting. A GitHub environment would add an approval step on GitHub's side, but a job that names one presents the subject `repo:<owner>/<repo>:environment:<name>` instead of `…:ref:refs/heads/main`. Bind that subject to the deployer and operations service accounts before the workflow names the environment, and remove the `ref` binding only after a green deploy.
+
+**A push that changes nothing production serves stops after CI.** `tools/deploy-needed.mjs` compares the push with the last commit that deployed, and skips the deploy and its outcome report if every changed path is one production never serves: root Markdown, `docs/`, `skills/`, `content/`, `cli/`, `e2e/`, `rules-tests/` and the GitHub issue and pull request templates. CI still runs, because the secret scan and the guards that read the spec cover those files. The agent guide and the skills still reach production, as the copies under `app/public/`, which are not on that list. A path nobody has classified deploys, and so does any failure to decide. The comparison is with the last deploy rather than the previous push because a failed, paused or replaced run leaves code behind, and a documentation push on top of it must not strand that code. `gh workflow run deploy.yml --ref main` always deploys.
 
 The run logs are public in a public repository. Secrets are masked, and so is the direct Cloud Run host suffix the functions share: `firebase deploy` prints every HTTPS function's address, and only Hosting is meant to be the public face.
 

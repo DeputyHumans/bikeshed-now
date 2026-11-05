@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Deploying
+
+- **A push that changes nothing production serves no longer deploys.** CI still runs on it, because the secret scan and the guards that read the spec cover documents too, but the deploy and its outcome report are skipped. The comparison is with the last commit that deployed rather than the previous push, so code from a failed, paused or replaced run still ships with the next push. `gh workflow run deploy.yml --ref main` always deploys.
+
 ### Changed
 
 - **Markdown prose is no longer hard-wrapped.** Most documents here were wrapped at about 78 columns while newer text was not, so some files mixed the two. A paragraph or a list item is now one line in 57 documents and the copies generated from them, including `/llms.txt` and the served skills. No words changed, and each document renders as it did. `CONTRIBUTING.md` and `CLAUDE.md` state the rule. `docs/acf/` follows its upstream, and the Markdown test fixtures and `content/markdown-reference` stay wrapped because they exercise the join.
