@@ -423,7 +423,7 @@ function placementInPage(el) {
 }
 
 /** What the A24.1 walk measured, for A24.1b. */
-const walk = { surfaces: null, expected: 13 };
+const walk = { surfaces: null, expected: 14 };
 
 const phoneWalk = sharedMeasurement("A24.1 at 400×800 on a touch phone, 11 screens and 2 dialogs never scroll sideways, and each one's primary actions, once scrolled to, lie wholly inside the viewport, uncovered at their centre", {
   tiers: BOTH,
@@ -519,6 +519,9 @@ const phoneWalk = sharedMeasurement("A24.1 at 400×800 on a touch phone, 11 scre
 
     await openDoc(ctx, phone, deckId);
     await visit(phone, "deck", { ready: btn(phone, "Slides"), primary: [btn(phone, "Slides"), paneToggle(phone, "Comments"), btn(phone, "Present")] });
+    // The list starts closed on a phone, so it is opened to see that it leaves the toolbar uncovered.
+    await phone.page.getByRole("button", { name: "Slides", exact: true }).click();
+    await visit(phone, "deck, slide list open", { ready: css(phone, ".slide-rail", "the slide list"), primary: [btn(phone, "Slides"), paneToggle(phone, "Comments"), btn(phone, "Present")] });
   } catch (err) {
     stopped = err;
     ctx.step(`the walk stopped after ${surfaces.at(-1)?.name ?? "no surface"}: ${String(err?.message ?? err).split("\n")[0]}`);
