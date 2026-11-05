@@ -38,7 +38,8 @@ const OPTIONS: Option[] = [
   {
     value: "public",
     title: "Public",
-    describes: "Readable by anyone, indexed by search engines, and listed in the sitemap.",
+    describes:
+      "Readable by anyone and listed in the sitemap. Search engines may index it, and AI crawlers may read it or train on it.",
     icon: "globe",
   },
 ];
@@ -66,7 +67,7 @@ const FOLDER_OPTIONS: Option[] = [
     value: "public",
     title: "Public",
     describes:
-      "Everything in this folder and its subfolders can be read by anyone, is indexed by search engines, and is listed in the sitemap.",
+      "Everything in this folder and its subfolders can be read by anyone and is listed in the sitemap. Search engines may index it, and AI crawlers may read it or train on it.",
     icon: "globe",
   },
 ];

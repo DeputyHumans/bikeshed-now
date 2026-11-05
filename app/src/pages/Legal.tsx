@@ -19,7 +19,7 @@ import { readConsent, writeConsent } from "../consent";
  * most likely way for them to go stale is somebody adding a third party.
  */
 
-const UPDATED = "30 October 2026";
+const UPDATED = "4 November 2026";
 
 function Contact() {
   if (!LEGAL_CONTACT) {
@@ -102,8 +102,9 @@ export function Terms() {
       <h2>Documents you publish publicly</h2>
       <p>
         Making a document public or unlisted means anyone with the link can read
-        it without an account, and a public document may be indexed by search
-        engines. That is irreversible in the practical sense: once something has
+        it without an account. Search engines may index a public document, and AI
+        crawlers may read it, including crawlers that collect training data for AI
+        models. That is irreversible in the practical sense: once something has
         been read, copied or cached, making it private again does not unread it.
         Cached copies can be served for up to five minutes after you change it.
       </p>

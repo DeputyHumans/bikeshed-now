@@ -13,6 +13,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 ### Added
 
 - **`/robots.txt`, and the front page in the sitemap.** `/robots.txt` was answered with the app's HTML, so crawlers got no rules at all, and `/sitemap.xml` listed only documents. Now there is a real file, static so that a function being down cannot stop a site being crawled, with one group for every bot: everything public is open, and signed-in pages, earlier versions, downloads and one-time email links are asked to be left alone. The sitemap also lists `/`, `/terms` and `/privacy`.
+- **Authors are told that AI crawlers may read a public document, and may train on it.** With no working `robots.txt` every crawler was already allowed, and the terms and the Share dialog mentioned only search engines. Both now say so, as does the guide, and the terms are dated 4 November 2026.
 
 ### Fixed
 

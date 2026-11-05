@@ -967,7 +967,7 @@ Per-character attribution is the one worth naming twice: with the edit lock gone
 |---|---|---|---|
 | `private` | owner + members | no | `/d/{slug}` |
 | `unlisted` | anyone with the link | no: without `k`, indistinguishable from an absent id | `/d/{slug}?k={token}` |
-| `public` | anyone | indexed, in `sitemap.xml` | `/d/{slug}` |
+| `public` | anyone | indexed, in `sitemap.xml`, open to AI crawlers including training ones | `/d/{slug}` |
 
 **The private-bucket invariant is not weakened.** The bucket keeps uniform access and public-access-prevention; `contentProxy` stays the only path bytes take. "Public" means *the proxy will serve you without a cookie*.
 
