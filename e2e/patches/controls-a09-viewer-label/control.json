@@ -1,0 +1,13 @@
+{
+  "oracle": "A viewer is never told they are reading a draft",
+  "what": "a viewer's version chip says draft",
+  "target": {
+    "spec": "e2e/specs/functional/a09-editing.spec.mjs",
+    "case": "A9.5 with a draft saved, an editor reads it under the unpublished-edits banner and \"v1 · draft\"; a viewer reads v1 with neither",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "viewer's version label"
+  }
+}

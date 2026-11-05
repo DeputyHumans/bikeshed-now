@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -1109,7 +1109,7 @@
+           folderId={doc.meta?.folderId ?? null}
+           folders={folders}
+           signedIn={signedIn}
+-          versionLabel={draftOnScreen ? `${doc.currentVersion} · draft` : `${doc.currentVersion}${shownWords === undefined ? "" : ` · ${readingMinutes(shownWords)} min`}`}
++          versionLabel={draftOnScreen ? `${doc.currentVersion} · draft` : `${doc.currentVersion} · draft${shownWords === undefined ? "" : ` · ${readingMinutes(shownWords)} min`}`}
+           onDetails={() => setDialog("details")}
+           // The member record, or the projection: a reader of a public document
+           // who is not a member is told too, which is what the projection

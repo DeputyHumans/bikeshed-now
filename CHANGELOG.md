@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **The end-to-end check that a viewer never sees someone's draft works again.** A9.5 expected the version chip to read exactly `v1`, and the chip has also shown reading time since October, so the case failed for everyone without saying anything about drafts. It now accepts the reading time and still fails on the word draft, which a new control proves.
+
 ## 0.34.0 — 2026-11-04
 
 ### Added

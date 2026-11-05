@@ -708,6 +708,9 @@ scenario("A9.4 the empty-container marking is in the live edit frame and never r
 
 // --- A9.5 ---------------------------------------------------------------------
 
+/** What a viewer's chip says of v1: its reading time follows once the words are counted, and "draft" never does. */
+const PUBLISHED_LABEL = /^v1( · \d+ min)?$/;
+
 const DRAFT_BANNER = /^You're reading unpublished edits, last saved by (.+?)( just now| \d+m ago)\. Everyone else still sees v1 until they're saved as a new version\.$/;
 
 async function readerView(u) {
@@ -744,7 +747,7 @@ scenario("A9.5 with a draft saved, an editor reads it under the unpublished-edit
   for (const u of [e, o, v]) {
     views[u.name] = await eventually(async () => {
       const r = await readerView(u);
-      if (u.name === "viewer" ? r.label !== "v1" : r.label !== "v1 · draft") throw new Error(JSON.stringify(r));
+      if (u.name === "viewer" ? !PUBLISHED_LABEL.test(r.label) : r.label !== "v1 · draft") throw new Error(JSON.stringify(r));
       return r;
     }, { timeout: LATENCY_MS, message: `${u.name}'s version label` });
     views[u.name].text = await frameText(await u.frame());
@@ -762,7 +765,7 @@ scenario("A9.5 with a draft saved, an editor reads it under the unpublished-edit
     assert.ok(r.text.includes(t), `${who}: the frame shows the draft's text`);
   }
   assert.deepEqual(
-    { label: views.viewer.label, banner: views.viewer.banners.filter((b) => b.startsWith("You're reading unpublished edits")), src: views.viewer.src, hasToken: views.viewer.text.includes(t) },
+    { label: PUBLISHED_LABEL.test(views.viewer.label) ? "v1" : views.viewer.label, banner: views.viewer.banners.filter((b) => b.startsWith("You're reading unpublished edits")), src: views.viewer.src, hasToken: views.viewer.text.includes(t) },
     { label: "v1", banner: [], src: `/content/${docId}/v1/index.html`, hasToken: false },
     "the viewer reads v1: no banner, no draft label, no draft text",
   );
