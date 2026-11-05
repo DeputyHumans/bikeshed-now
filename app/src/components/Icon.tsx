@@ -56,6 +56,10 @@ const PATHS = {
   globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18",
   team: "M8 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20a6 6 0 0 1 12 0M17 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM15.5 15.2A5 5 0 0 1 22 20",
   key: "M15 9a4 4 0 1 0-3.5 3.97L10 14.5l-1.5-.5L7 15.5 5 15l-.5 2L3 17.5V20h3l7.2-7.2A4 4 0 0 0 15 9z",
+  // A head with an antenna: not a person, which is all the label beside it
+  // claims. The eyes are short strokes, because a dot IS the stroke (see `more`)
+  // and this one renders at 12px.
+  agent: "M12 3v4M7 7h10a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3zM9 12v2.5M15 12v2.5",
 
   // --- The editor toolbar -------------------------------------------------
   // Every one of these replaced a TEXT label. "• List" and "1. List" wrapped

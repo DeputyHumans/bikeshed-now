@@ -212,33 +212,24 @@ button.fork-chip { cursor: pointer; }
 }
 
 /**
- * The automation badge (SPEC §17).
+ * The automation badge (SPEC §17): a chip, smaller, because it sits in a line
+ * of captions.
  *
- * Deliberately plain and deliberately worded "via": it reports a
- * server-derived channel, and it sits next to self-reported client and agent
+ * Deliberately plain: it reports that a credential acted rather than a browser,
+ * which the server knows, and it sits next to self-reported client and agent
  * strings that get no badge at all. A badge implying verification it does not
- * have would be worse than no badge.
- *
- * Never upper-cased: the words name a token or an app as its owner named it,
- * in quotes (SPEC §17), and a quote in other letters is a misquote. One line,
- * cut short with an ellipsis where it does not fit; the title says it whole.
+ * have would be worse than no badge. The words naming the credential are its
+ * title, and its toast on a tap (components/ViaBadge.tsx).
  */
-.badge-automated {
-  display: inline-block;
-  max-width: 100%;
-  padding: 0 6px;
+button.badge-automated {
+  /* It lies in flex rows with long neighbours, and a shrunk one spills its word. */
+  flex: none;
   height: 18px;
-  line-height: 16px;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  border: 1px solid var(--color-line);
+  padding: 0 6px;
   font-size: 0.7rem;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   vertical-align: middle;
-  color: var(--color-ink-muted);
+  cursor: pointer;
 }
 .self-reported {
   font-style: italic;

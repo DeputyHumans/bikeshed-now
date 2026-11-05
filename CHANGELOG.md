@@ -23,6 +23,7 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 
 ### Changed
 
+- **Work done outside the browser now says `agent`.** Cards, lists, Details, Activity, comments and decided suggestions spelled out the credential, as in "via CLI on mbp", and cut it off where it did not fit. They now show a small robot and the word `agent`. Hover for the exact words, or tap it or press Enter to see them as a toast, because a phone has no hover. Email, the CLI and the `via` field in MCP and API answers still give the words in full.
 - **On a phone the header is the wordmark and one menu**, which holds your address, Account, Docs and Sign out, or Docs and Sign in. It only shrank at 400 px, and an iPhone Pro is 402.
 - **A deck opens on its slide on a phone.** The slide list used to start open, covering it. Picking a slide or tapping beside the list closes it, and so does going to a folder from the folder list.
 - **The suggestion form opens at the top on a touch screen**, because the iOS keyboard opens over the bottom of the page without moving it. The form and the docked selection buttons also lie above the consent card now.

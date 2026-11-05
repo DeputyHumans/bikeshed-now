@@ -652,11 +652,16 @@
   .viewer-toolbar .presence-bar { order: 3; }
 }
 
+/* An address, a sentence, the agent badge, a version and a time do not fit a
+   phone's line. */
+@media (max-width: 600px) {
+  .activity-row { flex-wrap: wrap; }
+}
+
 @media (max-width: 400px) {
   /* A document's details stack, a line each, and a version's row puts who
      published it on a line of its own under the version, length and date. */
   .details-list { grid-template-columns: 1fr; gap: var(--s-1); }
   .details-list dd { margin-bottom: var(--s-2); }
-  .details-versions .activity-row { flex-wrap: wrap; }
   .details-versions .activity-row > .details-how { flex-basis: 100%; order: 1; }
 }

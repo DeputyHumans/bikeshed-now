@@ -8,6 +8,7 @@ import { addComment, listComments, setResolved } from "../firestore";
 import { peerColor } from "../brand/tokens";
 import { formatRelative } from "../firestore";
 import { viaOf } from "../provenance";
+import { ViaBadge } from "../components/ViaBadge";
 import { logEvent } from "../analytics";
 import { rejectSuggestion, reviseSuggestion, withdrawSuggestion } from "../suggestions";
 import { SuggestForm } from "../components/SuggestPopover";
@@ -26,14 +27,10 @@ function CommentAuthor({ comment }: { comment: Comment }) {
   return (
     <div className="comment-head">
       <span className="comment-author">{comment.authorEmail}</span>
-      {via ? (
-        // Server-derived, so it can be stated as fact. The self-reported client
-        // and agent strings beside it get no badge, because a badge implying
-        // verification it does not have is worse than no badge.
-        <span className="badge-automated" title={`Posted on ${comment.authorEmail}'s behalf by ${via}`}>
-          via {via}
-        </span>
-      ) : null}
+      {/* Server-derived, so it can be stated as fact. The self-reported client
+          and agent strings beside it get no badge, because a badge implying
+          verification it does not have is worse than no badge. */}
+      <ViaBadge via={via} title={`Posted on ${comment.authorEmail}'s behalf by ${via}`} />
       {comment.actor?.agent ? (
         <span className="self-reported" title="Self-reported by the client">
           {comment.actor.agent}
@@ -42,13 +39,6 @@ function CommentAuthor({ comment }: { comment: Comment }) {
       <span>{formatRelative(comment.createdAt)}</span>
     </div>
   );
-}
-
-/** Who decided a suggestion, and through what when it was not them in the browser. */
-function decider(s: Suggestion, fallback: string): string {
-  const who = s.decidedBy?.email ?? fallback;
-  const via = viaOf(s.decidedBy);
-  return via ? `${who}, via ${via}` : who;
 }
 
 /** Whether a suggestion's claim is still held, and by whom. */
@@ -64,18 +54,18 @@ function claimHolder(s: Suggestion, now = Date.now()): string | null {
 function SuggestionChange({ exact, suggestion, stale }: { exact: string; suggestion: Suggestion; stale: boolean }) {
   const deleting = suggestion.replacement === "";
   const holder = suggestion.state === "pending" ? claimHolder(suggestion) : null;
+  const decided = suggestion.state === "accepted" ? "Accepted" : suggestion.state === "rejected" ? "Rejected" : null;
+  const decidedVia = decided ? viaOf(suggestion.decidedBy) : null;
   const status =
-    suggestion.state === "accepted"
-      ? `Accepted by ${decider(suggestion, "an approver")}`
-      : suggestion.state === "rejected"
-        ? `Rejected by ${decider(suggestion, "an approver")}`
-        : suggestion.state === "withdrawn"
-          ? `Withdrawn by ${suggestion.decidedBy?.email ?? "its author"}`
-          : stale
-            ? "The text has changed since this was suggested, so it can’t be applied."
-            : holder
-              ? `${holder} is applying it…`
-              : "Waiting for the owner or an approver.";
+    decided
+      ? `${decided} by ${suggestion.decidedBy?.email ?? "an approver"}`
+      : suggestion.state === "withdrawn"
+        ? `Withdrawn by ${suggestion.decidedBy?.email ?? "its author"}`
+        : stale
+          ? "The text has changed since this was suggested, so it can’t be applied."
+          : holder
+            ? `${holder} is applying it…`
+            : "Waiting for the owner or an approver.";
   return (
     <div className="suggestion" data-state={suggestion.state} data-stale={stale || undefined}>
       <p className="suggestion-change">
@@ -94,7 +84,11 @@ function SuggestionChange({ exact, suggestion, stale }: { exact: string; suggest
           </>
         )}
       </p>
-      <p className="suggestion-status">{status}</p>
+      <p className="suggestion-status">
+        {status}
+        {decidedVia ? " " : null}
+        <ViaBadge via={decidedVia} title={`${decided} through ${decidedVia}, not by a person in the browser`} />
+      </p>
       {suggestion.revisions?.length ? (
         // What its author proposed before, so a change of mind is on the
         // record rather than overwritten (SPEC §22).

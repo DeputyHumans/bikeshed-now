@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { originOfVersion } from "../provenance";
+import { ToastProvider } from "./Toast";
 import type { DocMeta, DocVersion, PublicDoc } from "../types";
 
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
@@ -31,9 +32,11 @@ const VERSIONS = [
 
 function open(props: Partial<Parameters<typeof DetailsPanel>[0]>) {
   render(
-    <MemoryRouter>
-      <DetailsPanel title="Plan" docId="plan" meta={null} publicDoc={null} versions={[]} viewing="v2" words={undefined} slides={0} showDraft={false} onClose={() => {}} {...props} />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter>
+        <DetailsPanel title="Plan" docId="plan" meta={null} publicDoc={null} versions={[]} viewing="v2" words={undefined} slides={0} showDraft={false} onClose={() => {}} {...props} />
+      </MemoryRouter>
+    </ToastProvider>,
   );
   return screen.getByRole("dialog");
 }
@@ -43,12 +46,15 @@ describe("a document's details", () => {
     const dialog = open({ meta: META, versions: VERSIONS, words: 2380, showDraft: true });
     expect(dialog.textContent).toContain("10 min read · 2,380 words");
     expect(dialog.textContent).toContain("by ana@example.com");
-    expect(within(dialog).getAllByText("via “Claude” (connected app)").length).toBeGreaterThan(0);
+    const chips = within(dialog).getAllByRole("button", { name: "agent" });
+    expect(chips.length).toBeGreaterThan(0);
+    for (const chip of chips) expect(chip.getAttribute("title")).toContain("“Claude” (connected app)");
+    expect(dialog.textContent).not.toContain("connected app");
     expect(dialog.textContent).toContain("Changes saved");
     const rows = [...dialog.querySelectorAll(".details-versions li")].map((li) => li.textContent);
-    expect(rows[0]).toMatch(/^v2 · current.*published from the editor.*via “Claude” \(connected app\)/);
+    expect(rows[0]).toMatch(/^v2 · current.*published from the editor.*agent/);
     expect(rows[1]).toMatch(/^v1.*uploaded by ana@example.com/);
-    expect(rows[1]).not.toContain("via");
+    expect(rows[1]).not.toContain("agent");
   });
 
   it("say when the current version was published, falling back as the card does for a document not summarized yet", () => {

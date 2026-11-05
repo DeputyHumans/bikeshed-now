@@ -125,6 +125,51 @@ function mountWith(
   );
 }
 
+describe("what acted on a comment", () => {
+  const COMMENTS = [
+    { commentId: "c1", body: "From a token.", authorEmail: "ana@example.com", actor: { channel: "cli", via: "CLI on mbp" } },
+    { commentId: "c2", body: "From the browser.", authorEmail: "bo@example.com", actor: { channel: "web" } },
+  ];
+
+  it("reads agent on the comment an agent posted, with the words in its title, and nothing on a person's", () => {
+    comments.current = COMMENTS;
+    mount();
+    const [fromToken, fromPerson] = [...document.querySelectorAll(".comment")] as HTMLElement[];
+    expect(fromToken.querySelector(".comment-head")?.textContent).toContain("agent");
+    expect(fromToken.textContent).not.toContain("CLI on mbp");
+    expect(fromToken.querySelector(".badge-automated")?.getAttribute("title")).toBe("Posted on ana@example.com's behalf by CLI on mbp");
+    expect(fromPerson.querySelector(".badge-automated")).toBeNull();
+  });
+
+  it("a tap shows the words and does not also select the thread, which would jump to its passage", () => {
+    comments.current = COMMENTS;
+    const onSelect = vi.fn();
+    render(
+      <ToastProvider>
+        <Sidebar
+          docId="d1"
+          versionId="v1"
+          annotations={[THREAD]}
+          orphaned={[]}
+          selectedId={null}
+          canComment
+          signedIn
+          peers={[]}
+          uid="u1"
+          emailLower="me@example.com"
+          onSelect={onSelect}
+          onComposing={() => {}}
+          onSignIn={() => {}}
+          onClose={() => {}}
+        />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "agent" }));
+    expect(screen.getByText("Posted on ana@example.com's behalf by CLI on mbp")).toBeTruthy();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
 describe("a suggestion's thread", () => {
   it("says the change in words, and is counted as a suggestion", () => {
     mountWith(SUGGESTION);
@@ -251,6 +296,28 @@ describe("a suggestion's thread", () => {
     expect(screen.queryByText("Suggested replacing …")).toBeNull();
     expect(screen.getByText("Rejected: Keep it.")).toBeTruthy();
     expect(screen.getByText("Rejected by owner@example.com")).toBeTruthy();
+  });
+
+  it("marks a decision an agent made with the badge beside the approver, and says what acted only behind it", () => {
+    mountWith({
+      ...SUGGESTION,
+      resolved: true,
+      suggestion: { replacement: "x", state: "accepted", decidedBy: { email: "owner@example.com", channel: "mcp", via: "CLI on mbp" } },
+    } as unknown as Annotation);
+    fireEvent.click(screen.getByRole("button", { name: "Show resolved" }));
+    const status = document.querySelector(".suggestion-status")!;
+    expect(status.textContent).toBe("Accepted by owner@example.com agent");
+    expect(status.querySelector(".badge-automated")?.getAttribute("title")).toBe("Accepted through CLI on mbp, not by a person in the browser");
+  });
+
+  it("gives no badge to a decision made in the browser", () => {
+    mountWith({
+      ...SUGGESTION,
+      suggestion: { replacement: "x", state: "rejected", decidedBy: { email: "owner@example.com", channel: "web" } },
+    } as unknown as Annotation);
+    const status = document.querySelector(".suggestion-status")!;
+    expect(status.textContent).toBe("Rejected by owner@example.com");
+    expect(status.querySelector(".badge-automated")).toBeNull();
   });
 
   it("lists what its author proposed before changing it, oldest first, with a replaced note", () => {

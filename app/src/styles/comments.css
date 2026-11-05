@@ -88,6 +88,8 @@
 .comment + .comment { border-top: 1px solid var(--color-line); }
 .comment-head {
   display: flex;
+  /* An address, the agent badge and a client's own name do not always fit a line. */
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--s-1);
   font-size: var(--fs-caption);

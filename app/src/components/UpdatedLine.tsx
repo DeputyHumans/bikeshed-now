@@ -7,7 +7,7 @@ import { readingTime } from "../readingTime";
 import { ViaBadge } from "./ViaBadge";
 
 /**
- * "6 min read · Updated 2 h ago · via CLI on mbp". The workspace passes its
+ * "6 min read · Updated 2 h ago · agent". The workspace passes its
  * record's summary (workspace/tree.ts currentSummary), a shared folder the
  * server's listing; both mean the current version's publish, which a rename
  * or a share does not move.

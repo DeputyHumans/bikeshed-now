@@ -16,6 +16,7 @@ vi.mock("../firestore", async () => ({
 }));
 
 import { StatsPanel } from "./StatsPanel";
+import { ToastProvider } from "./Toast";
 
 const META = { docId: "d", title: "Plan", stats: { views: 2, totalMs: 60_000, commits: 2 } } as unknown as DocMeta;
 const at = (m: number) => new Date(Date.UTC(2026, 9, 29, 12, m)).toISOString();
@@ -30,9 +31,11 @@ const PAGE2: ActivityItem[] = [
 
 async function open() {
   render(
-    <MemoryRouter>
-      <StatsPanel meta={META} canSeeDetail onClose={() => {}} />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter>
+        <StatsPanel meta={META} canSeeDetail onClose={() => {}} />
+      </MemoryRouter>
+    </ToastProvider>,
   );
   await act(async () => {});
 }
@@ -42,6 +45,10 @@ const rows = () =>
   within([...document.querySelectorAll("ul.activity-feed")].at(-1) as HTMLElement)
     .queryAllByRole("listitem")
     .map((li) => li.textContent);
+
+/** What acted, as a row's badge has it: null for a person in the browser. */
+const how = (row: number) =>
+  [...document.querySelectorAll("ul.activity-feed")].at(-1)!.querySelectorAll("li")[row].querySelector(".badge-automated")?.getAttribute("title") ?? null;
 
 beforeEach(() => {
   fetchActivity.mockReset();
@@ -56,9 +63,9 @@ describe("the Activity feed", () => {
       expect.stringContaining("gave a@example.com access"),
       expect.stringContaining("published a version from the editor"),
     ]);
-    expect(rows()[0]).toContain("via personal token “agent”");
-    expect(rows()[1]).toContain("via “Claude” (connected app)");
-    expect(rows()[2]).not.toContain("via");
+    expect(how(0)).toBe("Done through personal token “agent”, not by a person in the browser");
+    expect(how(1)).toBe("Done through “Claude” (connected app), not by a person in the browser");
+    expect(how(2)).toBeNull();
   });
 
   it("filters every kind of row, not only reads: an app's grant is automation", async () => {
@@ -77,7 +84,7 @@ describe("the Activity feed", () => {
     });
     expect(fetchActivity).toHaveBeenLastCalledWith("d", "c1");
     expect(rows()).toHaveLength(4);
-    expect(rows()[3]).toContain("via CLI on mbp");
+    expect(how(3)).toBe("Done through CLI on mbp, not by a person in the browser");
     expect(screen.queryByRole("button", { name: "Show earlier activity" })).toBeNull();
   });
 

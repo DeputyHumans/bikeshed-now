@@ -503,7 +503,9 @@ describe("each card's length and last update", () => {
     act(() => listeners.folders?.([]));
     const card = (title: string) => screen.getByText(title).closest(".doc-card") as HTMLElement;
     expect(card("By the CLI").querySelector(".doc-card-meta")?.textContent).toContain("10 min read");
-    expect(card("By the CLI").querySelector(".badge-automated")?.textContent).toBe("via CLI on mbp");
+    expect(card("By the CLI").querySelector(".badge-automated")?.textContent).toBe("agent");
+    expect(card("By the CLI").querySelector(".badge-automated")?.getAttribute("title")).toContain("CLI on mbp");
+    expect(card("By the CLI").querySelector(".doc-card-meta")?.textContent).not.toContain("CLI on mbp");
     expect(card("By hand").querySelector(".doc-card-meta")?.textContent).toContain("1 min read");
     expect(card("By hand").querySelector(".badge-automated")).toBeNull();
     const older = card("Not summarized yet").querySelector(".doc-card-meta")?.textContent ?? "";
