@@ -86,7 +86,7 @@ h2 {
 }
 h3 { font-size: 1.05rem; line-height: 1.3; margin-bottom: 6px; }
 p { margin: 0 0 16px; }
-p, li, dd { max-width: 64ch; }
+p, li, dd, figcaption { text-wrap: pretty; }
 a { color: var(--accent); text-underline-offset: 2px; }
 strong { font-weight: 650; }
 
@@ -129,7 +129,6 @@ kbd {
   line-height: 1.45;
   font-weight: 600;
   margin-bottom: 28px;
-  max-width: 52ch;
 }
 .eyebrow {
   margin: 0 0 8px;
@@ -149,7 +148,6 @@ figcaption {
   margin-top: 12px;
   font-size: 0.86rem;
   color: var(--muted);
-  max-width: 64ch;
 }
 .panel {
   padding: 24px;
@@ -193,7 +191,6 @@ figcaption {
 .lead {
   font-size: clamp(1.15rem, 1rem + 0.7vw, 1.45rem);
   line-height: 1.45;
-  max-width: 34ch;
   margin-bottom: 12px;
 }
 
@@ -529,7 +526,6 @@ tbody th { font-weight: 650; white-space: nowrap; }
 /* --- Agents ------------------------------------------------------------ */
 
 .headline {
-  max-width: 52ch;
   margin-bottom: 40px;
   padding: 14px 18px;
   border-left: 3px solid var(--accent);
@@ -991,19 +987,9 @@ bikeshed update storage-migration proposal.md</code></pre>
 
 <div class="chapter" id="version-history">
 <h2>Previous versions</h2>
-<p>Open an earlier version from the version menu. Its content and existing
-comments and suggestions are a read-only archive. Choose <strong>Open latest</strong>
-to edit or leave feedback. Access and expiry apply to every version.</p>
-<p>Discover history with <code>list_versions</code> or <code>bikeshed versions &lt;id&gt; --all --json</code>.
-Pages are newest first, default 20, maximum 50; continue with <code>cursor</code> from <code>nextCursor</code>.
-Use <code>version</code> with <code>get_document</code>, <code>get_comments</code> and <code>fork_document</code>;
-read results include <code>currentVersion</code> and <code>isCurrent</code>.</p>
-<p><code>bikeshed get</code>, <code>bikeshed comments</code>, <code>bikeshed fork</code> and <code>bikeshed open</code>
-accept <code>--version</code> and preserve versioned URLs and link keys. Conflicting selectors fail.
-Every feedback tool accepts a current <code>version</code> guard; CLI feedback commands accept <code>--version</code>.
-Use <code>baseVersion</code> on <code>update_document</code> and <code>commit_draft</code>, or <code>--base</code> on
-<code>bikeshed update</code> and <code>bikeshed commit</code>. On a stale-write error, read latest and reassess;
-never silently retarget historical feedback. Missing versions fail explicitly.</p>
+<p>Open an earlier version from the version menu. Its content and existing comments and suggestions are a read-only archive. Choose <strong>Open latest</strong> to edit or leave feedback. Access and expiry apply to every version.</p>
+<p>Discover history with <code>list_versions</code> or <code>bikeshed versions &lt;id&gt; --all --json</code>. Pages are newest first, default 20, maximum 50; continue with <code>cursor</code> from <code>nextCursor</code>. Use <code>version</code> with <code>get_document</code>, <code>get_comments</code> and <code>fork_document</code>; read results include <code>currentVersion</code> and <code>isCurrent</code>.</p>
+<p><code>bikeshed get</code>, <code>bikeshed comments</code>, <code>bikeshed fork</code> and <code>bikeshed open</code> accept <code>--version</code> and preserve versioned URLs and link keys. Conflicting selectors fail. Every feedback tool accepts a current <code>version</code> guard; CLI feedback commands accept <code>--version</code>. Use <code>baseVersion</code> on <code>update_document</code> and <code>commit_draft</code>, or <code>--base</code> on <code>bikeshed update</code> and <code>bikeshed commit</code>. On a stale-write error, read latest and reassess; never silently retarget historical feedback. Missing versions fail explicitly.</p>
 </div>
 </main>
 <footer>

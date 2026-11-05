@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **The guides no longer break lines well short of their column.** Text in `/docs` and `/docs/developers` was capped at 34 to 64 characters wide inside a wider column, so it stopped short of the panels beside it and left stray last words on their own line. It now wraps against the column, which makes lines longer on a wide screen. The four paragraphs still hard-wrapped in the guides' source are one line each, which changes nothing a reader sees.
+
 ## 0.33.2 — 2026-11-04
 
 ### Deploying
