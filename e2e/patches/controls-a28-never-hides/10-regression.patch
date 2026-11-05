@@ -8,4 +8,4 @@
 +      setHidden(false);
      };
      step();
-     const stop = watchScroll(doc, step);
+     const stopScroll = watchScroll(doc, step);
