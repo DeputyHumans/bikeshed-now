@@ -59,7 +59,9 @@ const publish = () => screen.getByRole("button", { name: /^(Publish|Publishingâ€
 const choose = (file: File) =>
   fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
 
-beforeEach(() => uploadVersion.mockClear());
+beforeEach(() => {
+  uploadVersion.mockClear();
+});
 
 describe("UploadVersionDialog", () => {
   it("sends the chosen file on top of the version that was current when it opened", async () => {

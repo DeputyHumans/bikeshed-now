@@ -51,7 +51,7 @@ beforeEach(() => {
   restoreItem.mockClear();
   api.available = false;
   api.get.mockClear();
-  api.post.mockClear();
+  api.post.mockReset();
   listeners.docs = null;
   listeners.folders = null;
   listeners.asked = [];

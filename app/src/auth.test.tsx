@@ -94,6 +94,7 @@ beforeEach(() => {
   popup.reauth.mockReset();
   popup.withCredential.mockReset();
   popup.profileEmail = undefined;
+  delete (mockedAuth as { currentUser?: User }).currentUser;
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
 });
