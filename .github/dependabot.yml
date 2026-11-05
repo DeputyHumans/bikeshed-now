@@ -6,6 +6,11 @@
 # against a codebase with a dependency budget of eighteen. A grouped update is
 # one review with one CI run, which is a review that actually happens.
 #
+# Major versions are left out of the npm groups. A group of every available
+# major is one pull request that needs all of them to work at once, so it stays
+# red and never gets that review. A major is a decision somebody makes, with its
+# own change and its own checks. Security advisories still arrive as alerts.
+#
 # Three markdown packages are EXCLUDED from grouping and from automatic updates
 # entirely. `markdown-it`, `turndown` and `turndown-plugin-gfm` decide the bytes
 # of every Markdown document, and those bytes are part of the content hash — a
@@ -19,17 +24,25 @@ updates:
     directory: /
     schedule: { interval: weekly }
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
     directory: /app
     schedule: { interval: weekly }
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       app:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
     directory: /functions
@@ -39,9 +52,12 @@ updates:
       - dependency-name: markdown-it
       - dependency-name: turndown
       - dependency-name: turndown-plugin-gfm
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       functions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
