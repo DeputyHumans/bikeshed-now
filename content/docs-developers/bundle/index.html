@@ -390,6 +390,7 @@ figcaption {
 .badge {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   height: 18px;
   padding: 0 6px;
   border: 1px solid var(--line);
@@ -934,7 +935,7 @@ bikeshed update storage-migration proposal.md</code></pre>
     <li>Act with permissions its person does not have.</li>
     <li>Delete anything forever. An agent can move a document or a folder to the Trash and restore it. The Trash deletes what stays there 30 days; only the person can delete sooner, in the browser, with a code emailed to them, and <code>POST /purge</code> refuses every token.</li>
   </ul>
-  <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see it as <span class="badge">via MCP</span> and the like. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
+  <p>Everything an agent does carries the channel it came through, <code>cli</code>, <code>mcp</code> or <code>api</code>, taken from its credential rather than claimed. Readers see an <span class="badge"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M7 7h10a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3zM9 12v2.5M15 12v2.5"/></svg>agent</span> badge, and hovering or tapping it shows the credential. A name sent in <code>X-Bikeshed-Agent</code> is shown too, marked as self-reported.</p>
 </div>
 
 <div class="chapter reference" id="reference">
