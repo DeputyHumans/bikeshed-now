@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **Dependency updates.** `yjs` moves to 13.6.33 in the app, which sets the current target of deep events just before calling their observers. For development, `@types/node` moves to 24.19.2, `mime` to 4.1.2 and `playwright-core` to 1.64.1.
+
 ## 0.35.0 — 2026-11-05
 
 ### Security
