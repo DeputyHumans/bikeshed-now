@@ -13,6 +13,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 ### Fixed
 
 - **The guides no longer break lines well short of their column.** Text in `/docs` and `/docs/developers` was capped at 34 to 64 characters wide inside a wider column, so it stopped short of the panels beside it and left stray last words on their own line. It now wraps against the column, which makes lines longer on a wide screen. The four paragraphs still hard-wrapped in the guides' source are one line each, which changes nothing a reader sees.
+- **A slide title keeps the words either side of a line break apart.** A heading set on two lines with `<br>` ran together in the slide list, the overview and their screen-reader labels, as in "Protection becomesdisconnection."
 
 ## 0.33.2 — 2026-11-04
 

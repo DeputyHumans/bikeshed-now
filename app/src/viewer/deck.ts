@@ -93,12 +93,25 @@ function mostHaveHeadings(els: HTMLElement[]): boolean {
   return withHeading * 2 >= els.length;
 }
 
+/**
+ * A heading's text with its line breaks kept as spaces. `textContent` has
+ * nothing for a `<br>`, so a heading set on two lines would read as one
+ * run-together word. Only a `<br>` adds a space: an inline element can sit inside
+ * a word, and `<wbr>` says the word carries on.
+ */
+function textWithBreaks(node: Node): string {
+  if (node.nodeType === 3) return node.nodeValue ?? "";
+  if ((node as Element).localName === "br") return " ";
+  return Array.from(node.childNodes).map(textWithBreaks).join("");
+}
+
 export function slideTitle(el: Element, index: number): string {
   const authored = el.getAttribute("data-title")?.trim();
   if (authored) return authored;
 
-  const heading = el.querySelector("h1, h2, h3")?.textContent?.trim();
-  if (heading) return heading;
+  const heading = el.querySelector("h1, h2, h3");
+  const headingText = heading && textWithBreaks(heading).replace(/\s+/g, " ").trim();
+  if (headingText) return headingText;
 
   const label = el.getAttribute("aria-label")?.trim();
   if (label && !LABEL_IS_AN_INDEX.test(label)) return label;

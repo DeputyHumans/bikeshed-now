@@ -30,6 +30,39 @@ function titles(doc: Document): string[] {
 }
 
 describe("scanSlides", () => {
+  it("keeps the words either side of a line break in a heading apart", () => {
+    // `textContent` has nothing for a <br>, so a heading set on two lines read
+    // as one run-together word in the rail, the overview and their labels. The
+    // second slide already has a space before its break, and the fourth breaks
+    // across source lines: a title holds single spaces whichever way it arrives.
+    const doc = parse(`<body><main class="deck">
+      <section class="slide"><h2>Costs keep<br>climbing</h2></section>
+      <section class="slide"><h2>Plain words. <br>Spaced already.</h2></section>
+      <section class="slide"><h2><em>Nested<br></em>break</h2></section>
+      <section class="slide"><h2>Across
+        source<br />
+        lines</h2></section>
+    </main></body>`);
+
+    expect(titles(doc)).toEqual([
+      "Costs keep climbing",
+      "Plain words. Spaced already.",
+      "Nested break",
+      "Across source lines",
+    ]);
+  });
+
+  it("adds no space where a heading's word only crosses an element", () => {
+    // Only a <br> separates words. An inline element can sit inside one word,
+    // and <wbr> says outright that the word carries on.
+    const doc = parse(`<body><main class="deck">
+      <section class="slide"><h2>Bike<em>shed</em> now</h2></section>
+      <section class="slide"><h2>Long<wbr>word</h2></section>
+    </main></body>`);
+
+    expect(titles(doc)).toEqual(["Bikeshed now", "Longword"]);
+  });
+
   it("finds slides that carry no id at all", () => {
     // The single most common shape, and the one `body > section[id]` missed
     // entirely. Note the trailing and doubled spaces in the class attribute:
