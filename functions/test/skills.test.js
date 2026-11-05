@@ -497,11 +497,31 @@ test("neither the catalogue nor the manifest sets a version", () => {
   assert.equal("version" in manifest(), false, "the manifest sets a version");
 });
 
-test("the catalogue warns that it is for one deployment, and nothing can outrank that", () => {
+test("the catalogue warns that it is for one deployment, whatever the manifest says", () => {
   // Someone running their own deployment who adds this gets skills naming the
-  // hosted one, and the CLI would send their token there.
-  assert.match(catalogue().plugins[0].description, /bikeshed\.now/);
-  assert.equal("description" in manifest(), false, "a manifest description could replace the warning");
+  // hosted one, and the CLI would send their token there. Someone browsing the
+  // catalogue reads the entry's description even when the manifest sets its own,
+  // so the warning holds only while the entry sets one.
+  const { description, plugins } = catalogue();
+  assert.match(description ?? "", /bikeshed\.now/, "the catalogue's own description names no deployment");
+  assert.match(plugins[0].description ?? "", /bikeshed\.now/, "the entry's description names no deployment");
+  assert.match(plugins[0].description ?? "", /your own deployment/, "the entry's description has lost its warning");
+  assert.equal(new URL(plugins[0].homepage).host, "bikeshed.now");
+});
+
+test("the manifest describes the plugin, because an upload has nothing else to show", () => {
+  // An uploaded zip comes with no catalogue, so a field missing here is a blank
+  // on the plugin's page: "No description found in plugin.json".
+  const { displayName, description, author, homepage, repository, keywords } = manifest();
+  assert.equal(displayName, "Bikeshed");
+  assert.equal(typeof description, "string", "the manifest has no description");
+  assert.ok(description.length >= 60, "the description is too short to say what the plugin does");
+  assert.equal(typeof author?.name, "string", "the manifest has no author");
+  assert.ok(Array.isArray(keywords) && keywords.length > 0, "the manifest has no keywords");
+  // A homepage that does not parse stops the plugin loading at all.
+  for (const [field, value] of [["homepage", homepage], ["repository", repository]]) {
+    assert.equal(URL.canParse(value), true, `the manifest's ${field} is not a URL: ${value}`);
+  }
 });
 
 test("the manifest is one any deployment can ship", () => {

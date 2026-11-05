@@ -1,6 +1,10 @@
 {
   "name": "bikeshed",
   "displayName": "Bikeshed",
-  "author": { "name": "DeputyHumans" },
-  "license": "Apache-2.0"
+  "description": "Claude publishes a finished report, plan or deck as a Bikeshed document. People comment on the exact passage they mean, and Claude reads those comments, answers them and publishes the revision. It can also file documents in folders and set who can read them. The plugin holds instructions only, so connect Bikeshed too. Claude will ask if you haven't.",
+  "author": { "name": "DeputyHumans", "url": "https://github.com/DeputyHumans" },
+  "homepage": "https://github.com/DeputyHumans/bikeshed-now",
+  "repository": "https://github.com/DeputyHumans/bikeshed-now",
+  "license": "Apache-2.0",
+  "keywords": ["publishing", "documents", "reports", "decks", "comments", "review", "sharing"]
 }

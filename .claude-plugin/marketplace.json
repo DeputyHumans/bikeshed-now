@@ -1,11 +1,13 @@
 {
   "name": "bikeshed",
-  "owner": { "name": "DeputyHumans" },
+  "description": "The Bikeshed plugin for documents on bikeshed.now. Running your own deployment? Download the plugin from its Account page instead.",
+  "owner": { "name": "DeputyHumans", "url": "https://github.com/DeputyHumans" },
   "plugins": [
     {
       "name": "bikeshed",
       "source": "./claude-plugin",
-      "description": "Teaches Claude to publish documents on bikeshed.now, answer the comments on them, file them and control who can read them. If you run your own deployment, don't add this: download the plugin from your deployment's Account page, so that your documents go there."
+      "description": "Claude publishes a finished report, plan or deck as a document on bikeshed.now. People comment on the exact passage they mean, and Claude reads those comments, answers them and publishes the revision. It can also file documents in folders and set who can read them. The plugin holds instructions only, so connect bikeshed.now too. If you run your own deployment, don't add this: download the plugin from your deployment's Account page, so your documents go there.",
+      "homepage": "https://bikeshed.now"
     }
   ]
 }
