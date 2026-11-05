@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useChromeAutoHide.ts
++++ b/app/src/viewer/useChromeAutoHide.ts
+@@ -62,7 +62,7 @@
+  */
+ export function nextChrome(state: ChromeScroll, reading: ChromeReading): ChromeScroll {
+   const y = Math.min(Math.max(reading.y, 0), Math.max(reading.maxY, 0));
+-  if (reading.frozen || reading.viewH !== state.viewH) {
++  if (reading.frozen) {
+     return { hidden: state.hidden, anchor: y, viewH: reading.viewH };
+   }
+   if (y <= AT_TOP) return { hidden: false, anchor: y, viewH: reading.viewH };

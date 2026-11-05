@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.2 on a phone",
+  "what": "the wordmark drawn over the actions beside it, as it was on an iPhone Pro",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.2 no two controls in one layer overlap at any size",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "controls that overlap"
+  }
+}

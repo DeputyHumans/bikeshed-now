@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.11 on a phone",
+  "what": "a deck's slide list starts open, covering the slide",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.11 a deck opens on its slide; the drawer opens on request, and picking a slide or tapping beside it closes it",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the drawer is closed when a deck opens"
+  }
+}

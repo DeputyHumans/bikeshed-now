@@ -1,0 +1,11 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -177,7 +177,7 @@
+   const [pane, setPane] = useState<"doc" | "comments">("doc");
+   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
+   // Closed to start with in one column, where it is a drawer over the slide it lists.
+-  const [railOpen, setRailOpen] = useState(!singleColumn);
++  const [railOpen, setRailOpen] = useState(true);
+   const [pendingComment, setPendingComment] = useState<PendingComment | null>(() => readPendingComment(docId));
+   // The suggestion being written: what it quotes, and where its form floats.
+   const [suggesting, setSuggesting] = useState<{ version: string; anchor: Anchor; position: PopoverPosition } | null>(null);

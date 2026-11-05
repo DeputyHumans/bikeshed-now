@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.15 on a phone",
+  "what": "the frame growing is read as a scroll, so the bars flicker at the bottom",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.15 the bars leave on the way down and return on the way up, the frame really grows, the bottom does not flicker, and the document's bytes do not change",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "with nobody touching anything"
+  }
+}

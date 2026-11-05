@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.4 on a phone",
+  "what": "icons give up their width again, and the home link no longer has room for the logo",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.4 no icon or logo is flexed below its declared size at any size",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "marks squeezed"
+  }
+}

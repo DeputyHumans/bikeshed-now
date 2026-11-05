@@ -1,0 +1,23 @@
+--- a/app/src/styles/base.css
++++ b/app/src/styles/base.css
+@@ -49,7 +49,7 @@
+ /* Never a flex item's slack. With that max-width an svg's minimum size is zero, so
+    any row short of room takes the width out of its icons first: a logo beside a
+    wordmark came out zero wide on an iPhone Pro, its name still drawn. */
+-svg { display: block; flex-shrink: 0; }
++svg { display: block; }
+ 
+ button, input, select, textarea {
+   font: inherit;
+--- a/app/src/styles/layout.css
++++ b/app/src/styles/layout.css
+@@ -23,7 +23,8 @@
+ }
+ 
+ /* The way home never gives up its width: the actions wrap or fold first. */
+-.header-home { flex: none; text-decoration: none; }
++.header-home { flex: none; text-decoration: none; width: 60px; overflow: hidden; }
++.header-home .wordmark { width: 60px; }
+ 
+ .header-spacer { flex: 1; }
+ 

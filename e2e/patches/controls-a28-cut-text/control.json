@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.6 on a phone",
+  "what": "a link is a flex box again on touch, which draws no ellipsis",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.6 words a box cuts carry an ellipsis at any size",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "words cut with no ellipsis"
+  }
+}

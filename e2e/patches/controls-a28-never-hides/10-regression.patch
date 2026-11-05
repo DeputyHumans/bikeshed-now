@@ -1,0 +1,11 @@
+--- a/app/src/viewer/useChromeAutoHide.ts
++++ b/app/src/viewer/useChromeAutoHide.ts
+@@ -143,7 +143,7 @@
+         return; // a frame on its way out
+       }
+       state = nextChrome(state, reading);
+-      setHidden(state.hidden);
++      setHidden(false);
+     };
+     step();
+     const stop = watchScroll(doc, step);

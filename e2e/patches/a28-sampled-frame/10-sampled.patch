@@ -1,0 +1,11 @@
+--- a/app/src/viewer/frameWatch.ts
++++ b/app/src/viewer/frameWatch.ts
+@@ -47,6 +47,8 @@
+   } finally {
+     doc.removeEventListener(FRAME_PROBE_EVENT, probe);
+   }
++  // e2e: Chromium answers as WebKit does on a sandboxed frame, so the sampled path runs.
++  heard = false;
+   delivers.set(doc, heard);
+   return heard;
+ }

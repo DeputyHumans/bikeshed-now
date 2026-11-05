@@ -1,0 +1,10 @@
+--- a/app/src/pages/DocList.tsx
++++ b/app/src/pages/DocList.tsx
+@@ -294,7 +294,6 @@
+   });
+   const [drawer, setDrawer] = useState(false);
+   // Picking a folder is what the drawer was opened for, and it lay over the result.
+-  useEffect(() => setDrawer(false), [folderId, view]);
+   const [uploading, setUploading] = useState(false);
+   // A document brings its visibility triple along; a folder its level and date.
+   const [sharing, setSharing] = useState<{

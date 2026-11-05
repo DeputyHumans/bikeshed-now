@@ -1,0 +1,11 @@
+--- a/app/src/styles/base.css
++++ b/app/src/styles/base.css
+@@ -144,7 +144,7 @@
+      ellipsis, so a link that had to shrink lost letters with no sign of it:
+      "Everything" read "Everythi". It also passed the link's underline on to a
+      wordmark inside it, which an inline-block does not. */
+-  a[href]:not(:is(p, .legal li, .field-hint, .caption) a) { display: inline-block; align-content: center; }
++  a[href]:not(:is(p, .legal li, .field-hint, .caption) a) { display: inline-flex; align-items: center; }
+   summary, .checkbox-row > label { align-content: center; }
+   /* A finger in the document focuses its frame, and the ring that tells a keyboard
+      user where they are becomes a blue box round the page for as long as they read. */

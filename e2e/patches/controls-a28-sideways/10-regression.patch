@@ -1,0 +1,11 @@
+--- a/app/src/styles/workspace.css
++++ b/app/src/styles/workspace.css
+@@ -496,6 +496,8 @@
+   background: var(--color-accent);
+   transition: width var(--t-fast) linear;
+ }
++
++.workspace { min-width: 700px; }
+ 
+ /* Beside the folder drawer. It covers 82% of a phone, its own button among it. */
+ .drawer-scrim { display: none; }

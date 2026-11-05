@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.18 on a phone",
+  "what": "the folder drawer stays over the folder just picked",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.18 a tap beside the folder drawer closes it, and so does going somewhere",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "the drawer has closed behind them"
+  }
+}

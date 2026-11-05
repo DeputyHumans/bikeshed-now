@@ -1,0 +1,22 @@
+--- a/app/src/components/ViewerToolbar.tsx
++++ b/app/src/components/ViewerToolbar.tsx
+@@ -190,7 +190,7 @@
+   const wide = useMediaQuery("(min-width: 601px)");
+   const navigate = useNavigate();
+   const toast = useToast();
+-  const slots = wide ? 6 : roomy ? 4 : 3;
++  const slots = 7;
+   const { row, menu } = phoneActions({
+     slots,
+     canEdit,
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -633,7 +633,7 @@
+   }
+   .viewer-action { flex: none; }
+   /* Takes what the actions leave, so the row can never run off the screen. */
+-  .viewer-toolbar-actions .pane-toggle { flex: 1 1 auto; min-width: 0; margin-right: var(--s-1); }
++  .viewer-toolbar-actions .pane-toggle { flex: none; margin-right: var(--s-1); }
+   .viewer-toolbar-actions .pane-toggle button { flex: 1 1 0; min-width: 0; padding: 0 var(--s-1); }
+   .viewer-toolbar .btn-label,
+   .viewer-toolbar .btn-keep-label .btn-label { display: none; }

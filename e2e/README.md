@@ -201,7 +201,7 @@ on an amplify set: its `stack` names `--patches amplify-<name>`, which both
 sides get, before the control's own set. The same setup field accepts the
 explicit capability-only sets `a19-analytics-live` and
 `a20-cli-bad-skill-name`, `a20-cli-uppercase-skill`, `a20-cli-underscore-skill`,
-and `a20-cli-no-retry-delay`; arbitrary product-fix or other control sets are
+`a20-cli-no-retry-delay`, and `a28-sampled-frame`, which makes Chromium answer as WebKit does on a sandboxed frame so the sampled scroll path runs; arbitrary product-fix or other control sets are
 refused there, so the green side cannot silently inherit the mutant. A control may target one case of
 a scenario with `n`, as `"<scenario> [N=<k>]"`: both sides then run with
 `--n <k> --trials 1` (see Adding a negative control), so no fixed-N copy of

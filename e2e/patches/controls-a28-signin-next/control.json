@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.14 on a phone",
+  "what": "signing in to comment forgets where the reader was",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.14 a comment started signed out is on its passage after signing in",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "with the way back in its next"
+  }
+}

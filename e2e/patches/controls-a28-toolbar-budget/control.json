@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.3 on a phone",
+  "what": "more actions in the second row than it has room for",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.3 no control runs off the screen or is cut by its box at any size",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "controls cut off"
+  }
+}

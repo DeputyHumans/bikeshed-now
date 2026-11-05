@@ -1,0 +1,12 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -585,7 +585,8 @@
+   const signInToComment = useCallback(() => {
+     if (pendingComment) savePendingComment(pendingComment);
+     const { pathname, search, hash } = window.location;
+-    navigate(`/signup?next=${encodeURIComponent(`${pathname}${search}${hash}`)}`);
++    void pathname; void search; void hash;
++    navigate("/signup");
+   }, [pendingComment, navigate]);
+ 
+   /** Open the suggestion form on the current selection, trimmed to its text. */

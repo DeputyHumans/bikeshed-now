@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.5 on a phone",
+  "what": "text fields back at the size iOS zooms on",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.5 every text field and select is at least 16 px on touch, so iOS does not zoom the page",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "fields iOS would zoom on"
+  }
+}

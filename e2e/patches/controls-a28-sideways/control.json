@@ -1,0 +1,13 @@
+{
+  "oracle": "A28.1 on a phone",
+  "what": "a workspace wider than the phone",
+  "target": {
+    "spec": "e2e/specs/functional/a28-phone-layout.spec.mjs",
+    "case": "A28.1 nothing scrolls sideways at any size",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "surfaces that scroll sideways"
+  }
+}
