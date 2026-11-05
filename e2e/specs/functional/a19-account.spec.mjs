@@ -966,9 +966,9 @@ scenario(currentIdentityCases[state], {
 
 // --- A19.6 -------------------------------------------------------------------
 
-/** The skill names the stack's tree ships: skills/<name>/SKILL.md. */
+/** The skill names the stack's tree ships: claude-plugin/skills/<name>/SKILL.md. */
 function treeSkills() {
-  const root = join(target.stack?.treeDir ?? REPO_ROOT, "skills");
+  const root = join(target.stack?.treeDir ?? REPO_ROOT, "claude-plugin", "skills");
   return readdirSync(root).filter((n) => existsSync(join(root, n, "SKILL.md"))).sort();
 }
 

@@ -66,6 +66,8 @@ A skill that names a command which does not exist is worse than no skill: an age
 
 It also holds each skill to Claude's upload limits (a name of at most 64 lowercase letters, digits and hyphens, never naming Claude or Anthropic, and a description of at most 1,024 characters), and opens every zip with an independent reader. The predeploy check refuses a zip whose `SKILL.md` differs by one byte from the file served beside it.
 
-`npm run check:agents` separately asserts that the copies under `app/public/skills/` are byte-identical to these, the same way `AGENTS.md` and `llms.txt` are held to their sources. Edit the file here and run `npm run build:agents`.
+`npm run check:agents` separately asserts that the copies under `app/public/skills/` are exactly these with one change, the same way `AGENTS.md` and `llms.txt` are held to their sources. Edit the file here and run `npm run build:agents`.
+
+The one change is the address. These files name `https://bikeshed.now`, so an agent reading them straight from this repo gets one that works. A deployment's copy has it swapped back to `https://<deployment>`, which the build then stamps with that deployment's own address, or leaves as it is on a deployment with no custom domain.
 
 Licensed under Apache-2.0, like the rest of this repository. They are meant to be copied.

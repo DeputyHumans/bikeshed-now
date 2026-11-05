@@ -12,6 +12,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ### Changed
 
+- **The skills moved to `claude-plugin/skills/`, and name `https://bikeshed.now` there.** An agent reading them straight from this repo now gets an address that works, where it used to get `https://<deployment>`. What a deployment serves is unchanged: `tools/build-agents.mjs` swaps the address back on the way into `app/public/skills/`, and the stamp does the rest as before. The URLs under `/skills/` stay the same (SPEC §19).
 - **Dependency updates.** `yjs` moves to 13.6.33 in the app, which sets the current target of deep events just before calling their observers. For development, `@types/node` moves to 24.19.2, `mime` to 4.1.2 and `playwright-core` to 1.64.1, whose `cookies(url)` no longer leaves out a Secure cookie on `http://127.0.0.1`, so the end-to-end harness's self-test stops expecting that.
 
 ## 0.35.0 — 2026-11-05

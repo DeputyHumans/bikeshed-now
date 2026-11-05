@@ -177,11 +177,11 @@ test("every generated file under app/public is one the stamp knows about", () =>
   assert.deepEqual(generated.sort(), [...servedDocuments()].sort());
 });
 
-test("the documents in the tree still carry the token", () => {
+test("the documents a build takes still carry the token", () => {
   // A reword that drops it would make the stamp a no-op with nothing failing.
   const guide = readFileSync(join(ROOT, "docs", "agents", "agent-guide.md"), "utf8");
   const skill = readFileSync(
-    join(ROOT, "skills", "bikeshed-publishing", "SKILL.md"),
+    join(ROOT, "app", "public", "skills", "bikeshed-publishing", "SKILL.md"),
     "utf8",
   );
   assert.ok(guide.split(TOKEN).length - 1 >= 4, "the guide stopped naming <deployment>");

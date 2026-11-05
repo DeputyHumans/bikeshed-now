@@ -12,7 +12,7 @@
  *
  *   CLAUDE.md          → AGENTS.md            for an agent CHANGING THIS SOURCE
  *   docs/agents/agent-guide.md → app/public/llms.txt for an agent USING A DEPLOYMENT
- *   skills/            → app/public/skills/  the long form of the second
+ *   claude-plugin/skills/ → app/public/skills/  the long form of the second
  *
  * `AGENTS.md` is the cross-tool convention, so it must exist and must say the
  * same thing as `CLAUDE.md` rather than a stale paraphrase of it. `/llms.txt`
@@ -27,6 +27,8 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { TOKEN } from "./stamp-deployment.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -60,8 +62,27 @@ const PAIRS = [
  * rather than hand-written, so a skill cannot be added without becoming
  * discoverable, or removed without disappearing.
  */
-const SKILLS_DIR = join(ROOT, "skills");
+const SKILLS_DIR = join(ROOT, "claude-plugin", "skills");
 const SKILLS_OUT = join(ROOT, "app", "public", "skills");
+
+/**
+ * The deployment a skill names while it sits in the repo.
+ *
+ * A marketplace reads `claude-plugin/` straight from GitHub with no build in
+ * between, so an agent gets these files as they are and would export a
+ * placeholder literally. Only the deployment at this address can be described
+ * that way. A deployment's own copy starts from the token again, because one
+ * with no custom domain has nothing to stamp with and serves the token on
+ * purpose, and the stamp rewrites nothing else. A real address reaching
+ * `app/public` would be served as it stands by every deployment, and the CLI,
+ * which sends its stored token to whichever origin is set, would follow it.
+ */
+export const HOSTED_ORIGIN = "https://bikeshed.now";
+
+/** A skill's text as a deployment is given it. */
+export function servedSkill(text) {
+  return text.split(HOSTED_ORIGIN).join(TOKEN);
+}
 
 /** The `name:` and `description:` of a SKILL.md, from its YAML frontmatter. */
 export function frontmatter(text) {
@@ -164,8 +185,8 @@ function run() {
 
   const skills = readSkills();
   const skillFiles = [
-    ["index.json", skillIndex(skills)],
-    ...skills.map((s) => [join(s.name, "SKILL.md"), s.text]),
+    ["index.json", servedSkill(skillIndex(skills))],
+    ...skills.map((s) => [join(s.name, "SKILL.md"), servedSkill(s.text)]),
   ];
 
   for (const [rel, expected] of skillFiles) {
@@ -183,7 +204,7 @@ function run() {
       /* missing counts as drift */
     }
     if (current !== expected) {
-      console.error(`app/public/skills/${rel} does not match skills/${rel}.`);
+      console.error(`app/public/skills/${rel} does not match claude-plugin/skills/${rel}.`);
       drifted += 1;
     }
   }
@@ -206,7 +227,7 @@ function run() {
     const known = new Set(skills.map((s) => s.name));
     for (const name of served) {
       if (!known.has(name)) {
-        console.error(`app/public/skills/${name} is served but no longer in skills/.`);
+        console.error(`app/public/skills/${name} is served but no longer in claude-plugin/skills/.`);
         drifted += 1;
       }
     }

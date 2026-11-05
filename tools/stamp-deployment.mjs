@@ -4,11 +4,11 @@
 /**
  * Why this exists, and why it writes only to the BUILD OUTPUT.
  *
- * `docs/agents/agent-guide.md` and `skills/<name>/SKILL.md` are copied verbatim
- * into `app/public/` by `tools/build-agents.mjs`, and `check:agents`
- * byte-compares them. Those tracked copies keep the placeholder deliberately:
- * Bikeshed is self-hosted, so a literal host in the tree would be wrong on every
- * deployment but one — the rule `app/src/pages/Landing.tsx` already states for
+ * `tools/build-agents.mjs` copies `docs/agents/agent-guide.md` into `app/public/`
+ * verbatim, and `claude-plugin/skills/<name>/SKILL.md` with its address swapped
+ * for the token, and `check:agents` byte-compares the results. Those tracked
+ * copies keep the placeholder deliberately: Bikeshed is self-hosted, so a literal
+ * host in what a deployment builds from would be wrong on every deployment but one — the rule `app/src/pages/Landing.tsx` already states for
  * the landing page, which builds every address it prints from
  * `window.location.origin`.
  *
@@ -144,7 +144,7 @@ export function stamp(text, origin) {
  */
 function skillNames(root) {
   try {
-    return readdirSync(join(root, "skills"), { withFileTypes: true })
+    return readdirSync(join(root, "claude-plugin", "skills"), { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();

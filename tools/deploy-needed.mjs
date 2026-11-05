@@ -28,15 +28,16 @@ export const DEPLOY_JOB = "deploy production";
 /**
  * Paths production never serves.
  *
- * `docs/agents/agent-guide.md` and `skills/` do reach readers, but as the copies
- * under `app/public/`, which are not listed and which `check:agents` keeps in
+ * `docs/agents/agent-guide.md` and `claude-plugin/` do reach readers, but as the
+ * copies under `app/public/`, which are not listed and which `check:agents` keeps in
  * step. `content/` reaches production through `bikeshed update`, and `cli/`
  * through `npm publish`.
  */
 export const NOT_DEPLOYED = [
   /^[^/]+\.md$/,
   /^docs\//,
-  /^skills\//,
+  /^claude-plugin\//,
+  /^\.claude-plugin\//,
   /^content\//,
   /^cli\//,
   /^e2e\//,

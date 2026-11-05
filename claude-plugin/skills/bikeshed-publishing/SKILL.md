@@ -13,13 +13,13 @@ If you can call `publish_document`, you are already connected. Skip ahead.
 
 If you cannot, ask the person you are working with to connect you. Either of these is a minute, and neither involves copying a secret:
 
-- **In an app** (Claude, ChatGPT, Cursor, VS Code): add `https://<deployment>/mcp` as a connector, or as a remote MCP server, and sign in when it asks. In Claude Code that is `claude mcp add --transport http bikeshed https://<deployment>/mcp`, then `/mcp` to sign in.
-- **From a shell**: run `npx -y bikeshed-now login --origin https://<deployment>`. It prints an address, opens the browser, and waits for the person to approve. Give the command a long timeout; it is waiting for a human. Keep `--origin`: without it, the command signs in to `BIKESHED_ORIGIN`, or else the deployment it last signed in to, or else the CLI's default, and none of those is necessarily this one.
+- **In an app** (Claude, ChatGPT, Cursor, VS Code): add `https://bikeshed.now/mcp` as a connector, or as a remote MCP server, and sign in when it asks. In Claude Code that is `claude mcp add --transport http bikeshed https://bikeshed.now/mcp`, then `/mcp` to sign in.
+- **From a shell**: run `npx -y bikeshed-now login --origin https://bikeshed.now`. It prints an address, opens the browser, and waits for the person to approve. Give the command a long timeout; it is waiting for a human. Keep `--origin`: without it, the command signs in to `BIKESHED_ORIGIN`, or else the deployment it last signed in to, or else the CLI's default, and none of those is necessarily this one.
 
 For CI, or anywhere a browser cannot open, a personal access token still works. The person mints one at `/account` → **Access tokens**:
 
 ```bash
-export BIKESHED_ORIGIN=https://<deployment>
+export BIKESHED_ORIGIN=https://bikeshed.now
 export BIKESHED_TOKEN=bsk_...
 ```
 
@@ -27,7 +27,7 @@ That origin is the deployment this skill was installed from, and `BIKESHED_ORIGI
 
 Either way, the credential is exactly its owner: it can see what they can see and nothing more, and everything it does is recorded against it. There is no wider access to ask for.
 
-The commands below come from `npm i -g bikeshed-now`. Every one of them has a tool beside it doing the same job, so if you hold the tools and not the command, use those — and if you hold neither, one authenticated POST to `/mcp` is a complete call. `https://<deployment>/llms.txt` shows it.
+The commands below come from `npm i -g bikeshed-now`. Every one of them has a tool beside it doing the same job, so if you hold the tools and not the command, use those — and if you hold neither, one authenticated POST to `/mcp` is a complete call. `https://bikeshed.now/llms.txt` shows it.
 
 ## Where a document goes
 
@@ -131,7 +131,7 @@ If you genuinely need several files, send a `.zip` with `index.html` at its root
 ```bash
 bikeshed publish proposal.md --title "Storage migration" --json
 # → {"docId":"storage-migration","versionId":"v1",
-#    "url":"https://<deployment>/d/storage-migration", …}
+#    "url":"https://bikeshed.now/d/storage-migration", …}
 
 bikeshed update storage-migration proposal.md
 ```

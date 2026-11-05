@@ -103,8 +103,8 @@ async function documents() {
     skills,
     texts: [
       ["docs/agents/agent-guide.md", GUIDE],
-      ["skills/README.md", readFileSync(join(ROOT, "skills", "README.md"), "utf8")],
-      ...skills.map((s) => [`skills/${s.name}/SKILL.md`, s.text]),
+      ["claude-plugin/README.md", readFileSync(join(ROOT, "claude-plugin", "README.md"), "utf8")],
+      ...skills.map((s) => [`claude-plugin/skills/${s.name}/SKILL.md`, s.text]),
       // The guides a deployment opens at /docs and /docs/developers. People
       // read them, but the developer guide makes the same claims about the
       // surface, and the user guide must go on naming none it gets wrong.
@@ -125,7 +125,7 @@ test("every skill declares the name of the directory it is in", async () => {
     assert.equal(
       skill.declaredName,
       skill.name,
-      `skills/${skill.name}/SKILL.md declares "${skill.declaredName}"`,
+      `claude-plugin/skills/${skill.name}/SKILL.md declares "${skill.declaredName}"`,
     );
   }
 });
