@@ -20,7 +20,7 @@
 
 import { PUBLIC_CACHE_SECONDS } from "../config";
 import { type DocAclData, type FolderAclData, earlierEnd, expiryMs, folderAccess, isFrozen, readAccess, visibilityOf } from "./acl";
-import type { DocHead } from "./head";
+import { type DocHead, readBlocks } from "./head";
 import { escapeAttr, escapeText } from "./html";
 
 /* ------------------------------------------------------------------------ */
@@ -138,6 +138,7 @@ export function composeFolderPage(input: {
     image: `${origin}${DEFAULT_CARD.path}`,
     imageIsDefault: true,
     noindex: decision.noindex,
+    text: null,
   };
 }
 
@@ -205,6 +206,11 @@ export interface ShellPage {
   image: string;
   imageIsDefault: boolean;
   noindex: boolean;
+  /**
+   * The document's words, for a crawler that runs no JavaScript and so never
+   * sees the frame they load into; null keeps the template's text about the site.
+   */
+  text: readonly string[] | null;
 }
 
 /** Everything the shell says about a document, from the decision and the document's own head. */
@@ -219,6 +225,8 @@ export function composePage(input: {
   entry: string;
   files: readonly string[];
   k: string;
+  /** The entry, as far as it was read. */
+  html: string;
 }): ShellPage {
   const { origin, docId, requestedVersion, decision, head, k } = input;
   const noindex = decision.noindex;
@@ -237,6 +245,9 @@ export function composePage(input: {
     files: input.files,
     k: token,
   });
+  // Only what a crawler is meant to index, at the address it is meant to cite.
+  // An unlisted document is `noindex`, and an earlier version has been revised.
+  const blocks = noindex || requestedVersion !== null ? [] : readBlocks(input.html);
   return {
     title: head.title ?? input.docTitle,
     description: head.description,
@@ -245,6 +256,7 @@ export function composePage(input: {
     image: image.url,
     imageIsDefault: image.isDefault,
     noindex,
+    text: blocks.length > 0 ? blocks : null,
   };
 }
 
@@ -254,6 +266,9 @@ const TITLE = /<title(?:\s[^>]*)?>[\s\S]*?<\/title\s*>/i;
 const META = /<meta\s[^>]*>/gi;
 const NAME_IS_DESCRIPTION = /\sname\s*=\s*(?:"description"|'description')/i;
 const HEAD_END = /<\/head\s*>/i;
+/** What stands between these in `app/index.html` is the text a crawler reads there. */
+const TEXT_OPEN = "<!--crawler-text-->";
+const TEXT_CLOSE = "<!--/crawler-text-->";
 
 /**
  * The shell with this page's head spliced in.
@@ -309,7 +324,21 @@ export function renderShell(template: string, page: ShellPage): string {
   const lineStart = html.lastIndexOf("\n", headEnd.index) + 1;
   const before = html.slice(lineStart, headEnd.index);
   const indent = /^[ \t]*$/.test(before) ? before : "";
-  return splice(html, headEnd.index, headEnd.index, `${lines.join(`\n${indent}`)}\n${indent}`);
+  return spliceText(splice(html, headEnd.index, headEnd.index, `${lines.join(`\n${indent}`)}\n${indent}`), page);
+}
+
+/**
+ * The document's words in place of the template's text about the site. A
+ * template without the markers keeps what it has: it is an older shell, still
+ * in the cache during a deploy.
+ */
+function spliceText(html: string, page: ShellPage): string {
+  if (page.text === null) return html;
+  const open = html.indexOf(TEXT_OPEN);
+  const close = html.indexOf(TEXT_CLOSE, open);
+  if (open === -1 || close === -1) return html;
+  const blocks = page.text.map((block) => `<p>${escapeText(block)}</p>`).join("");
+  return splice(html, open + TEXT_OPEN.length, close, `<div class="crawler-text"><h1>${escapeText(page.title)}</h1>${blocks}</div>`);
 }
 
 /** The first `<meta …>` whose attributes include `name="description"`. */

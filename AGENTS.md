@@ -121,7 +121,7 @@ No tracked file may name the real project, account, bucket, SDK config or measur
 | `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/architecture/adr/` | twenty-six decisions, each with its reversal condition |
+| `docs/architecture/adr/` | twenty-seven decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 
 ## Looks like a bug, is not
@@ -133,6 +133,8 @@ No tracked file may name the real project, account, bucket, SDK config or measur
 - **Slide detection is a list of rules, not a selector.** Measured against real decks, `section[id]` and `section.slide` each match under half of them and their coverage does not overlap. Reading order is DOM order: some decks number sections out of order, and some use bare numerals whose `#id` form is not a valid selector at all.
 - **A thumbnail keeps the slide's ancestors, and `paged` is latched.** Rendering a slide alone throws away the container rules its own stylesheet is written against, so it renders unstyled in a box measured from the styled frame — all whitespace. And the navigator is gated on `paged`, which the rail's own width can change: re-deciding it on resize makes the viewer oscillate.
 - **A suggestion's replacement is not in the document's text.** It is an attribute on the last highlight wrapper, shown with `content: attr(…)`. A text node would shift `textContent`, which every anchor is measured against, and would be published by the strip that unwraps highlights.
+- **A public document's shell holds its words, hidden.** They are for a crawler that runs no JavaScript ([ADR 0028](docs/architecture/adr/0028-what-a-crawler-can-read.md)). The stylesheet hides them and the app replaces them on mount; an attribute or inline style would read to a parser as a page choosing not to say them.
+- **`robots.txt` names no bot.** A bot obeys only the group that names it, so naming one would lift every other rule for it.
 - **The email secret holds a single space.** `defineSecret` demands a version; Secret Manager refuses an empty payload. Whitespace is how a deployment says "email off", and `apiKey()` trims.
 
 ## Agentic Continuous Flow (ACF)

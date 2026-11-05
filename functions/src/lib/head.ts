@@ -129,6 +129,29 @@ const WORDS = new Intl.Segmenter(undefined, { granularity: "word" });
  */
 export function countWords(html: string): number {
   const raw = html.length > WORDS_SCAN_CHARS ? html.slice(0, WORDS_SCAN_CHARS) : html;
+  let words = 0;
+  for (const segment of WORDS.segment(bodyText(raw, " "))) if (segment.isWordLike) words++;
+  return words;
+}
+
+/** Marks a block boundary while a body is read. Whitespace would be collapsed with the rest. */
+const BLOCK = "\u0001";
+
+/**
+ * A document's words block by block, for a crawler that runs no JavaScript and
+ * so never sees the frame they load into (SPEC §17). Plain text, decoded: the
+ * caller escapes what it writes. Only as far as the shell scans.
+ */
+export function readBlocks(html: string): string[] {
+  const raw = html.length > HEAD_SCAN_BYTES ? html.slice(0, HEAD_SCAN_BYTES) : html;
+  return bodyText(raw, BLOCK)
+    .split(BLOCK)
+    .map(collapseWhitespace)
+    .filter((block) => block.length > 0);
+}
+
+/** The body's text, decoded, with `boundary` wherever a tag other than an inline one was. */
+function bodyText(raw: string, boundary: string): string {
   const stripped = stripHidden(raw, asciiLower(raw));
   const bodyAt = firstTag(stripped.lower, "body", 0);
   const from = bodyAt === -1 ? afterHead(stripped.lower) : bodyAt;
@@ -151,12 +174,10 @@ export function countWords(html: string): number {
       continue;
     }
     runs.push(text.slice(runFrom, lt));
-    if (!INLINE.has(tagName(lower, lt))) runs.push(" ");
+    if (!INLINE.has(tagName(lower, lt))) runs.push(boundary);
     i = runFrom = gt + 1;
   }
-  let words = 0;
-  for (const segment of WORDS.segment(decodeEntities(runs.join("")))) if (segment.isWordLike) words++;
-  return words;
+  return decodeEntities(runs.join(""));
 }
 
 /**

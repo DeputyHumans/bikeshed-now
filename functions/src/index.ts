@@ -3035,7 +3035,8 @@ export const docShell = onRequest(WARM, async (req, res) => {
       .createReadStream({ start: 0, end: HEAD_SCAN_BYTES - 1 });
     const bytes = await collectPrefix(stream, HEAD_SCAN_BYTES);
     stage = "scan";
-    const head = readHead(bytes.toString("utf8"));
+    const html = bytes.toString("utf8");
+    const head = readHead(html);
 
     stage = "render";
     const page = composePage({
@@ -3048,15 +3049,16 @@ export const docShell = onRequest(WARM, async (req, res) => {
       entry,
       files,
       k,
+      html,
     });
-    const html = renderShell(template, page);
+    const rendered = renderShell(template, page);
 
     // ONLY NOW: the page exists, so this URL may be cached with it.
     res.setHeader("Cache-Control", `public, max-age=${decision.maxAge}`);
     if (decision.noindex) res.setHeader("X-Robots-Tag", "noindex");
     res.status(200);
     if (isHead) res.end();
-    else res.send(html);
+    else res.send(rendered);
   } catch (err) {
     // The generic shell is a 200, so without this line a runtime identity
     // that cannot read the bucket would serve the product's head for every

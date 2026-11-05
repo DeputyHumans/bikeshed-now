@@ -1074,6 +1074,8 @@ Hosting's static shell says "Bikeshed" in its `<head>` and nothing about the doc
 
 An absent document, a version that does not exist, and any failure between the decision and the finished page are generic as well.
 
+**A crawler that runs no JavaScript reads the shell's text** ([ADR 0028](adr/0028-what-a-crawler-can-read.md)). `app/index.html` carries the landing page's sentences and links inside `#root`, between `<!--crawler-text-->` markers; the app's stylesheet hides them and the app replaces them on mount. A shell with no `noindex` and no pinned version swaps them for the document's title and words (`readBlocks`, as far as the shell scanned), each escaped, so a citation lands at `/d/{slug}`. Every other row above keeps the site's text.
+
 `/folder/**` goes to the same function (§2 `GET /folder/:folderId`). A folder's page names the folder, with the default card, when the folder's own public level or its key opens it, under the same cache and robots rules as a document's; it reads nothing inside the folder, so a cached page never goes on describing contents that have changed. Every other folder is the generic shell.
 
 **The head comes from the entry's first 256 KiB** (`HEAD_SCAN_BYTES`), asked for as a byte range and capped again in the function, so a large document is never read to the end for the sake of its head. What lies past the cap is not described. From that prefix, with comments, `<script>`, `<style>`, `<svg>`, `<template>` and `<nav>` dropped first — an inline SVG's accessible `<title>` must not become the document's, nor a table of contents its description:

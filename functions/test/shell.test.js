@@ -12,6 +12,7 @@ const {
   decideShell,
   DEFAULT_CARD,
   resolveImage,
+  composeFolderPage,
   composePage,
   renderShell,
   collectPrefix,
@@ -222,6 +223,7 @@ function compose(over = {}) {
     entry: "index.html",
     files: ["index.html", "cover.png"],
     k: "",
+    html: "",
     ...over,
   });
 }
@@ -285,6 +287,7 @@ function page(over = {}) {
     image: `${ORIGIN}/brand/og-default.png`,
     imageIsDefault: true,
     noindex: false,
+    text: null,
     ...over,
   };
 }
@@ -870,4 +873,89 @@ test("docShell names the step that failed, so a template regression reads differ
     at("readHead(") < at('stage = "render"') && at('stage = "render"') < at("composePage("),
     "the render stage is entered after the scanner and before the composer",
   );
+});
+
+/* ------------------------------------------------------------------------ */
+/* The text a crawler reads without running JavaScript                       */
+
+const WORDS = "<!doctype html><html><head><title>Own</title></head><body><h1>Own</h1><p>The body of the document.</p></body></html>";
+
+test("a public document's words replace the site's in the shell", () => {
+  const out = renderShell(TEMPLATE, compose({ html: WORDS, head: { ...NO_HEAD, title: "Own" } }));
+  assert.ok(out.includes("<p>The body of the document.</p>"));
+  assert.ok(out.includes('class="crawler-text"'));
+  assert.equal(out.includes("Everyone has an opinion"), false, "the site's own text is gone");
+  assert.equal(count(out, "<!--crawler-text-->"), 1);
+});
+
+test("the words sit inside the element the app replaces when it mounts", () => {
+  const out = renderShell(TEMPLATE, compose({ html: WORDS }));
+  const root = out.indexOf('<div id="root">');
+  const words = out.indexOf("The body of the document.");
+  const script = out.indexOf('<script type="module"');
+  assert.ok(root !== -1 && root < words && words < script);
+});
+
+test("an unlisted document's words stay out of its shell, even with the right key", () => {
+  const page = compose({ html: WORDS, decision: { ...DOCUMENT, noindex: true }, k: "tok" });
+  assert.equal(page.text, null);
+  const out = renderShell(TEMPLATE, page);
+  assert.equal(out.includes("The body of the document."), false);
+  assert.ok(out.includes("Everyone has an opinion"), "the site's own text stays");
+});
+
+test("an earlier version's words stay out of its shell", () => {
+  // An answer quoting what has since been revised is the thing robots.txt asks
+  // crawlers not to fetch; a crawler that fetches it anyway finds nothing to quote.
+  assert.equal(compose({ html: WORDS, requestedVersion: "v1" }).text, null);
+});
+
+test("a folder's page keeps the site's text", () => {
+  const folder = composeFolderPage({ origin: ORIGIN, folderId: "f", name: "F", decision: { kind: "folder", maxAge: 300, noindex: false }, k: "" });
+  assert.equal(folder.text, null);
+  assert.ok(renderShell(TEMPLATE, folder).includes("Everyone has an opinion"));
+});
+
+test("a document with nothing to read keeps the site's text", () => {
+  const page = compose({ html: "<html><body><script>build()</script></body></html>" });
+  assert.equal(page.text, null);
+  assert.ok(renderShell(TEMPLATE, page).includes("Everyone has an opinion"));
+});
+
+test("a document's words cannot become markup in the app's origin", () => {
+  // The shell is on the origin the session cookie lives on, so this is the line
+  // between an uploaded document and running script there.
+  const hostile = [
+    "<p>&lt;/div&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p>",
+    "<p>&lt;img src=x onerror=alert(2)&gt;</p>",
+    "<p>&lt;!--/crawler-text--&gt; after</p>",
+    "<p>$&amp; $` $' $1</p>",
+    "<p>unclosed <b",
+  ].join("");
+  const out = renderShell(TEMPLATE, compose({ html: `<html><body>${hostile}</body></html>`, head: { ...NO_HEAD, title: "</h1><script>alert(3)</script>" } }));
+  const from = out.indexOf("<!--crawler-text-->");
+  const block = out.slice(from + "<!--crawler-text-->".length, out.lastIndexOf("<!--/crawler-text-->"));
+  assert.deepEqual([...new Set(block.match(/<\/?[a-z!][^\s>]*/gi))].sort(), ["</div", "</h1", "</p", "<div", "<h1", "<p"], "only the shell's own tags");
+  assert.ok(block.includes("&lt;/div&gt;&lt;script&gt;alert(1)&lt;/script&gt;"));
+  assert.ok(block.includes("$&amp; $` $' $1"), "a replacement pattern stays literal");
+  assert.equal(count(out, "<!--/crawler-text-->"), 1);
+  assert.equal(count(out, 'id="root"'), 1, "the template around it is intact");
+});
+
+test("a template without the markers is served as it is", () => {
+  // A shell from before this change, still in the cache during a deploy.
+  const older = TEMPLATE.replace("<!--crawler-text-->", "").replace("<!--/crawler-text-->", "");
+  const out = renderShell(older, page({ text: ["Words."] }));
+  assert.equal(out.includes("Words."), false);
+  assert.ok(out.includes("<title>A title</title>"));
+});
+
+test("the template's text is what a browser hides and a crawler reads", () => {
+  // In the app's stylesheet rather than on the element. A parser that reads no
+  // CSS sees text, where a `hidden` attribute or an inline style would read as
+  // something a page chose not to show.
+  assert.match(TEMPLATE, /<!--crawler-text-->\s*<div class="crawler-text">/);
+  assert.equal(/class="crawler-text"[^>]*(hidden|style=)/.test(TEMPLATE), false);
+  const css = readFileSync(join(APP, "src", "styles", "primitives.css"), "utf8");
+  assert.match(css, /\.crawler-text\s*\{\s*display:\s*none;\s*\}/);
 });

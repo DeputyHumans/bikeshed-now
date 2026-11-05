@@ -354,3 +354,9 @@ button.fork-chip { cursor: pointer; }
   text-align: center;
   color: var(--color-ink-muted);
 }
+
+/* What app/index.html says to a crawler that runs no JavaScript. Hidden here, not
+   on the element, so that a parser reading no CSS sees text. */
+.crawler-text {
+  display: none;
+}
