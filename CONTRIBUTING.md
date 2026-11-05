@@ -9,7 +9,7 @@ Nothing here requires a Firebase account or a credit card. Everything runs again
 You need Node 24 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a JRE. The emulators are a Java process rather than a Node one, which is the one prerequisite `npm install` cannot hand you.
 
 ```bash
-npm run install:all          # root + app + functions + cli
+npm run install:all          # root + app + functions
 npm run build:policy         # render the identity gate from config/access-policy.json
 cp app/.env.example app/.env.local   # already points at the emulators
 npm run emulators            # in one terminal — project id is demo-bikeshed

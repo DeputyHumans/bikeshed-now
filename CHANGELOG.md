@@ -30,6 +30,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 - **The end-to-end check that a viewer never sees someone's draft works again.** A9.5 expected the version chip to read exactly `v1`, and the chip has also shown reading time since October, so the case failed for everyone without saying anything about drafts. It now accepts the reading time and still fails on the word draft, which a new control proves.
 - **The app's tests no longer depend on the order they run in.** One test left a signed-in user on the shared Firebase Auth stub and another left a refusal installed on the shared API stub, so a different order failed tests with nothing wrong in them. A hook in `UploadVersionDialog.test.tsx` also returned its mock, and a function returned from a hook runs as a teardown.
 - **`npm run verify` runs the app's coverage thresholds.** `CONTRIBUTING.md` said it did and CI does, but it ran the app's tests without them, so a drop below a threshold passed `verify` and failed only in CI.
+- **`npm run install:all` no longer leaves an untracked lockfile in `cli/`.** The CLI has no dependencies, so there was nothing to install.
 
 ## 0.34.0 — 2026-11-04
 
