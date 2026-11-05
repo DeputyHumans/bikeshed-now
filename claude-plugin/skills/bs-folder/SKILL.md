@@ -1,5 +1,5 @@
 ---
-name: bikeshed-folders
+name: bs-folder
 description: Use when deciding where a new Bikeshed document goes, and when organising a workspace — listing the folder tree, creating folders, and filing documents into them. Read this before publishing into a folder or moving a document, because a folder decides who can read what is inside it.
 ---
 
@@ -45,7 +45,7 @@ Given a folder's link, `/folder/<id>?k=<key>`, pass `k` to `get_folder` to list 
 
 ## Choosing a folder for a new document
 
-Nobody is emailed when a document lands in a folder, so the person hears who can now read it from you, or not at all. File a new document at the root, or in a folder only they can read, or in one they named for it; anywhere else, ask first, naming who will be able to read it. The `bikeshed-publishing` skill, "Where it is filed", has the whole rule.
+Nobody is emailed when a document lands in a folder, so the person hears who can now read it from you, or not at all. File a new document at the root, or in a folder only they can read, or in one they named for it; anywhere else, ask first, naming who will be able to read it. The `bs-publish` skill, "Where it is filed", has the whole rule.
 
 A folder does not need to be yours to fit, and being yours does not make it private: one you made inside a shared folder is shared too.
 
@@ -105,7 +105,7 @@ Deleting moves to the owner's Trash, and only the owner can do it. A folder take
 
 Trash only what the person asked you to, and report what went: the counts a folder returns, whose documents were in it if you know, and that it is deleted forever in 30 days unless restored. Use these operations when authorized; do not ask again for authorization already given. No tool deletes anything forever: a person who wants something gone sooner does it in the browser's Trash, with a code emailed to them.
 
-For sharing and role changes use `get_folder_access`, `set_folder_access`, `set_folder_visibility`, `get_document_access` and `set_document_access`, described in the `bikeshed-permissions` skill.
+For sharing and role changes use `get_folder_access`, `set_folder_access`, `set_folder_visibility`, `get_document_access` and `set_document_access`, described in the `bs-share` skill.
 
 If a listing is `truncated`, the workspace has more folders than one call returns. Say so rather than treating what you got as the whole tree.
 

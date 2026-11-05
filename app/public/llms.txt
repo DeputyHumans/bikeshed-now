@@ -176,10 +176,10 @@ Longer instructions for the three jobs this surface is for, written in the Agent
 
 | Skill | Load it when |
 |---|---|
-| `bikeshed-publishing` | writing and publishing a document, or revising one; which formats it takes and what renders, runs and loads in one |
-| `bikeshed-feedback` | reading anchored review comments and acting on them |
-| `bikeshed-permissions` | inspecting and changing permissions, visibility, open editing or expiry |
-| `bikeshed-folders` | organising a workspace, or moving a document |
+| `bs-publish` | writing and publishing a document, or revising one; which formats it takes and what renders, runs and loads in one |
+| `bs-comment` | reading anchored review comments and acting on them |
+| `bs-share` | inspecting and changing permissions, visibility, open editing or expiry |
+| `bs-folder` | organising a workspace, or moving a document |
 
 ```bash
 bikeshed skills                              # what this deployment publishes
@@ -236,7 +236,7 @@ bikeshed update storage-migration proposal.md
 - **Answer the threads in `needsReply`,** then publish once, passing `update_document` the `baseVersion` you revised, so you never overwrite what a person saved in the app.
 - **From a shell,** `bikeshed changes <id> --since <cursor> --wait` keeps checking until something happens, and prints the cursor for next time. `bikeshed update <id> <file> --base <version>` refuses a stale base.
 
-The `bikeshed-feedback` skill has the whole loop.
+The `bs-comment` skill has the whole loop.
 
 ## Raising something new
 
@@ -492,7 +492,7 @@ Owners may change settings on expired documents, so clear or extend expiry when 
 
 Return the server's usable URL and settings. Public/unlisted visibility is separate from direct and inherited membership; making a document private does not revoke its explicit or inherited members.
 
-Folder rename, move and the Trash are covered by `bikeshed-folders`.
+Folder rename, move and the Trash are covered by `bs-folder`.
 
 ### Manage folders
 

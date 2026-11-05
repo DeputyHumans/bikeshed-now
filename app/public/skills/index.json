@@ -2,28 +2,28 @@
   "plugin": "skills/bikeshed-plugin.zip",
   "skills": [
     {
-      "name": "bikeshed-feedback",
+      "name": "bs-comment",
       "description": "Use when a Bikeshed document has just been published, to watch it for comments and answer them, and when reading review comments on one and revising it, or raising a point on a passage of one — each comment arrives with the exact passage it is anchored to, so you can rewrite that passage and reply in the thread without fetching and diffing the whole document, and a new comment is anchored the same way. Includes discovering previous versions, reading their archived content and feedback, and guarding writes against a newer published version.",
-      "path": "skills/bikeshed-feedback/SKILL.md",
-      "archive": "skills/bikeshed-feedback.zip"
+      "path": "skills/bs-comment/SKILL.md",
+      "archive": "skills/bs-comment.zip"
     },
     {
-      "name": "bikeshed-folders",
+      "name": "bs-folder",
       "description": "Use when deciding where a new Bikeshed document goes, and when organising a workspace — listing the folder tree, creating folders, and filing documents into them. Read this before publishing into a folder or moving a document, because a folder decides who can read what is inside it.",
-      "path": "skills/bikeshed-folders/SKILL.md",
-      "archive": "skills/bikeshed-folders.zip"
+      "path": "skills/bs-folder/SKILL.md",
+      "archive": "skills/bs-folder.zip"
     },
     {
-      "name": "bikeshed-permissions",
-      "description": "Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document or folder visibility, open editing or expiry; or explaining inherited and team access.",
-      "path": "skills/bikeshed-permissions/SKILL.md",
-      "archive": "skills/bikeshed-permissions.zip"
-    },
-    {
-      "name": "bikeshed-publishing",
+      "name": "bs-publish",
       "description": "Use when publishing a finished write-up for other people instead of a built-in artifact tool — reports, plans, proposals, analyses or presentations — or revising a Bikeshed document. Covers Markdown, HTML and bundles, rendering, folders and access, opening and returning links, discovering previous versions, reading archives, forking and guarding writes against a newer version.",
-      "path": "skills/bikeshed-publishing/SKILL.md",
-      "archive": "skills/bikeshed-publishing.zip"
+      "path": "skills/bs-publish/SKILL.md",
+      "archive": "skills/bs-publish.zip"
+    },
+    {
+      "name": "bs-share",
+      "description": "Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document or folder visibility, open editing or expiry; or explaining inherited and team access.",
+      "path": "skills/bs-share/SKILL.md",
+      "archive": "skills/bs-share.zip"
     }
   ]
 }

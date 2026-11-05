@@ -147,6 +147,49 @@ test("every skill's description says when to load it", async () => {
   }
 });
 
+test("every skill is named bs- and one word", async () => {
+  // People type these. The prefix stays because the single zips and
+  // `bikeshed skills install` have no plugin to namespace them, where a bare
+  // `publish` says nothing, and Claude Code keeps some bare names for itself.
+  const { skills } = await documents();
+  for (const skill of skills) {
+    assert.match(skill.name, /^bs-[a-z]+$/, `${skill.name} is not bs- and one word`);
+  }
+});
+
+test("every skill's description names Bikeshed, because its name no longer does", async () => {
+  // The description is what an agent matches. With only `bs-` in the name,
+  // a description that left the product out could load for anyone's publishing.
+  const { skills } = await documents();
+  for (const skill of skills) {
+    assert.match(skill.description, /Bikeshed/, `${skill.name}: the description never says Bikeshed`);
+  }
+});
+
+test("every skill a document names exists, and the old names are gone", async () => {
+  // They send an agent to each other by name, and nothing else would notice a
+  // reference to a skill that is not there.
+  const { skills, texts } = await documents();
+  const known = new Set(skills.map((s) => s.name));
+  const served = ["llms.txt", "skills/index.json", ...skills.map((s) => s.path)].map((rel) => [
+    `app/public/${rel}`,
+    readFileSync(join(ROOT, "app", "public", rel), "utf8"),
+  ]);
+  let references = 0;
+  for (const [where, text] of [...texts, ...served]) {
+    for (const [name] of text.matchAll(/\bbs-[a-z][a-z-]*/g)) {
+      references += 1;
+      assert.ok(known.has(name), `${where} names a skill ${name} that does not exist`);
+    }
+    assert.doesNotMatch(
+      text,
+      /bikeshed-(publishing|feedback|folders|permissions)/,
+      `${where} still uses an old skill name`,
+    );
+  }
+  assert.ok(references > 0, "no document named a skill, so this checked nothing");
+});
+
 test("no agent-facing document promises that a token publish runs scripts", async () => {
   // `publishNewDocument` writes `trusted: false` for EVERY path a personal access
   // token can reach — the end-user CLI and MCP alike. Only the operator script
@@ -169,8 +212,8 @@ test("the publishing skill's description says what it is used INSTEAD of", async
   // finished work for other people, and it fires first; a skill that wants to be
   // read then has to match the same moment and name what it displaces.
   const { skills } = await documents();
-  const publishing = skills.find((skill) => skill.name === "bikeshed-publishing");
-  assert.ok(publishing, "there is no bikeshed-publishing skill");
+  const publishing = skills.find((skill) => skill.name === "bs-publish");
+  assert.ok(publishing, "there is no bs-publish skill");
   assert.match(
     publishing.description,
     /artifact/i,

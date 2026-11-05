@@ -6,10 +6,10 @@ They are written in the Agent Skills convention — a directory per skill, holdi
 
 | Skill | Load it when |
 |---|---|
-| `bikeshed-publishing` | writing and publishing a document, or revising one; where it is filed, what id it gets, and handing back and opening its link; which formats it takes and what renders, runs and loads in one |
-| `bikeshed-feedback` | watching a published document for comments, reading anchored review comments and acting on them |
-| `bikeshed-permissions` | inspecting or changing permissions, visibility, open editing or expiry |
-| `bikeshed-folders` | choosing where a new document goes, organising a workspace, or moving a document |
+| `bs-publish` | writing and publishing a document, or revising one; where it is filed, what id it gets, and handing back and opening its link; which formats it takes and what renders, runs and loads in one |
+| `bs-comment` | watching a published document for comments, reading anchored review comments and acting on them |
+| `bs-share` | inspecting or changing permissions, visibility, open editing or expiry |
+| `bs-folder` | choosing where a new document goes, organising a workspace, or moving a document |
 
 ## Installing them
 
@@ -31,7 +31,11 @@ Or by hand — they are public files, listed at `/skills/index.json`, each one a
 
 The zips are linked from the account screen too, beside the address to connect an app with. The plugin holds all four skills and its manifest. Each single zip holds `<name>/SKILL.md` and nothing else. All of them are packed from the copy the deployment serves. If you added skills one at a time before, remove them first.
 
-The plugin holds all four because they refer to each other by name: `bikeshed-publishing` sends an agent to the other three for parts of the job.
+The plugin holds all four because they refer to each other by name: `bs-publish` sends an agent to the other three for parts of the job.
+
+Installed them under their old `bikeshed-*` names? Delete those directories, because `bikeshed skills install` only adds and an agent would otherwise find both. In Claude's own apps, remove the old uploads.
+
+The `bs-` stays even inside the plugin, because the single zips and `bikeshed skills install` have no plugin to namespace them, and a bare `publish` says nothing there. In Claude Code, a skill from the plugin answers to `/bs-publish` and to `/bikeshed:bs-publish`.
 
 `https://<deployment>/llms.txt` is the shorter, always-loaded version. The skills are the long form, loaded only for the task that needs them.
 
@@ -56,7 +60,7 @@ One line where your agent reads instructions from is what settles it, because it
 
 ```
 When a write-up is meant for other people, publish it to Bikeshed with the
-bikeshed-publishing skill, not with a built-in artifact tool. Tell me which
+bs-publish skill, not with a built-in artifact tool. Tell me which
 folder it goes in and who can read it there before filing it anywhere shared,
 give it a distinct id, give me the link, and watch it for comments until I say
 stop or an hour passes quietly.

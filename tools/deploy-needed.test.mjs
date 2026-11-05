@@ -16,7 +16,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 test("what production serves deploys, and so does anything nobody has classified", () => {
   for (const path of [
     "app/public/llms.txt",
-    "app/public/skills/bikeshed-publishing/SKILL.md",
+    "app/public/skills/bs-publish/SKILL.md",
     "claude-plugin/.claude-plugin/plugin.json",
     "app/src/test/README.md",
     "functions/src/index.ts",
@@ -42,7 +42,7 @@ test("what production never serves does not deploy", () => {
     "docs/architecture/spec.md",
     "docs/agents/agent-guide.md",
     "claude-plugin/README.md",
-    "claude-plugin/skills/bikeshed-publishing/SKILL.md",
+    "claude-plugin/skills/bs-publish/SKILL.md",
     ".claude-plugin/marketplace.json",
     "content/docs/bundle/index.html",
     "cli/src/index.mjs",

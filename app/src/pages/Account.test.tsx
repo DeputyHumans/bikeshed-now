@@ -74,16 +74,16 @@ const INDEX = {
   plugin: "skills/bikeshed-plugin.zip",
   skills: [
     {
-      name: "bikeshed-feedback",
+      name: "bs-comment",
       description: "Reading review comments.",
-      path: "skills/bikeshed-feedback/SKILL.md",
-      archive: "skills/bikeshed-feedback.zip",
+      path: "skills/bs-comment/SKILL.md",
+      archive: "skills/bs-comment.zip",
     },
     {
-      name: "bikeshed-publishing",
+      name: "bs-publish",
       description: "Publishing a write-up.",
-      path: "skills/bikeshed-publishing/SKILL.md",
-      archive: "skills/bikeshed-publishing.zip",
+      path: "skills/bs-publish/SKILL.md",
+      archive: "skills/bs-publish.zip",
     },
     // A shape the page must not turn into a link.
     { name: "odd", description: "x", path: "skills/odd/SKILL.md", archive: "javascript:alert(1)" },
@@ -160,8 +160,8 @@ describe("connect an app", () => {
     await screen.findByRole("heading", { name: "Skills for Claude" });
     expect(downloads()).toEqual([
       "/skills/bikeshed-plugin.zip",
-      "/skills/bikeshed-feedback.zip",
-      "/skills/bikeshed-publishing.zip",
+      "/skills/bs-comment.zip",
+      "/skills/bs-publish.zip",
     ]);
   });
 
@@ -176,7 +176,7 @@ describe("connect an app", () => {
   it("keeps the single zips for the plan without plugins, and out of the way", async () => {
     renderAccount();
     await screen.findByRole("heading", { name: "Skills for Claude" });
-    const single = screen.getByRole("link", { name: "bikeshed-feedback" });
+    const single = screen.getByRole("link", { name: "bs-comment" });
     expect(single.closest("details")?.querySelector("summary")?.textContent).toMatch(/free plan/i);
     expect(screen.getByRole("link", { name: /Download the Bikeshed plugin/ }).closest("details")).toBeNull();
   });
@@ -189,7 +189,7 @@ describe("connect an app", () => {
       });
     renderAccount();
     await screen.findByRole("heading", { name: "Skills for Claude" });
-    expect(downloads()).toEqual(["/skills/bikeshed-feedback.zip", "/skills/bikeshed-publishing.zip"]);
+    expect(downloads()).toEqual(["/skills/bs-comment.zip", "/skills/bs-publish.zip"]);
   });
 
   it("still offers the single zips when a deployment has no plugin yet", async () => {
@@ -201,7 +201,7 @@ describe("connect an app", () => {
       });
     renderAccount();
     await screen.findByRole("heading", { name: "Skills for Claude" });
-    expect(downloads()).toEqual(["/skills/bikeshed-feedback.zip", "/skills/bikeshed-publishing.zip"]);
+    expect(downloads()).toEqual(["/skills/bs-comment.zip", "/skills/bs-publish.zip"]);
   });
 
   it("hides the skills when the index cannot be read", async () => {

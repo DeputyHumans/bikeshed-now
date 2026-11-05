@@ -108,7 +108,7 @@ const ACCESS_RE = /^bsa_([0-9a-f]{32})\.[A-Za-z0-9_-]{43}$/;
 const REFRESH_RE = /^bsr_([0-9a-f]{32})\.[A-Za-z0-9_-]{43}$/;
 const PERSONAL_RE = /^bsk_([0-9a-f]{32})\.[A-Za-z0-9_-]{20,64}$/;
 /** SPEC §19 "Skills": three of them, one per job. */
-const SPEC_SKILLS = ["bikeshed-feedback", "bikeshed-folders", "bikeshed-permissions", "bikeshed-publishing"];
+const SPEC_SKILLS = ["bs-comment", "bs-folder", "bs-publish", "bs-share"];
 /** tools/stamp-deployment.mjs TOKEN: the placeholder the build replaces with the deployment's origin. */
 const STAMP_TOKEN = "https://<deployment>";
 /**

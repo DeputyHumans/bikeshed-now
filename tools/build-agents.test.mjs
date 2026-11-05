@@ -27,7 +27,7 @@ test("a skill read straight from the repo names a real address, never the placeh
   for (const { name, text } of skills) {
     assert.equal(text.includes("<deployment>"), false, `${name} still names the placeholder`);
   }
-  const publishing = skills.find((s) => s.name === "bikeshed-publishing");
+  const publishing = skills.find((s) => s.name === "bs-publish");
   assert.ok(count(publishing.text, HOSTED_ORIGIN) >= FEWEST, "the publishing skill stopped naming an address");
 });
 
@@ -43,7 +43,7 @@ test("what a deployment is given names the placeholder, never the hosted address
     assert.equal(served, servedSkill(text), `app/public/skills/${name} is not the swapped copy`);
     assert.equal(served.includes(HOST), false, `app/public/skills/${name} names ${HOST}`);
   }
-  const publishing = readFileSync(join(SERVED, "bikeshed-publishing", "SKILL.md"), "utf8");
+  const publishing = readFileSync(join(SERVED, "bs-publish", "SKILL.md"), "utf8");
   assert.ok(count(publishing, TOKEN) >= FEWEST, "the served publishing skill stopped naming the token");
   assert.equal(readFileSync(join(SERVED, "index.json"), "utf8").includes(HOST), false, "index.json names the host");
 });

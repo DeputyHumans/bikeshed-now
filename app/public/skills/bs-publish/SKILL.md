@@ -1,5 +1,5 @@
 ---
-name: bikeshed-publishing
+name: bs-publish
 description: Use when publishing a finished write-up for other people instead of a built-in artifact tool — reports, plans, proposals, analyses or presentations — or revising a Bikeshed document. Covers Markdown, HTML and bundles, rendering, folders and access, opening and returning links, discovering previous versions, reading archives, forking and guarding writes against a newer version.
 ---
 
@@ -41,10 +41,10 @@ Two exceptions, each with something you can check:
 ### What you hand back
 
 1. **The address**: the `url` in the result, every time, as a link they can click. Open it too when they can see the browser it opens in (below).
-2. **Where it is filed, and who can read it there**, from the result's `filedIn` and `access`, never from memory: "Filed at the root. Only you can read it." or "Filed in `Engineering/Reviews`. Seven people can read it: ana@, bo@, cy@ and the Platform team." When `access` says `alsoReadableBy`, say that too. When further sharing is authorized, use the `bikeshed-permissions` skill.
+2. **Where it is filed, and who can read it there**, from the result's `filedIn` and `access`, never from memory: "Filed at the root. Only you can read it." or "Filed in `Engineering/Reviews`. Seven people can read it: ana@, bo@, cy@ and the Platform team." When `access` says `alsoReadableBy`, say that too. When further sharing is authorized, use the `bs-share` skill.
 3. **Nothing else.** No second copy elsewhere, no pasted document.
 
-Then say you will watch it for comments, and do, if your harness can wait. Keep the `cursor` the publish returned: it is where watching starts. The `bikeshed-feedback` skill, "After you hand back the address", has the loop.
+Then say you will watch it for comments, and do, if your harness can wait. Keep the `cursor` the publish returned: it is where watching starts. The `bs-comment` skill, "After you hand back the address", has the loop.
 
 ### Instead of
 
@@ -194,7 +194,7 @@ So, for every new document:
 
 From a shell, `bikeshed folders` shows how many can read each folder, and `bikeshed folder <id>` names them. `bikeshed publish` prints where the document went and who can read it there.
 
-`--folder` on `publish`, or `publish_document`'s `folder`, files it in one call. The `bikeshed-folders` skill has the rest.
+`--folder` on `publish`, or `publish_document`'s `folder`, files it in one call. The `bs-folder` skill has the rest.
 
 ## A document may expire
 
@@ -202,7 +202,7 @@ From a shell, `bikeshed folders` shows how many can read each folder, and `bikes
 
 Nothing has been deleted when that happens. The versions, the comments and the bytes all survive, and the owner can move the date or clear it — so if you need an expired document, ask, rather than republishing its content as a new one and leaving two documents where there was one.
 
-Owners can set, extend or clear expiry with `set_document_visibility`; see `bikeshed-permissions`. Omitted settings stay unchanged.
+Owners can set, extend or clear expiry with `set_document_visibility`; see `bs-share`. Omitted settings stay unchanged.
 
 ## Scripts run only if somebody vouched for them
 
@@ -238,7 +238,7 @@ The viewer shows a slide rail and keyboard navigation when it finds a run of sib
 
 ## What happens next
 
-Share with additional readers when authorized, using `bikeshed-permissions`. Then watch for what comes back, and answer it: the `bikeshed-feedback` skill.
+Share with additional readers when authorized, using `bs-share`. Then watch for what comes back, and answer it: the `bs-comment` skill.
 
 ### Previous versions and write guards
 

@@ -1386,7 +1386,7 @@ A second, build-only step stamps the copy in `app/dist`: the token `https://<dep
 
 ### Skills
 
-`claude-plugin/skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter carrying `name` and `description`, then Markdown. Four of them — `bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders`, `bikeshed-permissions` — one per job the surface exists for. `llms.txt` is the short form every agent reads; a skill is the long form, loaded for the task that needs it.
+`claude-plugin/skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter carrying `name` and `description`, then Markdown. Four of them — `bs-publish`, `bs-comment`, `bs-folder`, `bs-share` — one per job the surface exists for, named short because people type them. `llms.txt` is the short form every agent reads; a skill is the long form, loaded for the task that needs it.
 
 In the repo they name `https://bikeshed.now`, so anything reading them directly gets an address that works. The same build step copies them to `app/public/skills/` with that address swapped back to `https://<deployment>`, with a generated `index.json` built from the frontmatter, and the same stamp reaches the `app/dist` copies, so a deployment serves the skills that describe **what that deployment can do**, at the address it is actually reachable at. The list of files to stamp is derived from the `claude-plugin/skills/` directory rather than enumerated, so a skill cannot be added or renamed and left unstamped. `bikeshed skills install <dir>` writes them wherever a harness reads skills from; it needs no token, because they are public files, and it validates each name against `^[a-z0-9][a-z0-9-]*$` before it uses it as a directory.
 
