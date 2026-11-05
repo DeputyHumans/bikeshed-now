@@ -1390,6 +1390,8 @@ A second, build-only step stamps the copy in `app/dist`: the token `https://<dep
 
 In the repo they name `https://bikeshed.now`, so anything reading them directly gets an address that works. The same build step copies them to `app/public/skills/` with that address swapped back to `https://<deployment>`, with a generated `index.json` built from the frontmatter, and the same stamp reaches the `app/dist` copies, so a deployment serves the skills that describe **what that deployment can do**, at the address it is actually reachable at. The list of files to stamp is derived from the `claude-plugin/skills/` directory rather than enumerated, so a skill cannot be added or renamed and left unstamped. `bikeshed skills install <dir>` writes them wherever a harness reads skills from; it needs no token, because they are public files, and it validates each name against `^[a-z0-9][a-z0-9-]*$` before it uses it as a directory.
 
+`.claude-plugin/marketplace.json` makes the repository a Claude plugin marketplace listing `claude-plugin/` as its one plugin, for the deployment at `https://bikeshed.now` only, because a catalogue in one repository can name one address. It sets no `version`, so a commit decides what is new. A push reaches anyone syncing it ahead of CI.
+
 Kept true by `functions/test/skills.test.js` rather than by intention. Every `bikeshed …` command and every MCP tool name a skill or the guide mentions must exist, **and** every tool and command that exists must be named in the guide — the second direction being the one that catches a capability nobody is told about. A skill naming an absent command is worse than no skill: an agent believes it.
 
 ### Not built

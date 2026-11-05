@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Added
+
+- **This repository is a Claude plugin marketplace, for bikeshed.now.** In claude.ai or Claude Desktop, Customize > Plugins > Add > Add marketplace with `DeputyHumans/bikeshed-now` installs all four skills at once, and updates can follow from then on. It names one address, so it is not for anyone running their own deployment (SPEC §19).
+
 ### Changed
 
 - **The skills moved to `claude-plugin/skills/`, and name `https://bikeshed.now` there.** An agent reading them straight from this repo now gets an address that works, where it used to get `https://<deployment>`. What a deployment serves is unchanged: `tools/build-agents.mjs` swaps the address back on the way into `app/public/skills/`, and the stamp does the rest as before. The URLs under `/skills/` stay the same (SPEC §19).

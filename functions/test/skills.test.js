@@ -3,7 +3,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { cpSync, mkdtempSync, readFileSync, rmSync } = require("node:fs");
+const { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } = require("node:fs");
 const { execFileSync } = require("node:child_process");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
@@ -464,6 +464,78 @@ test("the served index lists exactly the skills in the tree", async () => {
     assert.equal(entry.archive, `skills/${entry.name}.zip`);
     assert.match(entry.name, /^[a-z0-9][a-z0-9-]*$/);
   }
+});
+
+// --- What a marketplace reads straight from the repo ------------------------
+
+/** The catalogue at the repo root, and the one plugin it lists. */
+function catalogue() {
+  return JSON.parse(readFileSync(join(ROOT, ".claude-plugin", "marketplace.json"), "utf8"));
+}
+
+function manifest() {
+  return JSON.parse(readFileSync(join(ROOT, "claude-plugin", ".claude-plugin", "plugin.json"), "utf8"));
+}
+
+/** A directory's names, sorted, without what Finder leaves behind on a Mac. */
+const listing = (...path) => readdirSync(join(...path)).filter((n) => n !== ".DS_Store").sort();
+
+test("the catalogue has the fields Claude requires, and lists one plugin", () => {
+  const { name, owner, plugins } = catalogue();
+  assert.match(name, /^[a-z0-9-]+$/);
+  assert.doesNotMatch(name, /claude|anthropic/i, "a name impersonating an official marketplace is refused");
+  assert.equal(typeof owner?.name, "string");
+  assert.equal(plugins.length, 1);
+  assert.equal(plugins[0].name, manifest().name, "the catalogue lists a plugin that is not this one");
+});
+
+test("neither the catalogue nor the manifest sets a version", () => {
+  // A SKILL.md-only change deploys without a release, and a fixed version keeps
+  // readers on their cached copy "however many commits" are pushed. With none,
+  // the commit decides, so a corrected skill reaches them.
+  assert.equal("version" in catalogue().plugins[0], false, "the catalogue sets a version");
+  assert.equal("version" in manifest(), false, "the manifest sets a version");
+});
+
+test("the catalogue warns that it is for one deployment, and nothing can outrank that", () => {
+  // Someone running their own deployment who adds this gets skills naming the
+  // hosted one, and the CLI would send their token there.
+  assert.match(catalogue().plugins[0].description, /bikeshed\.now/);
+  assert.equal("description" in manifest(), false, "a manifest description could replace the warning");
+});
+
+test("the manifest is one any deployment can ship", () => {
+  // The same file goes into the zip every deployment offers.
+  const text = readFileSync(join(ROOT, "claude-plugin", ".claude-plugin", "plugin.json"), "utf8");
+  assert.equal(text.includes("bikeshed.now"), false, "the manifest names one deployment");
+  const { name, license } = manifest();
+  assert.match(name, /^[a-z0-9-]{1,64}$/);
+  assert.equal(license, "Apache-2.0");
+});
+
+test("the plugin's source is a directory holding the skills and nothing a host would act on", async () => {
+  // Every top-level name there means something to a host: a `bin/` stops
+  // claude.ai installing the plugin at all, and `hooks/` or `.mcp.json` would
+  // run or connect something. So the list is closed rather than checked for
+  // the names known today.
+  const { readSkills } = await import("../../tools/build-agents.mjs");
+  const { source } = catalogue().plugins[0];
+  assert.equal(source, "./claude-plugin", "organization sync takes a relative path only with ./");
+  const root = join(ROOT, source);
+  assert.deepEqual(listing(root), [".claude-plugin", "README.md", "skills"]);
+  assert.deepEqual(listing(root, ".claude-plugin"), ["plugin.json"]);
+  const skills = readSkills().map((s) => s.name);
+  assert.ok(skills.length > 0, "there are no skills");
+  assert.deepEqual(listing(root, "skills"), skills);
+  for (const name of skills) {
+    assert.deepEqual(listing(root, "skills", name), ["SKILL.md"], `${name} holds something else`);
+  }
+});
+
+test("the repo root is a marketplace and never itself a plugin", () => {
+  // A plugin here would copy the whole repo into every reader's cache.
+  assert.deepEqual(listing(ROOT, ".claude-plugin"), ["marketplace.json"]);
+  assert.equal(existsSync(join(ROOT, ".claude-plugin", "plugin.json")), false);
 });
 
 test("each skill's zip opens in another reader as its folder and its stamped SKILL.md", async () => {

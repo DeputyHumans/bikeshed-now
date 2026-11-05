@@ -32,6 +32,19 @@ The zips are linked from the account screen too, beside the address to connect a
 
 `https://<deployment>/llms.txt` is the shorter, always-loaded version. The skills are the long form, loaded only for the task that needs them.
 
+### In Claude's own apps, on bikeshed.now
+
+This directory is a Claude plugin holding all four skills, and the repository is a marketplace that lists it, so you can add them once instead of one by one:
+
+| Where | How |
+|---|---|
+| claude.ai, Claude Desktop | Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, then install `bikeshed` |
+| Claude Code | `/plugin marketplace add DeputyHumans/bikeshed-now`, then `/plugin install bikeshed@bikeshed` |
+
+Plugins need a paid plan. On claude.ai, Check for updates brings in changes, and Sync automatically does it for you. In Claude Code, updates from a marketplace like this are off until you turn them on under `/plugin`.
+
+**This marketplace is for bikeshed.now only.** Its skills name that address, and the CLI sends its stored token to whichever address is set. If you run your own deployment, use the plugin on its Account page instead.
+
 ## Making an agent prefer this over its own publisher
 
 A skill is loaded when its description matches the task. Nothing loads one unconditionally, so an agent whose harness has its own way to publish a finished write-up — Claude Code's `Artifact` tool, for instance — may reach for that instead, because its own instructions tell it to.
@@ -67,6 +80,8 @@ A skill that names a command which does not exist is worse than no skill: an age
 It also holds each skill to Claude's upload limits (a name of at most 64 lowercase letters, digits and hyphens, never naming Claude or Anthropic, and a description of at most 1,024 characters), and opens every zip with an independent reader. The predeploy check refuses a zip whose `SKILL.md` differs by one byte from the file served beside it.
 
 `npm run check:agents` separately asserts that the copies under `app/public/skills/` are exactly these with one change, the same way `AGENTS.md` and `llms.txt` are held to their sources. Edit the file here and run `npm run build:agents`.
+
+A push to `main` reaches anyone syncing the marketplace straight away, ahead of CI and whether or not it deploys, so a skill describing something production doesn't have yet can be read before it does.
 
 The one change is the address. These files name `https://bikeshed.now`, so an agent reading them straight from this repo gets one that works. A deployment's copy has it swapped back to `https://<deployment>`, which the build then stamps with that deployment's own address, or leaves as it is on a deployment with no custom domain.
 
