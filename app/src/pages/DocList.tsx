@@ -293,6 +293,8 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
     map: null,
   });
   const [drawer, setDrawer] = useState(false);
+  // Picking a folder is what the drawer was opened for, and it lay over the result.
+  useEffect(() => setDrawer(false), [folderId, view]);
   const [uploading, setUploading] = useState(false);
   // A document brings its visibility triple along; a folder its level and date.
   const [sharing, setSharing] = useState<{
@@ -685,6 +687,9 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
   return (
     <div className="workspace">
       <FolderTree folders={folders} currentFolderId={folderId} drawerOpen={drawer} page={view as WorkspacePage} />
+      {drawer ? (
+        <button type="button" className="drawer-scrim" aria-label="Close the folder list" onClick={() => setDrawer(false)} />
+      ) : null}
 
       {/* The drop zone is the whole column, not just the grid: "free space" on
           a workspace with two documents in it is mostly below them. */}
