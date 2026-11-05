@@ -12,9 +12,14 @@
  *                    because both change what the document DOES.
  *   ONE_COLUMN       viewer and workspace collapse to one column; the slide
  *                    rail becomes a drawer; a Doc/Comments toggle appears.
- *   PHONE            condensed header; Print leaves the toolbar for the More
- *                    menu; rail drawer.
- *   XS               hide the address and the viewer title; tighter padding.
+ *   PHONE            the header folds behind one menu button; Print leaves the
+ *                    toolbar for the More menu; rail drawer.
+ *   XS               a document's details stack, a line each.
+ *
+ * CONDENSED is PHONE, or a phone on its side: wide enough to look like a tablet,
+ * and under 300 CSS px tall in Safari, so the bars above a document have to fold
+ * just the same. A height is not a tier, so `tokens.test.ts` does not count it,
+ * and `styles/viewer.test.ts` holds its stylesheet copies to this one.
  */
 export const COMPACT_TOOLBAR_MAX = 1100;
 export const ONE_COLUMN_MAX = 860;
@@ -31,6 +36,6 @@ export const BREAKPOINTS = [
 export const COMPACT_TOOLBAR_QUERY = `(max-width: ${COMPACT_TOOLBAR_MAX}px)`;
 export const ONE_COLUMN_QUERY = `(max-width: ${ONE_COLUMN_MAX}px)`;
 export const PHONE_QUERY = `(max-width: ${PHONE_MAX}px)`;
-export const XS_QUERY = `(max-width: ${XS_MAX}px)`;
+export const CONDENSED_QUERY = `(max-width: ${PHONE_MAX}px), (max-height: 500px) and (pointer: coarse)`;
 export const COARSE_POINTER_QUERY = "(hover: none), (pointer: coarse)";
 export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";

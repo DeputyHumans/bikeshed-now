@@ -58,6 +58,43 @@ describe("Menu", () => {
     vi.restoreAllMocks();
   });
 
+  it("opens where its trigger is from inside something positioned, however far the page has scrolled", () => {
+    // In the sticky header, document coordinates opened it lower by the page's scroll.
+    const root = document.documentElement;
+    vi.spyOn(root, "clientWidth", "get").mockReturnValue(402);
+    vi.spyOn(root, "clientHeight", "get").mockReturnValue(714);
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(900);
+    const host = document.createElement("div");
+    document.body.append(host);
+    vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockReturnValue(host);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      // The header, at the top of the window; its trigger inside it.
+      const box = this === host ? { top: 0, bottom: 61, left: 0, right: 402 } : { top: 8, bottom: 52, left: 340, right: 384 };
+      return { ...box, width: box.right - box.left, height: box.bottom - box.top, x: box.left, y: box.top, toJSON: () => ({}) };
+    });
+    const { getByRole } = render(
+      <Menu label="Menu" entries={[{ id: "a", label: "A" }]} trigger={(props) => <button {...props}>Open</button>} />,
+      { container: host },
+    );
+    fireEvent.click(getByRole("button", { name: "Open" }));
+    expect((host.querySelector(".menu") as HTMLElement).style.top).toBe("56px");
+    host.remove();
+  });
+
+  it("closes on a tap outside it that lands on its backdrop, as a tap on the document must", () => {
+    const root = document.documentElement;
+    vi.spyOn(root, "clientWidth", "get").mockReturnValue(402);
+    vi.spyOn(root, "clientHeight", "get").mockReturnValue(714);
+    const { getByRole, container, queryByRole } = render(
+      <Menu label="Menu" entries={[{ id: "a", label: "A" }]} trigger={(props) => <button {...props}>Open</button>} />,
+    );
+    fireEvent.click(getByRole("button", { name: "Open" }));
+    expect(queryByRole("menu")).toBeTruthy();
+    fireEvent.click(container.querySelector(".menu-backdrop") as HTMLElement);
+    expect(queryByRole("menu")).toBeNull();
+  });
+
   /** A document card's menu, its trigger 10px from the bottom of the window. */
   function openAtBottom() {
     // jsdom lays nothing out, so the window, the trigger's box and the menu's

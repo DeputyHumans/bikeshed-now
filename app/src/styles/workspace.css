@@ -16,6 +16,7 @@
   position: sticky;
   top: calc(var(--header-h) + var(--s-3));
   max-height: calc(100vh - var(--header-h) - var(--s-6));
+  max-height: calc(100dvh - var(--header-h) - var(--s-6));
   overflow-y: auto;
   padding-right: var(--s-2);
 }

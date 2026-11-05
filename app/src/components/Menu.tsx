@@ -55,6 +55,22 @@ export function menuPosition(
   return { top: top + scroll.y, left: left + scroll.x };
 }
 
+/**
+ * What to add to a place in the window to get `menu.style.top` and `left`.
+ *
+ * The document's scroll, unless the menu sits in something positioned, which it
+ * is then measured from. Inside the sticky header, a menu placed in document
+ * coordinates opened lower by however far the page had scrolled.
+ */
+function originOf(menu: HTMLElement): { x: number; y: number } {
+  const parent = menu.offsetParent;
+  if (!(parent instanceof HTMLElement) || parent === document.body || parent === document.documentElement) {
+    return { x: window.scrollX, y: window.scrollY };
+  }
+  const box = parent.getBoundingClientRect();
+  return { x: parent.scrollLeft - box.left - parent.clientLeft, y: parent.scrollTop - box.top - parent.clientTop };
+}
+
 export function Menu({
   trigger,
   entries,
@@ -86,7 +102,7 @@ export function Menu({
       { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight },
       // jsdom measures nothing; the stylesheet's min-width makes it about 200.
       { width: menu.offsetWidth || 200, height: menu.offsetHeight },
-      { x: window.scrollX, y: window.scrollY },
+      originOf(menu),
     );
     menu.style.top = `${top}px`;
     menu.style.left = `${left}px`;
@@ -139,6 +155,7 @@ export function Menu({
         onClick: () => setOpen((v) => !v),
         "aria-expanded": open,
       })}
+      {open ? <div className="menu-backdrop" aria-hidden="true" onClick={() => setOpen(false)} /> : null}
       {open ? (
         <div
           ref={menuRef}

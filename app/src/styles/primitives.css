@@ -149,6 +149,28 @@
   color: var(--color-ink-muted);
   white-space: nowrap;
 }
+/* A chip that is a button keeps the 44 px a finger needs and still looks like every
+   other chip: the pill is drawn behind it at a chip's own height. The floor in
+   base.css had turned it into a pill twice the height of the span beside it. A
+   filter is a control and looks like one, so it stays its full height. */
+@media (hover: none), (pointer: coarse) {
+  button.chip:not(.recent-filter) {
+    position: relative;
+    z-index: 0;
+    border-color: transparent;
+    background: none;
+  }
+  button.chip:not(.recent-filter)::before {
+    content: "";
+    position: absolute;
+    inset: 10px 0;
+    z-index: -1;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+  }
+  button.expiry-chip[data-expired]::before { border-color: currentColor; }
+}
 .chip-accent {
   background: var(--color-accent-soft);
   border-color: rgba(75, 61, 209, 0.24);

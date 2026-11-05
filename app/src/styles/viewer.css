@@ -399,6 +399,7 @@
   bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
   z-index: 31;
   max-height: 60vh;
+  max-height: 60dvh;
   overflow: auto;
 }
 

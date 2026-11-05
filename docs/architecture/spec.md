@@ -1273,13 +1273,21 @@ its associated label as its hit area; inline links within prose retain their
 inline-target exception. Keyboard focus uses `:focus-visible`; when the browser
 focuses an iframe document without matching a focus pseudo-class on its host,
 the app reflects that focus with the same ring on the app-owned iframe. This
-indicator never decorates the authored document. Dialogs contain Tab focus even
+indicator never decorates the authored document, and on a touch screen it is not
+drawn, because a finger in the document would leave it round the page. Dialogs contain Tab focus even
 when a focused control is disabled or removed, and restore their opener when
 closed. Reduced motion applies to every app-driven scroll, including review
 navigation and the slide rail. Presence mode shapes remain visibly painted in
 forced colours. Brand chrome only — **never restyle embedded document content.**
 
 **On a touch screen the selection controls dock at the bottom.** A phone draws its own Copy/Share menu just above a selection, which is where Comment and Suggest edit float on a fine pointer, and covers them. Where `(pointer: coarse)` matches, they are a bar fixed to the bottom of the screen, 16px from each side and clear of the home indicator, and the suggestion form opens as a sheet above it. In one column, a tapped highlight's thread and the Comments tab both open the comments pane.
+
+**A text field is 16 CSS px on a touch screen.** Below that iOS zooms the whole page when one takes focus, and leaves it zoomed. The rule sits beside the tap floor in `base.css`, important for the same reason, and the larger verification code field is exempt. Pinch zoom is never blocked.
+
+**On a phone the header is the wordmark and one menu.** At 600 px and below the address, Account, Docs and Sign out need more room than there is, so they fold behind one button (`AccountMenu`). A signed-out visitor finds Docs and Sign in there, and Sign in comes back to the same place through `next`.
+
+`viewport-fit=cover` stays out. On its side Safari insets the page itself and `env(safe-area-inset-bottom)` still reports the home indicator, so the only thing it would buy is a cosmetic full bleed, at the price of about twenty inset rules, and it would make the layout width wider than the 860 px tier.
+
 
 ---
 
@@ -3338,7 +3346,7 @@ answers:
 | Surface | |
 |---|---|
 | Workspace card | "Fork", one click, into the folder being viewed, then opens it |
-| Viewer toolbar | "Fork", for a reader who is not the owner, in the slot Share takes for an owner — so no toolbar is wider than an owner's. Its tooltip says the author will see that it was forked |
+| Viewer toolbar | "Fork", for a reader who is not the owner, in the slot Share takes for an owner — so no toolbar is wider than an owner's. Its tooltip says the author will see that it was forked. |
 | Viewer menu | "Fork", or "Fork this version" on an old one, for every reader; "Forks…" for the owner |
 | Signed out | sign in, then the fork completes: the intent travels as `?fork=1` through `/signup?next=`, runs once the document has resolved as the account, and is removed before the request so a reload cannot fork twice. `next` is honoured only as a path on this origin |
 | MCP / CLI | `fork_document`; `bikeshed fork <id|link> [--version] [--folder] [--title]`. Lineage is `get_lineage` and `bikeshed lineage <id|link>`, the same answer as the panel; `list_documents` and `get_document` carry `forked`, and `list_documents` the fork count, off the record |

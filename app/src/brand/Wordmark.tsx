@@ -18,7 +18,7 @@ export function Wordmark({
   variant = "full",
   size = 22,
 }: {
-  /** "mark" drops the text — used below 400px, where the full lockup crowds out the actions. */
+  /** "mark" drops the text — used on a phone's document page, where the title takes its place. */
   variant?: "full" | "mark";
   size?: number;
 }) {

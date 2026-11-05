@@ -33,3 +33,21 @@ describe("the visibility options", () => {
     expect(declarations(".visibility-option > span")).toMatch(/min-width\s*:\s*0\s*;/);
   });
 });
+
+/**
+ * An owner's menu is taller than a phone, and a scroll of the page closes it, so
+ * what runs off the bottom could never be reached. It scrolls inside itself.
+ */
+describe("a long menu on a phone", () => {
+  it("stays on the screen and scrolls inside itself", () => {
+    const menu = declarations(".menu");
+    expect(menu).toMatch(/max-height\s*:\s*calc\(100dvh/);
+    expect(menu).toMatch(/overflow-y\s*:\s*auto/);
+  });
+});
+
+describe("a dialog on a phone", () => {
+  it("sizes to the screen, however long an address it lists", () => {
+    expect(declarations(".modal-backdrop")).toMatch(/grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/);
+  });
+});

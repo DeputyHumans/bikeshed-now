@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 import {
   COARSE_POINTER_QUERY,
   COMPACT_TOOLBAR_QUERY,
+  CONDENSED_QUERY,
   ONE_COLUMN_QUERY,
   PHONE_QUERY,
   REDUCED_MOTION_QUERY,
-  XS_QUERY,
 } from "./breakpoints";
 
 /**
@@ -39,6 +39,6 @@ export function useMediaQuery(query: string): boolean {
 export const useIsCompactToolbar = () => useMediaQuery(COMPACT_TOOLBAR_QUERY);
 export const useIsSingleColumn = () => useMediaQuery(ONE_COLUMN_QUERY);
 export const useIsPhone = () => useMediaQuery(PHONE_QUERY);
-export const useIsExtraSmall = () => useMediaQuery(XS_QUERY);
+export const useIsCondensed = () => useMediaQuery(CONDENSED_QUERY);
 export const useCoarsePointer = () => useMediaQuery(COARSE_POINTER_QUERY);
 export const usePrefersReducedMotion = () => useMediaQuery(REDUCED_MOTION_QUERY);

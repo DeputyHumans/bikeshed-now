@@ -2,9 +2,9 @@
 // The icon set: hand-authored paths, one stroke weight, no icon library.
 
 /**
- * Thirty-seven icons is not a dependency. A library would bring a thousand, a
+ * A few dozen icons is not a dependency. A library would bring a thousand, a
  * build step to shake them, and a second visual language to reconcile with the
- * mark — for the sake of the thirty-seven this interface actually uses.
+ * mark — for the sake of the few dozen this interface actually uses.
  *
  * Every path is drawn on a 24-unit grid with a 1.7 stroke and round caps, so
  * they sit together, inherit `currentColor`, and stay crisp at any size.
@@ -16,6 +16,7 @@ const PATHS = {
   chevron: "m9 5 7 7-7 7",
   chevronDown: "m5 9 7 7 7-7",
   plus: "M12 5v14M5 12h14",
+  menu: "M4 7h16M4 12h16M4 17h16",
   close: "m6 6 12 12M18 6 6 18",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",
   // Three real circles, not zero-length strokes. As `h.01` segments these

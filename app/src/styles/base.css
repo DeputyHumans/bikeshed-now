@@ -46,7 +46,10 @@ a {
 a:hover { text-decoration-thickness: 2px; }
 
 img, svg, video { max-width: 100%; }
-svg { display: block; }
+/* Never a flex item's slack. With that max-width an svg's minimum size is zero, so
+   any row short of room takes the width out of its icons first: a logo beside a
+   wordmark came out zero wide on an iPhone Pro, its name still drawn. */
+svg { display: block; flex-shrink: 0; }
 
 button, input, select, textarea {
   font: inherit;
@@ -137,8 +140,22 @@ iframe.doc-frame[data-frame-focus] { outline-offset: -2px; }
     min-height: var(--tap) !important;
     min-width: var(--tap) !important;
   }
-  a[href]:not(:is(p, .legal li, .field-hint, .caption) a) { display: inline-flex; align-items: center; }
+  /* Centred by align-content, not by becoming a flex box. A flex box draws no
+     ellipsis, so a link that had to shrink lost letters with no sign of it:
+     "Everything" read "Everythi". It also passed the link's underline on to a
+     wordmark inside it, which an inline-block does not. */
+  a[href]:not(:is(p, .legal li, .field-hint, .caption) a) { display: inline-block; align-content: center; }
   summary, .checkbox-row > label { align-content: center; }
+  /* A finger in the document focuses its frame, and the ring that tells a keyboard
+     user where they are becomes a blue box round the page for as long as they read. */
+  iframe.doc-frame[data-frame-focus] { outline: none; }
+  /* Below 16px iOS zooms the whole page when a field takes focus, and leaves it
+     zoomed. Important for the same reason as the floor above: a feature's own
+     size must not bring the zoom back. The code field is larger on purpose. */
+  input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="button"], [type="submit"], [type="reset"], .verify-code-input),
+  select, textarea {
+    font-size: 16px !important;
+  }
 }
 
 ::selection {

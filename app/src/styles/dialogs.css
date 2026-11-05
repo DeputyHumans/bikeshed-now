@@ -7,6 +7,9 @@
   inset: 0;
   z-index: 50;
   display: grid;
+  /* A track of its own width, not its content's: an auto track grew to fit one long
+     address on one line, which pushed the whole dialog off the side of a phone. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: var(--s-3);
   background: rgba(var(--ink-rgb), 0.44);
@@ -15,6 +18,7 @@
 .modal {
   width: min(520px, 100%);
   max-height: min(84vh, 720px);
+  max-height: min(84dvh, 720px);
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-lg);
@@ -51,6 +55,18 @@
   border-radius: var(--radius-md);
   background: var(--color-bg);
   box-shadow: var(--shadow-lg);
+  /* An owner's menu is taller than a phone. It scrolls inside itself, which does
+     not close it the way a scroll of the page does. */
+  max-width: calc(100vw - var(--s-4));
+  max-height: calc(100vh - var(--s-4));
+  max-height: calc(100dvh - var(--s-4));
+  overflow-y: auto;
+}
+/* A tap on the document lands in another frame, whose events the page never hears,
+   so on touch a tap outside a menu has to land on something of ours. */
+.menu-backdrop { display: none; }
+@media (hover: none), (pointer: coarse) {
+  .menu-backdrop { display: block; position: fixed; inset: 0; z-index: 54; }
 }
 .menu-item {
   display: flex;
@@ -75,6 +91,7 @@
   font-size: var(--fs-caption);
   font-weight: 620;
   color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
 }
 
 /* --- Sharing (SPEC §18) --------------------------------------------------
