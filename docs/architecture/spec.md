@@ -1745,7 +1745,7 @@ The connection is one row in `tokens/` per (issuer, person, address, client), wi
 
 ### Skills as downloads
 
-Each skill is also served as `/skills/<name>.zip`, holding `<name>/SKILL.md`. This is the shape Claude's skill upload takes. The zip is packed from the **stamped** file after the build, stored rather than compressed, and verified byte for byte by the predeploy check.
+All the skills are served as one Claude plugin at `/skills/bikeshed-plugin.zip`, holding `.claude-plugin/plugin.json` and `skills/<name>/SKILL.md`, which `index.json` names as `plugin` and the account screen offers first. It sets no version. Each skill is also served as `/skills/<name>.zip`, holding `<name>/SKILL.md`, the shape Claude's skill upload takes, for a plan without plugins. Every zip is packed from the **stamped** files after the build, stored rather than compressed, and verified byte for byte by the predeploy check.
 
 ### Not built
 

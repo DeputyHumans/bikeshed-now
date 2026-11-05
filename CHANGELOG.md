@@ -12,6 +12,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ### Added
 
+- **All the skills are one download.** The account screen now offers `/skills/bikeshed-plugin.zip`, a Claude plugin holding all four, in place of four separate zips. They refer to each other by name, so uploading only some of them left an agent looking for skills it did not have. The single zips stay for Claude's Free plan, which has no plugins, behind a disclosure on the same screen. Uploads are now described as Customize > Plugins and Customize > Skills, where Claude has moved them (SPEC §23).
 - **This repository is a Claude plugin marketplace, for bikeshed.now.** In claude.ai or Claude Desktop, Customize > Plugins > Add > Add marketplace with `DeputyHumans/bikeshed-now` installs all four skills at once, and updates can follow from then on. It names one address, so it is not for anyone running their own deployment (SPEC §19).
 
 ### Changed

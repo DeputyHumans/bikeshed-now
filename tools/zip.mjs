@@ -5,9 +5,9 @@
  * Why a zip writer of our own, and why it never compresses.
  *
  * Claude's skill upload takes a `.zip` holding one folder with a `SKILL.md`
- * in it. The served copy of each skill is stamped with the deployment's origin
+ * in it, and its plugin upload a `.zip` holding a manifest and several of them. The served copy of each skill is stamped with the deployment's origin
  * at build time, so its zip has to be built at build time too, from the stamped
- * bytes. The tools have no runtime dependencies, and two entries in an archive
+ * bytes. The tools have no runtime dependencies, and a few entries in an archive
  * nobody extracts more than once are not worth one.
  *
  * Stored, never deflated, for one reason: CI runs `grep -rqF '<deployment>'`

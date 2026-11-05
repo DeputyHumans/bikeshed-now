@@ -22,13 +22,14 @@ import {
   deploymentStamp,
   normalizeOrigin,
   packSkills,
+  pluginArchive,
   resolveOrigin,
   servedDocuments,
   skillArchives,
   stamp,
   stampDist,
 } from "./stamp-deployment.mjs";
-import { readStoredZip } from "./zip.mjs";
+import { readStoredZip, storedZip } from "./zip.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -266,7 +267,7 @@ test("an archive packed before the stamp fails the check", () => {
   assert.equal(result.ok, false);
   assert.deepEqual(
     result.archives,
-    skillArchives().map((a) => a.path),
+    [...skillArchives().map((a) => a.path), pluginArchive().path],
   );
   // And the archive really does still hold the placeholder the check caught.
   const [, file] = readStoredZip(readFileSync(join(dist, skillArchives()[0].path)));
@@ -348,8 +349,102 @@ test("every archive in index.json exists in dist", () => {
   const packed = readdirSync(join(dist, "skills"))
     .filter((f) => f.endsWith(".zip"))
     .map((f) => `skills/${f}`);
-  assert.deepEqual(packed.sort(), [...listed].sort());
+  assert.deepEqual(packed.sort(), [...listed, index.plugin].sort());
   rmSync(base, { recursive: true, force: true });
+});
+
+// --- The one download ------------------------------------------------------
+
+/** A stamped dist, and the plugin archive it packed, read back. */
+function stampedPlugin() {
+  const { base, dist } = fakeDist();
+  stampDist(dist, "https://h.example");
+  const { path } = pluginArchive();
+  return { base, dist, path, entries: readStoredZip(readFileSync(join(dist, path))) };
+}
+
+test("the plugin zip holds the manifest and every skill, and nothing else", () => {
+  const { base, entries } = stampedPlugin();
+  const skills = skillArchives().map((a) => a.name);
+  assert.ok(skills.length > 0, "there are no skills");
+  assert.deepEqual(entries.map((e) => e.name), [
+    ".claude-plugin/",
+    ".claude-plugin/plugin.json",
+    "skills/",
+    ...skills.flatMap((name) => [`skills/${name}/`, `skills/${name}/SKILL.md`]),
+  ]);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("the plugin zip's manifest is the tracked one, and its skills are the stamped ones", () => {
+  const { base, dist, entries } = stampedPlugin();
+  const byName = new Map(entries.map((e) => [e.name, e.data]));
+  assert.ok(
+    byName.get(".claude-plugin/plugin.json").equals(readFileSync(join(ROOT, "claude-plugin", ".claude-plugin", "plugin.json"))),
+    "the manifest differs from the tracked one",
+  );
+  for (const { name } of skillArchives()) {
+    const served = readFileSync(join(dist, "skills", name, "SKILL.md"));
+    assert.ok(byName.get(`skills/${name}/SKILL.md`).equals(served), `${name} differs from the served file`);
+    assert.equal(served.toString("utf8").includes("<deployment>"), false, `${name} was not stamped`);
+  }
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("a repeated build packs the same plugin zip, byte for byte", () => {
+  // A rebuild that looks like a change would be read as one.
+  const { base, dist, path } = stampedPlugin();
+  const first = readFileSync(join(dist, path));
+  packSkills(dist);
+  assert.ok(readFileSync(join(dist, path)).equals(first));
+  rmSync(base, { recursive: true, force: true });
+});
+
+/** Rewrite one entry of the packed plugin zip, or drop it when `data` is null. */
+function tamper(dist, path, entryName, data) {
+  const entries = readStoredZip(readFileSync(join(dist, path)))
+    .filter((e) => data !== null || e.name !== entryName)
+    .map((e) => (e.name === entryName ? { name: e.name, data } : e.name.endsWith("/") ? { name: e.name } : e));
+  writeFileSync(join(dist, path), storedZip(entries));
+}
+
+test("the gate refuses a plugin zip missing a skill", () => {
+  const env = { BIKESHED_PUBLIC_ORIGIN: "https://h.example" };
+  const { base, dist, path } = stampedPlugin();
+  assert.deepEqual(checkDist(dist, env, ROOT).archives, []);
+  tamper(dist, path, `skills/${skillArchives()[0].name}/SKILL.md`, null);
+  assert.deepEqual(checkDist(dist, env, ROOT).archives, [path]);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("the gate refuses a plugin zip whose skill differs from the served file by one byte", () => {
+  const env = { BIKESHED_PUBLIC_ORIGIN: "https://h.example" };
+  const { base, dist, path } = stampedPlugin();
+  const name = `skills/${skillArchives()[0].name}/SKILL.md`;
+  const held = readStoredZip(readFileSync(join(dist, path))).find((e) => e.name === name).data;
+  tamper(dist, path, name, Buffer.concat([held, Buffer.from(" ")]));
+  assert.deepEqual(checkDist(dist, env, ROOT).archives, [path]);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("the gate refuses a plugin zip whose manifest is not the tracked one", () => {
+  const env = { BIKESHED_PUBLIC_ORIGIN: "https://h.example" };
+  const { base, dist, path } = stampedPlugin();
+  tamper(dist, path, ".claude-plugin/plugin.json", Buffer.from("{}"));
+  assert.deepEqual(checkDist(dist, env, ROOT).archives, [path]);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("the gate refuses a missing plugin zip", () => {
+  const env = { BIKESHED_PUBLIC_ORIGIN: "https://h.example" };
+  const { base, dist, path } = stampedPlugin();
+  rmSync(join(dist, path));
+  assert.deepEqual(checkDist(dist, env, ROOT).archives, [path]);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("the plugin zip's name cannot be taken by a skill's", () => {
+  assert.equal(skillArchives().some((a) => a.path === pluginArchive().path), false);
 });
 
 // --- Wiring ----------------------------------------------------------------

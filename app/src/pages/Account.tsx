@@ -124,29 +124,57 @@ function isSkillArchive(entry: unknown): entry is SkillArchive {
   );
 }
 
+interface SkillDownloads {
+  /** All the skills as one Claude plugin, where the deployment offers it. */
+  plugin: string | null;
+  skills: SkillArchive[];
+}
+
+const NO_DOWNLOADS: SkillDownloads = { plugin: null, skills: [] };
+
 /**
  * The skill zips, from the same index the CLI reads. Empty when the index is
  * missing or unreadable, which hides the block rather than showing an error:
  * a deployment built before the zips existed simply has none to offer.
  */
-function useSkillArchives(): SkillArchive[] {
-  const [skills, setSkills] = useState<SkillArchive[]>([]);
+function useSkillDownloads(): SkillDownloads {
+  const [downloads, setDownloads] = useState(NO_DOWNLOADS);
   useEffect(() => {
     let live = true;
     fetch("/skills/index.json")
       .then((r) => (r.ok ? r.json() : null))
-      .then((index: { skills?: unknown } | null) => {
+      .then((index: { plugin?: unknown; skills?: unknown } | null) => {
         const list = Array.isArray(index?.skills) ? index.skills : [];
-        if (live) setSkills(list.filter(isSkillArchive));
+        const plugin =
+          typeof index?.plugin === "string" && ARCHIVE_PATH.test(index.plugin) ? index.plugin : null;
+        if (live) setDownloads({ plugin, skills: list.filter(isSkillArchive) });
       })
       .catch(() => {
-        if (live) setSkills([]);
+        if (live) setDownloads(NO_DOWNLOADS);
       });
     return () => {
       live = false;
     };
   }, []);
-  return skills;
+  return downloads;
+}
+
+function SkillLinks({ skills }: { skills: SkillArchive[] }) {
+  return (
+    <ul className="connect-skills">
+      {skills.map((skill) => (
+        <li key={skill.name}>
+          <a href={`/${skill.archive}`} download>
+            <Icon name="download" size={14} />
+            {skill.name}
+          </a>
+          <span className="field-hint" style={{ display: "block" }}>
+            {skill.description}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /**
@@ -158,7 +186,7 @@ function ConnectSection() {
   const toast = useToast();
   const origin = window.location.origin;
   const url = `${origin}/mcp`;
-  const skills = useSkillArchives();
+  const { plugin, skills } = useSkillDownloads();
 
   return (
     <section style={{ marginTop: "var(--s-5)" }}>
@@ -219,26 +247,47 @@ function ConnectSection() {
         </details>
       </div>
 
-      {skills.length > 0 ? (
+      {plugin || skills.length > 0 ? (
         <div style={{ marginTop: "var(--s-4)" }}>
           <h3>Skills for Claude</h3>
-          <p className="field-hint">
-            Each one teaches Claude part of how Bikeshed works. Download it, then
-            add it in Claude's settings under Skills.
-          </p>
-          <ul className="connect-skills">
-            {skills.map((skill) => (
-              <li key={skill.name}>
-                <a href={`/${skill.archive}`} download>
-                  <Icon name="download" size={14} />
-                  {skill.name}
-                </a>
-                <span className="field-hint" style={{ display: "block" }}>
-                  {skill.description}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {plugin ? (
+            <>
+              <p className="field-hint">
+                These teach Claude how Bikeshed works: publishing, answering comments,
+                filing and sharing. Download the plugin, then add it in Claude under{" "}
+                {"Customize > Plugins > Add > Upload plugin"}. If you added any of these
+                skills one at a time before, remove them first.
+              </p>
+              <ul className="connect-skills">
+                <li>
+                  <a href={`/${plugin}`} download>
+                    <Icon name="download" size={14} />
+                    Download the Bikeshed plugin
+                  </a>
+                </li>
+              </ul>
+              {skills.length > 0 ? (
+                <div className="connect-guide">
+                  <details>
+                    <summary>On Claude's Free plan? Add the skills one at a time</summary>
+                    <p>
+                      Plugins need a paid plan. Download each skill, then add it in Claude
+                      under {"Customize > Skills"}.
+                    </p>
+                    <SkillLinks skills={skills} />
+                  </details>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="field-hint">
+                Each one teaches Claude part of how Bikeshed works. Download it, then
+                add it in Claude under {"Customize > Skills"}.
+              </p>
+              <SkillLinks skills={skills} />
+            </>
+          )}
         </div>
       ) : null}
     </section>

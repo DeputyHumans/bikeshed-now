@@ -71,6 +71,7 @@ const APP: TokenSummary = {
 };
 
 const INDEX = {
+  plugin: "skills/bikeshed-plugin.zip",
   skills: [
     {
       name: "bikeshed-feedback",
@@ -148,14 +149,59 @@ describe("connect an app", () => {
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/mcp`);
   });
 
-  it("offers each skill zip the index lists, and nothing else", async () => {
-    renderAccount();
-    await screen.findByRole("heading", { name: "Skills for Claude" });
-    const links = screen
+  const downloads = () =>
+    screen
       .getAllByRole("link")
       .filter((a) => a.hasAttribute("download"))
       .map((a) => a.getAttribute("href"));
-    expect(links).toEqual(["/skills/bikeshed-feedback.zip", "/skills/bikeshed-publishing.zip"]);
+
+  it("leads with the one plugin, then offers each skill's zip, and nothing else", async () => {
+    renderAccount();
+    await screen.findByRole("heading", { name: "Skills for Claude" });
+    expect(downloads()).toEqual([
+      "/skills/bikeshed-plugin.zip",
+      "/skills/bikeshed-feedback.zip",
+      "/skills/bikeshed-publishing.zip",
+    ]);
+  });
+
+  it("says where the plugin goes, and to take the single skills out first", async () => {
+    renderAccount();
+    await screen.findByRole("heading", { name: "Skills for Claude" });
+    const block = screen.getByRole("heading", { name: "Skills for Claude" }).parentElement!;
+    expect(block.textContent).toContain("Customize > Plugins > Add > Upload plugin");
+    expect(block.textContent).toMatch(/remove them first/i);
+  });
+
+  it("keeps the single zips for the plan without plugins, and out of the way", async () => {
+    renderAccount();
+    await screen.findByRole("heading", { name: "Skills for Claude" });
+    const single = screen.getByRole("link", { name: "bikeshed-feedback" });
+    expect(single.closest("details")?.querySelector("summary")?.textContent).toMatch(/free plan/i);
+    expect(screen.getByRole("link", { name: /Download the Bikeshed plugin/ }).closest("details")).toBeNull();
+  });
+
+  it("offers no plugin link when the index's path is not one of ours", async () => {
+    skillsResponse = async () =>
+      new Response(JSON.stringify({ ...INDEX, plugin: "javascript:alert(1)" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    renderAccount();
+    await screen.findByRole("heading", { name: "Skills for Claude" });
+    expect(downloads()).toEqual(["/skills/bikeshed-feedback.zip", "/skills/bikeshed-publishing.zip"]);
+  });
+
+  it("still offers the single zips when a deployment has no plugin yet", async () => {
+    // A deployment built before the plugin existed serves an index without it.
+    skillsResponse = async () =>
+      new Response(JSON.stringify({ skills: INDEX.skills }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    renderAccount();
+    await screen.findByRole("heading", { name: "Skills for Claude" });
+    expect(downloads()).toEqual(["/skills/bikeshed-feedback.zip", "/skills/bikeshed-publishing.zip"]);
   });
 
   it("hides the skills when the index cannot be read", async () => {

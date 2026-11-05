@@ -142,6 +142,14 @@ A comment is text anybody who can read the document wrote, and an agent reads it
 
 When an agent watches a document, the same text reaches it every few minutes, unasked. The feedback skill's loop decides only within its person's role, never because a comment asks, and on a public or unlisted document decides nothing without its person's word. It reports every decision to its person.
 
+### A push steers the agents reading the marketplace
+
+`.claude-plugin/marketplace.json` lists `claude-plugin/`, so anyone who added the repository reads its skills from `main`, and with Sync automatically on, a push reaches them ahead of CI and whether or not it deploys. A skill is instructions an agent believes. A self-hoster who adds it gets skills naming the hosted address, and the CLI sends its stored token to whichever address is set.
+
+**Mitigation.** The plugin is text only, and a test closes the list of what its directory may hold, so nothing can run or connect on install: no `hooks/`, no `bin/`, no `.mcp.json`. Who can push to `main` is who can deploy, so this reaches nobody a deploy could not. A deployment never takes these copies as they stand: `tools/build-agents.mjs` swaps the address back to the placeholder on the way into `app/public/skills/`, and CI builds for another origin and fails if the hosted address survives. The catalogue says it is for bikeshed.now only.
+
+**Accepted.** A skill from a failing commit can reach readers before CI says so, and the next push corrects it. If that proves wrong, point the catalogue's entry at a branch `deploy.yml` moves after a deploy. The self-hoster's token is not fixed here: the CLI does not tie a token to the origin it came from, which predates the marketplace.
+
 ### The change log tells somebody more than they could see
 
 An agent reads `get_changes` as its owner. The log could otherwise hand a reader what only an editor sees, or name the person who forked a document.

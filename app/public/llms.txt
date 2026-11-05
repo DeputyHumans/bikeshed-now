@@ -14,7 +14,7 @@ This deployment is `https://<deployment>` — the origin you fetched this from. 
 npx -y bikeshed-now skills install .claude/skills
 ```
 
-Or fetch them yourself, if you would rather not run anything: `/skills/index.json` lists them, and each one is at `/skills/<name>/SKILL.md`. Write each file to the directory your harness reads skills from. In Claude's own apps, where a person uploads skills in Settings, each one is also a zip at `/skills/<name>.zip`.
+Or fetch them yourself, if you would rather not run anything: `/skills/index.json` lists them, and each one is at `/skills/<name>/SKILL.md`. Write each file to the directory your harness reads skills from. In Claude's own apps, where a person uploads them, all of them are one plugin at `/skills/bikeshed-plugin.zip`, and each one is also a zip at `/skills/<name>.zip` for a plan without plugins.
 
 | Harness | Directory |
 |---|---|
@@ -186,7 +186,7 @@ bikeshed skills                              # what this deployment publishes
 bikeshed skills install ~/.claude/skills     # write them where an agent reads
 ```
 
-They are also plain files: `/skills/index.json` lists them, and each one is at `/skills/<name>/SKILL.md`. Fetch them directly if your harness reads skills from somewhere else, or paste one into an `AGENTS.md`. Each index entry also names an `archive`, `/skills/<name>.zip`, which is what a person uploads in Claude's own apps under Settings → Capabilities → Skills.
+They are also plain files: `/skills/index.json` lists them, and each one is at `/skills/<name>/SKILL.md`. Fetch them directly if your harness reads skills from somewhere else, or paste one into an `AGENTS.md`. The index's `plugin` names `/skills/bikeshed-plugin.zip`, which is what a person uploads in Claude's own apps under Customize > Plugins > Add > Upload plugin. Each entry also names an `archive`, `/skills/<name>.zip`, for a plan without plugins, uploaded under Customize > Skills.
 
 Each deployment serves its own copy, so what you install describes the deployment you are actually talking to rather than the newest one that exists.
 

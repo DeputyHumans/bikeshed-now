@@ -761,7 +761,7 @@ footer p { margin: 0 0 6px; }
   <p>Each of those opens a page here that names the app, says where it will send you back to and what it will be able to do, and asks you to approve. Then install the skills, which teach the agent each job in detail:</p>
 <pre><code>npx -y bikeshed-now skills install .claude/skills</code></pre>
   <ul class="ticks">
-    <li>Codex, Gemini CLI, Cursor, Copilot and others read <code>.agents/skills</code>. In Claude's own apps, upload each skill's zip from <code>/skills/&lt;name&gt;.zip</code> in Settings.</li>
+    <li>Codex, Gemini CLI, Cursor, Copilot and others read <code>.agents/skills</code>. In Claude's own apps, download the plugin from Account and upload it under Customize &gt; Plugins &gt; Add &gt; Upload plugin. Without a paid plan, upload each skill's zip from <code>/skills/&lt;name&gt;.zip</code> under Customize &gt; Skills.</li>
     <li><strong>For CI and scripts,</strong> where no browser opens, create a personal access token at Account → Access tokens and send it as <code>Authorization: Bearer bsk_…</code>. It is shown once.</li>
     <li>Either way, a credential carries exactly its owner's identity and permissions, and disconnecting it is one click in Account.</li>
     <li><strong>Connected by your organisation.</strong> If your Claude workspace uses managed authorization and this site trusts it, Claude connects without a page to approve, provided you already have an account here under the same address. Disconnect it in Account and your organisation can't reconnect it.</li>

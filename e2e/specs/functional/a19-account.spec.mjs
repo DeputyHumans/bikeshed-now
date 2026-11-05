@@ -1007,15 +1007,40 @@ scenario("A19.6 each skill zip is application/zip, an attachment, holding exactl
     zips.set(s.name, z.buffer);
   }
 
-  ctx.step("the account screen offers each zip, in the index's order, and downloading one gives those bytes");
+  ctx.step("/skills/bikeshed-plugin.zip holds the manifest and every skill, each the served (stamped) one");
+  assert.equal(index.json?.plugin, "skills/bikeshed-plugin.zip", "the index names the plugin zip");
+  const plugin = await http.get(`/${index.json.plugin}`, { expect: 200 });
+  assert.deepEqual(
+    { type: plugin.headers.get("content-type"), disposition: plugin.headers.get("content-disposition"), nosniff: plugin.headers.get("x-content-type-options") },
+    { type: "application/zip", disposition: "attachment", nosniff: "nosniff" },
+    "the plugin zip's headers",
+  );
+  const held = readZip(plugin.buffer);
+  assert.deepEqual(
+    held.map((e) => e.name),
+    [".claude-plugin/", ".claude-plugin/plugin.json", "skills/", ...skills.flatMap((s) => [`skills/${s.name}/`, `skills/${s.name}/SKILL.md`])],
+    "the plugin zip holds the manifest and every skill, and nothing else",
+  );
+  assert.ok(held.every((e) => e.method === 0), "the plugin zip is stored, not compressed");
+  for (const s of skills) {
+    const md = await http.get(`/skills/${s.name}/SKILL.md`, { expect: 200 });
+    assert.equal(sha256(held.find((e) => e.name === `skills/${s.name}/SKILL.md`).data), sha256(md.buffer), `the plugin's ${s.name} is the served (stamped) one, byte for byte`);
+  }
+
+  ctx.step("the account screen leads with the plugin, then each zip in the index's order, and downloading gives those bytes");
   const [acct] = await cast(target, ["owner"], { notifications: false, analytics: false });
   const u = await signedIn(ctx, acct, "owner");
   await openAccount(u, acct.email);
   const links = u.page.locator("ul.connect-skills a[download]");
-  await eventually(async () => (await links.count()) === skills.length, { timeout: 15_000, message: "one download link per skill" });
-  assert.deepEqual(await links.evaluateAll((as) => as.map((a) => a.getAttribute("href"))), skills.map((s) => `/${s.archive}`), "the links");
+  await eventually(async () => (await links.count()) === skills.length + 1, { timeout: 15_000, message: "the plugin, and one download link per skill" });
+  assert.deepEqual(await links.evaluateAll((as) => as.map((a) => a.getAttribute("href"))), [`/${index.json.plugin}`, ...skills.map((s) => `/${s.archive}`)], "the links");
+  const [pluginDownload] = await Promise.all([u.page.waitForEvent("download", { timeout: 15_000 }), links.first().click()]);
+  assert.equal(pluginDownload.suggestedFilename(), "bikeshed-plugin.zip", "the download is named for the plugin");
+  assert.equal(sha256(readFileSync(await pluginDownload.path())), sha256(plugin.buffer), "the downloaded bytes are the served plugin zip");
+
   const first = skills[0];
-  const [dl] = await Promise.all([u.page.waitForEvent("download", { timeout: 15_000 }), links.first().click()]);
+  await u.page.locator(".connect-guide summary", { hasText: "Free plan" }).click();
+  const [dl] = await Promise.all([u.page.waitForEvent("download", { timeout: 15_000 }), links.nth(1).click()]);
   assert.equal(dl.suggestedFilename(), `${first.name}.zip`, "the download is named for the skill");
   const path = await dl.path();
   assert.equal(sha256(readFileSync(path)), sha256(zips.get(first.name)), "the downloaded bytes are the served zip");

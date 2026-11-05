@@ -1,4 +1,5 @@
 {
+  "plugin": "skills/bikeshed-plugin.zip",
   "skills": [
     {
       "name": "bikeshed-feedback",

@@ -190,6 +190,37 @@ export function skillArchives(root = ROOT) {
   }));
 }
 
+/**
+ * All the skills as one download: a Claude plugin, for Customize > Plugins.
+ *
+ * Every deployment offers its own, because each names its own address, which is
+ * what the marketplace in this repo cannot do. It sets no version, and goes out
+ * of the same `dist` as the single zips, so it can't say anything they don't.
+ */
+const PLUGIN_ARCHIVE = "skills/bikeshed-plugin.zip";
+
+export function pluginArchive(root = ROOT) {
+  return {
+    path: PLUGIN_ARCHIVE,
+    manifest: join(root, "claude-plugin", ".claude-plugin", "plugin.json"),
+    skills: skillNames(root).map((name) => ({ name, source: `skills/${name}/SKILL.md` })),
+  };
+}
+
+/** What the plugin archive holds, in order, given the served skills in `distDir`. */
+function pluginEntries(distDir) {
+  const { manifest, skills } = pluginArchive();
+  return [
+    { name: ".claude-plugin/" },
+    { name: ".claude-plugin/plugin.json", data: readFileSync(manifest) },
+    { name: "skills/" },
+    ...skills.flatMap(({ name, source }) => [
+      { name: `skills/${name}/` },
+      { name: `skills/${name}/SKILL.md`, data: readFileSync(join(distDir, source)) },
+    ]),
+  ];
+}
+
 /** Refuse anything but a build output, so the tree can never be the target. */
 function assertBuildOutput(distDir) {
   if (basename(distDir) !== "dist") {
@@ -216,6 +247,8 @@ export function packSkills(distDir) {
     );
     archives.push(path);
   }
+  writeFileSync(join(distDir, PLUGIN_ARCHIVE), storedZip(pluginEntries(distDir)));
+  archives.push(PLUGIN_ARCHIVE);
   return archives;
 }
 
@@ -280,6 +313,14 @@ function badArchives(distDir) {
       folder.data.length === 0 &&
       file.name === entries[1];
     if (!shaped || !file.data.equals(readFileSync(source))) bad.push(path);
+  }
+  // Packing is deterministic, so what is there has to be what would be packed:
+  // a dropped skill, one stale byte and a changed manifest all differ.
+  try {
+    const held = readFileSync(join(distDir, PLUGIN_ARCHIVE));
+    if (!held.equals(storedZip(pluginEntries(distDir)))) bad.push(PLUGIN_ARCHIVE);
+  } catch {
+    bad.push(PLUGIN_ARCHIVE);
   }
   return bad;
 }

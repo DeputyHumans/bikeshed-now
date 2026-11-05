@@ -26,9 +26,12 @@ Or by hand — they are public files, listed at `/skills/index.json`, each one a
 |---|---|
 | Claude Code | `.claude/skills/<name>/SKILL.md` in a project, or `~/.claude/skills/` |
 | Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp, Roo | `.agents/skills/<name>/SKILL.md` |
-| Claude (web, Desktop) | download `https://<deployment>/skills/<name>.zip` and upload it under Settings → Capabilities → Skills |
+| Claude (web, Desktop) | download `https://<deployment>/skills/bikeshed-plugin.zip` and upload it under Customize > Plugins > Add > Upload plugin |
+| Claude, on the Free plan | plugins need a paid plan, so download `https://<deployment>/skills/<name>.zip` for each skill and upload it under Customize > Skills |
 
-The zips are linked from the account screen too, beside the address to connect an app with. Each holds `<name>/SKILL.md` and nothing else, packed from the copy the deployment serves.
+The zips are linked from the account screen too, beside the address to connect an app with. The plugin holds all four skills and its manifest. Each single zip holds `<name>/SKILL.md` and nothing else. All of them are packed from the copy the deployment serves. If you added skills one at a time before, remove them first.
+
+The plugin holds all four because they refer to each other by name: `bikeshed-publishing` sends an agent to the other three for parts of the job.
 
 `https://<deployment>/llms.txt` is the shorter, always-loaded version. The skills are the long form, loaded only for the task that needs them.
 

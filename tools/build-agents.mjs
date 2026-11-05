@@ -28,7 +28,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { TOKEN } from "./stamp-deployment.mjs";
+import { TOKEN, pluginArchive } from "./stamp-deployment.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -131,11 +131,12 @@ export function readSkills() {
 /**
  * The discovery document, formatted exactly as it is written and compared.
  *
- * `archive` is additive: `bikeshed skills install` reads only `path`.
+ * `plugin` and `archive` are additive: `bikeshed skills install` reads only `path`.
  */
 function skillIndex(skills) {
   return `${JSON.stringify(
     {
+      plugin: pluginArchive().path,
       skills: skills.map(({ name, description, path, archive }) => ({
         name,
         description,

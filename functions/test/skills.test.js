@@ -199,7 +199,7 @@ test("no frontmatter value hides a colon a YAML parser would choke on", async ()
 });
 
 test("every skill fits Claude's skill upload", async () => {
-  // Settings → Capabilities → Skills refuses a SKILL.md whose name is over 64
+  // Customize > Skills refuses a SKILL.md whose name is over 64
   // characters, is anything but lowercase letters, digits and hyphens, or
   // contains a reserved word; and one whose description is over 1,024
   // characters. A refusal there is a person's dead end, not an agent's.
@@ -536,6 +536,41 @@ test("the repo root is a marketplace and never itself a plugin", () => {
   // A plugin here would copy the whole repo into every reader's cache.
   assert.deepEqual(listing(ROOT, ".claude-plugin"), ["marketplace.json"]);
   assert.equal(existsSync(join(ROOT, ".claude-plugin", "plugin.json")), false);
+});
+
+test("the plugin zip opens in another reader, with its manifest where a host looks for it", async () => {
+  // A host refuses an archive without one `.claude-plugin/plugin.json` at its
+  // root, and adm-zip is a second implementation, as in the test below.
+  const { pluginArchive, servedDocuments, stampDist } = await import("../../tools/stamp-deployment.mjs");
+  const { skills } = await documents();
+  const base = mkdtempSync(join(tmpdir(), "bikeshed-pluginzip-"));
+  const dist = join(base, "dist");
+  try {
+    for (const rel of servedDocuments()) {
+      cpSync(join(ROOT, "app", "public", rel), join(dist, rel));
+    }
+    stampDist(dist, "https://stamp.example");
+
+    const zip = new AdmZip(join(dist, pluginArchive().path));
+    const names = zip.getEntries().map((e) => e.entryName);
+    assert.equal(names.filter((n) => n.endsWith("plugin.json")).length, 1, "a host needs exactly one manifest");
+    assert.deepEqual(JSON.parse(zip.readAsText(".claude-plugin/plugin.json")), manifest());
+    for (const entry of zip.getEntries()) assert.equal(entry.header.method, 0, "stored, not deflated");
+    for (const skill of skills) {
+      const held = zip.getEntry(`skills/${skill.name}/SKILL.md`);
+      assert.ok(held, `the plugin zip has no ${skill.name}`);
+      const served = readFileSync(join(dist, "skills", skill.name, "SKILL.md"));
+      assert.equal(held.getData().equals(served), true, `${skill.name} is not the served SKILL.md`);
+    }
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("the served index names the plugin zip", async () => {
+  const { pluginArchive } = await import("../../tools/stamp-deployment.mjs");
+  const index = JSON.parse(readFileSync(join(ROOT, "app", "public", "skills", "index.json"), "utf8"));
+  assert.equal(index.plugin, pluginArchive().path);
 });
 
 test("each skill's zip opens in another reader as its folder and its stamped SKILL.md", async () => {
