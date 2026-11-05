@@ -3213,9 +3213,10 @@ export class User {
 
   /**
    * The `__session` cookie Chrome holds for the origin, or null. Read from the
-   * UNFILTERED jar: Playwright's cookies(url) drops a Secure cookie for any
-   * http host but `localhost`, and the stack's origin is http://127.0.0.1 —
-   * where Chrome itself does store and send it (a loopback origin is secure).
+   * UNFILTERED jar, so the answer does not depend on how Playwright's
+   * cookies(url) treats a Secure cookie on the stack's http://127.0.0.1 origin,
+   * where Chrome does store and send it (a loopback origin is secure): 1.63 left
+   * it out, 1.64.1 does not.
    */
   async sessionCookie() {
     const host = new URL(this.target.origin).hostname;

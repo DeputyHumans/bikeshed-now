@@ -179,7 +179,6 @@ test("signInUi fills the form, waits for POST /session ok and the redirect, and 
     const c = await u.sessionCookie();
     assert.equal(c?.value, "s3ss10n");
     assert.equal(c.secure, true, "Chrome kept a Secure cookie for http://127.0.0.1");
-    assert.deepEqual(await u.context.cookies(origin), [], "…which Playwright's URL-filtered cookies() hides — the reason sessionCookie() reads the whole jar");
     const again = await u.signInUi("someone@example.com", "pw-1");
     assert.deepEqual([again.status, again.already, again.gate], ["ok", true, "ready"], "a signed-in context is redirected away from /signup");
     const fresh = await pool.user();
