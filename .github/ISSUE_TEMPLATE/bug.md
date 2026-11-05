@@ -30,8 +30,6 @@ Against the emulators if at all possible:
 
 ---
 
-**A command in the documentation that fails is a bug**, and worth reporting on
-its own. Every command in every document here is meant to be copy-pasteable.
+**A command in the documentation that fails is a bug**, and worth reporting on its own. Every command in every document here is meant to be copy-pasteable.
 
-**Please do not report a security issue here.** See `SECURITY.md` — particularly
-anything that lets somebody read a document they should not.
+**Please do not report a security issue here.** See `SECURITY.md` — particularly anything that lets somebody read a document they should not.

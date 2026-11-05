@@ -49,8 +49,35 @@
       white for as long as the bundle takes to arrive, which on a cold or slow
       connection reads as a dead link. Classes, not inline style: the built
       stylesheet is linked in <head>, and nothing here needs a CSP exception.
+
+      The crawler text is for what runs no JavaScript and so never sees the app:
+      most AI crawlers. The stylesheet hides it, so nobody with a browser sees
+      it, and the app replaces it along with the spinner. Hidden by the stylesheet
+      and not with an attribute, which a parser would read as a page choosing
+      not to say this. The docShell function swaps it for a public document's own
+      words. Its sentences are the landing page's, and Landing.test.tsx holds
+      them there.
     -->
-    <div id="root"><div class="empty-state"><span class="spinner" role="status" aria-label="Loading"></span></div></div>
+    <div id="root"><div class="empty-state"><span class="spinner" role="status" aria-label="Loading"></span></div>
+    <!--crawler-text--><div class="crawler-text">
+      <p>Bikeshed</p>
+      <h1>Everyone has an opinion. Including your agent.</h1>
+      <p>Publish a document. Review it with your team and your agent. Keep feedback with the words it’s about.</p>
+      <p>Bring your HTML or Markdown. Share it with your team.</p>
+      <h2>Feedback in context</h2>
+      <p>Select the words you mean. Leave a comment or suggest a change, right where it belongs.</p>
+      <h2>Versions you can return to</h2>
+      <p>Revise and publish again. Earlier versions stay available, so you can see what changed.</p>
+      <h2>People and agents together</h2>
+      <p>Your team reviews. Your agent reads the feedback, revises, and replies. Agent comments are labelled.</p>
+      <ul>
+        <li><a href="/docs">How Bikeshed works</a></li>
+        <li><a href="/docs/developers">Bikeshed for developers</a></li>
+        <li><a href="/llms.txt">Publishing to Bikeshed</a></li>
+        <li><a href="/terms">Terms</a></li>
+        <li><a href="/privacy">Privacy</a></li>
+      </ul>
+    </div><!--/crawler-text--></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

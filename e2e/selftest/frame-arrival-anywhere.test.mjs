@@ -201,7 +201,7 @@ test("README states the anywhere probe and probeArrivals' anywhere", async () =>
   const { join } = await import("node:path");
   const { REPO_ROOT } = await import("../lib/paths.mjs");
   const readme = readFileSync(join(REPO_ROOT, "e2e", "README.md"), "utf8");
-  for (const s of ["`armArrival(page, null, text)`", "anywhere in the frame's body", "`probeArrivals(users, {from, id, text, timeoutMs = 15_000, delay = 0,\nanywhere = false})`"]) {
+  for (const s of ["`armArrival(page, null, text)`", "anywhere in the frame's body", "`probeArrivals(users, {from, id, text, timeoutMs = 15_000, delay = 0, anywhere = false})`"]) {
     assert.ok(readme.includes(s), `README lacks ${JSON.stringify(s)}`);
   }
 });

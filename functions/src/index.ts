@@ -197,6 +197,7 @@ import {
   warnIfOriginUnconfigured,
   type ShellDoc,
 } from "./lib/shell";
+import { sitemapXml } from "./lib/sitemap";
 import {
   badRequest,
   contentPath,
@@ -2852,7 +2853,7 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 /**
- * GET /sitemap.xml — public documents only.
+ * GET /sitemap.xml — the site's own public pages, and public documents.
  *
  * Unlisted documents are deliberately absent: they carry `X-Robots-Tag: noindex`
  * and exist to be shared by link, so listing them here would defeat the entire
@@ -2860,7 +2861,6 @@ export const manageTeamMembers = onRequest(MAILING, async (req, res) => {
  */
 export const sitemap = onRequest(PLAIN, async (req, res) => {
   if (rejectMethod(req, res, ["GET"])) return;
-  const origin = publicOrigin();
   const snap = await db()
     .collection("public")
     .where("visibility", "==", "public")
@@ -2868,7 +2868,7 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
     .limit(5000)
     .get();
 
-  const entries = snap.docs
+  const documents = snap.docs
     // An expired document is not served, so listing it would be advertising a
     // 404 to a crawler. The projection carries the date precisely so this can
     // be decided without a second read per row. A trashed one has no
@@ -2876,19 +2876,12 @@ export const sitemap = onRequest(PLAIN, async (req, res) => {
     .filter((d) => !isExpired(d.data() as DocAclData, Date.now()))
     .map((d) => {
       const at = d.data()?.publishedAt as admin.firestore.Timestamp | undefined;
-      const lastmod = at?.toDate ? at.toDate().toISOString().slice(0, 10) : "";
-      const loc = `${origin}/d/${d.id}`
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;");
-      return `  <url><loc>${loc}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
-    })
-    .join("\n");
+      return { id: d.id, lastmod: at?.toDate ? at.toDate().toISOString().slice(0, 10) : "" };
+    });
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
   res.setHeader("Cache-Control", `public, max-age=${PUBLIC_CACHE_SECONDS}`);
-  res.status(200).send(
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`,
-  );
+  res.status(200).send(sitemapXml(publicOrigin(), documents));
 });
 
 /**
@@ -3042,7 +3035,8 @@ export const docShell = onRequest(WARM, async (req, res) => {
       .createReadStream({ start: 0, end: HEAD_SCAN_BYTES - 1 });
     const bytes = await collectPrefix(stream, HEAD_SCAN_BYTES);
     stage = "scan";
-    const head = readHead(bytes.toString("utf8"));
+    const html = bytes.toString("utf8");
+    const head = readHead(html);
 
     stage = "render";
     const page = composePage({
@@ -3055,15 +3049,16 @@ export const docShell = onRequest(WARM, async (req, res) => {
       entry,
       files,
       k,
+      html,
     });
-    const html = renderShell(template, page);
+    const rendered = renderShell(template, page);
 
     // ONLY NOW: the page exists, so this URL may be cached with it.
     res.setHeader("Cache-Control", `public, max-age=${decision.maxAge}`);
     if (decision.noindex) res.setHeader("X-Robots-Tag", "noindex");
     res.status(200);
     if (isHead) res.end();
-    else res.send(html);
+    else res.send(rendered);
   } catch (err) {
     // The generic shell is a 200, so without this line a runtime identity
     // that cannot read the bucket would serve the product's head for every

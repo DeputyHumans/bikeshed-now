@@ -1,7 +1,6 @@
 # Documentation
 
-`architecture/spec.md` is normative and supersedes every other document here,
-including this one. Cite it as `(SPEC §N)`.
+`architecture/spec.md` is normative and supersedes every other document here, including this one. Cite it as `(SPEC §N)`.
 
 ## I want to…
 
@@ -21,9 +20,6 @@ including this one. Cite it as `(SPEC §N)`.
 
 ## Layout
 
-Timeless directories update in place; git keeps the history.
-`acf/`, `agents/`, `architecture/`, `development/`, `operations/`, `patterns/`.
+Timeless directories update in place; git keeps the history. `acf/`, `agents/`, `architecture/`, `development/`, `operations/`, `patterns/`.
 
-Temporal directories take one dated file per entry, `YYYYMMDD-description.md`,
-and are never edited afterwards. `research/`, `retrospectives/`, and the five
-under `snapshots/`. They are empty until there is something to put in them.
+Temporal directories take one dated file per entry, `YYYYMMDD-description.md`, and are never edited afterwards. `research/`, `retrospectives/`, and the five under `snapshots/`. They are empty until there is something to put in them.

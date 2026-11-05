@@ -1,13 +1,8 @@
 # Bikeshed — implementation spec (normative)
 
-Every module MUST conform to this file. It supersedes prose elsewhere, including
-`README.md` and `docs/architecture/overview.md`. Field names, endpoint shapes, and the
-auth flow are FIXED here. If something is underspecified, prefer the simplest
-choice consistent with the rest of this document.
+Every module MUST conform to this file. It supersedes prose elsewhere, including `README.md` and `docs/architecture/overview.md`. Field names, endpoint shapes, and the auth flow are FIXED here. If something is underspecified, prefer the simplest choice consistent with the rest of this document.
 
-**Section numbers are a public API.** Roughly a hundred source files cite
-`(SPEC §N)` in their header. Append, never renumber. A withdrawn section becomes
-`§N. (withdrawn — see §M)` and keeps its number forever.
+**Section numbers are a public API.** Roughly a hundred source files cite `(SPEC §N)` in their header. Append, never renumber. A withdrawn section becomes `§N. (withdrawn — see §M)` and keeps its number forever.
 
 ---
 
@@ -15,17 +10,9 @@ choice consistent with the rest of this document.
 
 Versioned document publishing with highlight-anchored feedback.
 
-People publish self-contained HTML bundles or Markdown sources, share them with
-named reviewers, teams, or the public, and collect threaded comments anchored to
-highlighted passages. Documents are immutable versions; content lives in a
-private bucket and is served only through an authorizing proxy. Publishing and
-infrastructure are driven by idempotent scripts, a terminal CLI and an MCP
-endpoint, so agents are first-class publishers alongside people.
+People publish self-contained HTML bundles or Markdown sources, share them with named reviewers, teams, or the public, and collect threaded comments anchored to highlighted passages. Documents are immutable versions; content lives in a private bucket and is served only through an authorizing proxy. Publishing and infrastructure are driven by idempotent scripts, a terminal CLI and an MCP endpoint, so agents are first-class publishers alongside people.
 
-The optional landing-page explainer is operator-reviewed public marketing media,
-not a published document. It MAY be served directly from a separate public
-bucket, never the private document-content bucket. A media revision is immutable;
-its MP4, captions and poster MUST agree before the landing page references it.
+The optional landing-page explainer is operator-reviewed public marketing media, not a published document. It MAY be served directly from a separate public bucket, never the private document-content bucket. A media revision is immutable; its MP4, captions and poster MUST agree before the landing page references it.
 
 ---
 
@@ -37,22 +24,15 @@ A request is valid only if it is signed in with a **verified** email address:
 request.auth != null && email_verified == true && email is string
 ```
 
-`email is string` is a real conjunct, not decoration: a custom token can carry
-`email_verified: true` with no `email` claim, and without this the principal
-reaches the member checks and denies only by accident.
+`email is string` is a real conjunct, not decoration: a custom token can carry `email_verified: true` with no `email` claim, and without this the principal reaches the member checks and denies only by accident.
 
-There is **no built-in domain restriction**. The per-document owner+member ACL
-is the access control. A deployment MAY add a domain allowlist; it is empty by
-default, which means open.
+There is **no built-in domain restriction**. The per-document owner+member ACL is the access control. A deployment MAY add a domain allowlist; it is empty by default, which means open.
 
-**All emails are stored and compared LOWERCASED.** This is what makes the
-`array-contains` list rule in §5 exact rather than merely close.
+**All emails are stored and compared LOWERCASED.** This is what makes the `array-contains` list rule in §5 exact rather than merely close.
 
 ### 1.1 Single source of truth
 
-`config/access-policy.json` is the only place the policy is written. It is
-rendered by `tools/build-policy.mjs` into four **committed** artifacts, each
-carrying a `GENERATED — DO NOT EDIT` banner and the source sha256:
+`config/access-policy.json` is the only place the policy is written. It is rendered by `tools/build-policy.mjs` into four **committed** artifacts, each carrying a `GENERATED — DO NOT EDIT` banner and the source sha256:
 
 | Artifact | Why it exists separately |
 |---|---|
@@ -61,71 +41,34 @@ carrying a `GENERATED — DO NOT EDIT` banner and the source sha256:
 | `functions/src/generated/policy.ts` | Cloud Functions uploads only `functions/`, and tsconfig pins `rootDir: "src"` |
 | `app/src/generated/policy.ts` | Vite bundles only what it can import from `app/src` |
 
-`npm run check:policy` re-renders in memory and byte-compares. It runs as
-`pretest` and as the first step of `npm run build`. The artifacts are committed,
-not gitignored: a security boundary that is not in git is not reviewable and has
-no diff history.
+`npm run check:policy` re-renders in memory and byte-compares. It runs as `pretest` and as the first step of `npm run build`. The artifacts are committed, not gitignored: a security boundary that is not in git is not reviewable and has no diff history.
 
-The renderers in `config/policy.mjs` are **pure functions**, so the rules tests
-render allowlist mode in memory and feed the string straight to
-`initializeTestEnvironment` — no temp file, no second fixture that can drift.
+The renderers in `config/policy.mjs` are **pure functions**, so the rules tests render allowlist mode in memory and feed the string straight to `initializeTestEnvironment` — no temp file, no second fixture that can drift.
 
 ### 1.2 The client never receives the allowlist
 
-Vite inlines everything it imports into the public bundle, so `app/src/generated/
-policy.ts` carries the email SHAPE rules and one boolean (`POLICY_IS_OPEN`) and
-never the domain list. The client learns policy outcomes from `POST /session`,
-which returns exactly five typed outcomes: `ok`, `unverified`, `not_allowed`,
-`session_failed`, and `moving` when Google has renamed the account (§14).
+Vite inlines everything it imports into the public bundle, so `app/src/generated/ policy.ts` carries the email SHAPE rules and one boolean (`POLICY_IS_OPEN`) and never the domain list. The client learns policy outcomes from `POST /session`, which returns exactly five typed outcomes: `ok`, `unverified`, `not_allowed`, `session_failed`, and `moving` when Google has renamed the account (§14).
 
 ### 1.3 Email validity
 
 Two separate questions, never conflated:
 
-- `isEmailShapeValid(email)` — structural. Always applies. Rejects whitespace,
-  control characters, `..`, leading/trailing dots, and **`$ # [ ] /`**. The last
-  five are illegal RTDB key characters, and the presence mirror (§16) keys on
-  email — so this validator is what guarantees every stored address is
-  representable as a key.
-- `isAllowedEmail(email, policy)` — policy. Applies only when an allowlist is
-  configured. Matching is **anchored**: `example.com` does not match
-  `a@evil.example.com`. A leading dot (`.example.com`) is the explicit
-  subdomain opt-in.
+- `isEmailShapeValid(email)` — structural. Always applies. Rejects whitespace, control characters, `..`, leading/trailing dots, and **`$ # [ ] /`**. The last five are illegal RTDB key characters, and the presence mirror (§16) keys on email — so this validator is what guarantees every stored address is representable as a key.
+- `isAllowedEmail(email, policy)` — policy. Applies only when an allowlist is configured. Matching is **anchored**: `example.com` does not match `a@evil.example.com`. A leading dot (`.example.com`) is the explicit subdomain opt-in.
 
-Two distinct 400s so the UI can explain: `invalid email address` versus
-`email not permitted by policy`.
+Two distinct 400s so the UI can explain: `invalid email address` versus `email not permitted by policy`.
 
 ### 1.4 Two consequences of an open gate
 
-**(a) Presence is gated by a server-maintained mirror, not by the identity gate.**
-See §16. Without it, any signed-in account could enumerate the slug space and
-learn who reads what.
+**(a) Presence is gated by a server-maintained mirror, not by the identity gate.** See §16. Without it, any signed-in account could enumerate the slug space and learn who reads what.
 
-**(b) Read-only endpoints collapse 403 into 404.** `/content/**`,
-`/download/**`, `/unlock` and `/view` return `404` for "you may not read this"
-and for "this does not exist" alike. Mutation endpoints answer `403` only to a
-caller who may READ the document, who already knows the id; everyone else gets
-the same `404` as an absent id, or every write endpoint would be the existence
-check the read paths closed. This drops no feature and closes the existence
-oracle that an open gate would otherwise open. "May read" includes an unlisted
-document's key or link grant (§17), and nothing less: without them an unlisted
-document answers exactly as a private one. The viewer's not-found page offers
-to sign in, or to switch account, from the reader's own sign-in state alone;
-it is never given the document, so it says no more than the `404` does.
-Owner-only refusals and thumbnail-write refusals resolve the caller's current stored
-link grant before choosing that status, including GET `/access`; this changes no
-authority. A rotated, missing, or private-document grant proves nothing. Expiry
-freezes content access and writes as §17 specifies; it does not erase an already
-known id from the refusal's ACL check.
+**(b) Read-only endpoints collapse 403 into 404.** `/content/**`, `/download/**`, `/unlock` and `/view` return `404` for "you may not read this" and for "this does not exist" alike. Mutation endpoints answer `403` only to a caller who may READ the document, who already knows the id; everyone else gets the same `404` as an absent id, or every write endpoint would be the existence check the read paths closed. This drops no feature and closes the existence oracle that an open gate would otherwise open. "May read" includes an unlisted document's key or link grant (§17), and nothing less: without them an unlisted document answers exactly as a private one. The viewer's not-found page offers to sign in, or to switch account, from the reader's own sign-in state alone; it is never given the document, so it says no more than the `404` does. Owner-only refusals and thumbnail-write refusals resolve the caller's current stored link grant before choosing that status, including GET `/access`; this changes no authority. A rotated, missing, or private-document grant proves nothing. Expiry freezes content access and writes as §17 specifies; it does not erase an already known id from the refusal's ACL check.
 
 ---
 
 ## 2. HTTP endpoints
 
-Hosting rewrites → Cloud Functions v2, region **`us-central1`** (FIXED; Hosting
-rewrites require it). Export names are FIXED and are asserted to match
-`firebase.json` and `scripts/lib/endpoints.mjs` by `functions/test/wiring.test.js`,
-which also holds this table to them.
+Hosting rewrites → Cloud Functions v2, region **`us-central1`** (FIXED; Hosting rewrites require it). Export names are FIXED and are asserted to match `firebase.json` and `scripts/lib/endpoints.mjs` by `functions/test/wiring.test.js`, which also holds this table to them.
 
 | Rewrite | Function |
 |---|---|
@@ -175,101 +118,45 @@ which also holds this table to them.
 | — (Firestore trigger) | `moveAccount` |
 | — (daily schedule) | `purgeExpiredTrash` |
 
-Rewrite order matters: exact paths precede wildcards, which precede the SPA
-catch-all. `/folder` is an exact rewrite to `createFolder`, which the
-`/folder/**` glob does not match. `/d/**` and `/folder/**` are the two rewrites
-that serve a **client route**: `docShell` answers with the app shell itself,
-not an API (§17 "Link previews").
+Rewrite order matters: exact paths precede wildcards, which precede the SPA catch-all. `/folder` is an exact rewrite to `createFolder`, which the `/folder/**` glob does not match. `/d/**` and `/folder/**` are the two rewrites that serve a **client route**: `docShell` answers with the app shell itself, not an API (§17 "Link previews").
 
-**`/docs` and `/docs/developers` are redirects, not rewrites.** Hosting answers
-`/docs` and `/docs/` with `302` to `/d/docs`, and `/docs/developers` with `302`
-to `/d/docs-developers`; redirects are applied before static files and
-rewrites. Each guide is an ordinary published document whose source is
-`content/<id>/bundle/index.html`, so it is read in the viewer and takes
-comments like any other. The user guide names no command; the developer guide
-holds the command line, the agent tools and the loop an agent runs. Temporary
-rather than `301`, because a browser keeps a `301` for good. A deployment that
-has not published a guide answers its shortcut with the document page's "Not
-here", and under Vite dev there is no redirect at all.
+**`/docs` and `/docs/developers` are redirects, not rewrites.** Hosting answers `/docs` and `/docs/` with `302` to `/d/docs`, and `/docs/developers` with `302` to `/d/docs-developers`; redirects are applied before static files and rewrites. Each guide is an ordinary published document whose source is `content/<id>/bundle/index.html`, so it is read in the viewer and takes comments like any other. The user guide names no command; the developer guide holds the command line, the agent tools and the loop an agent runs. Temporary rather than `301`, because a browser keeps a `301` for good. A deployment that has not published a guide answers its shortcut with the document page's "Not here", and under Vite dev there is no redirect at all.
 
-**`Cache-Control` for `/content/**` and `/thumb/**` is set by the function, not by Hosting.**
-A Hosting `headers` entry would override the function and force one policy on
-both gated and public content; §17 needs them to differ.
+**`Cache-Control` for `/content/**` and `/thumb/**` is set by the function, not by Hosting.** A Hosting `headers` entry would override the function and force one policy on both gated and public content; §17 needs them to differ.
 
-Every endpoint is **auth-first**: authentication is checked before anything that
-could reveal whether a document exists. The one exception is `GET /d/**`, which
-never authenticates at all: it decides from the document record and `k` alone,
-and answers a private slug and an absent one with the same bytes (§17 "Link
-previews"). `GET /folder/**` is the same function, deciding from the folder
-record and `k`.
+Every endpoint is **auth-first**: authentication is checked before anything that could reveal whether a document exists. The one exception is `GET /d/**`, which never authenticates at all: it decides from the document record and `k` alone, and answers a private slug and an absent one with the same bytes (§17 "Link previews"). `GET /folder/**` is the same function, deciding from the folder record and `k`.
 
 ### `POST /session`
-Body `{ idToken }`. Verifies with `verifyIdToken(idToken, true)` and applies §1.
-Mints a session cookie (`createSessionCookie`, 5 days) and sets `__session` —
-the only cookie Firebase Hosting forwards to functions — as
-`HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=<expiresIn s>`. It also
-merges `{ uid, email }` into `users/{uid}`, the record every email finds a
-person by (§14), so an account whose address arrived verified has one from its
-first sign-in; a preference already saved there is kept, and a failed write is
-logged rather than refusing the sign-in.
+Body `{ idToken }`. Verifies with `verifyIdToken(idToken, true)` and applies §1. Mints a session cookie (`createSessionCookie`, 5 days) and sets `__session` — the only cookie Firebase Hosting forwards to functions — as `HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=<expiresIn s>`. It also merges `{ uid, email }` into `users/{uid}`, the record every email finds a person by (§14), so an account whose address arrived verified has one from its first sign-in; a preference already saved there is kept, and a failed write is logged rather than refusing the sign-in.
 
-Response `200 { status: "ok" }`, or `200 { status: "unverified" }`,
-`403 { status: "not_allowed", message }`, `401 { status: "session_failed" }`.
-The status is a typed outcome, not an error string, so the UI can explain
-rejection as a *state* rather than a failure.
+Response `200 { status: "ok" }`, or `200 { status: "unverified" }`, `403 { status: "not_allowed", message }`, `401 { status: "session_failed" }`. The status is a typed outcome, not an error string, so the UI can explain rejection as a *state* rather than a failure.
 
-The body may also carry `googleIdToken`, Google's own ID token from the
-sign-in that just happened. The browser sends it only when Google's address
-for the account differs from the account's. When Google's signature, `sub`
-and `email_verified` all hold (§14 "An address Google renames"), the response
-is `200 { status: "moving", jobId, to }`. No cookie is minted, because the
-presented token names the address the account is leaving. In all other cases
-it is the ordinary outcome as if the field were absent.
+The body may also carry `googleIdToken`, Google's own ID token from the sign-in that just happened. The browser sends it only when Google's address for the account differs from the account's. When Google's signature, `sub` and `email_verified` all hold (§14 "An address Google renames"), the response is `200 { status: "moving", jobId, to }`. No cookie is minted, because the presented token names the address the account is leaving. In all other cases it is the ordinary outcome as if the field were absent.
 
 ### `DELETE /session`
 Clears `__session` (Max-Age=0). `204`.
 
 ### `GET /health`, `HEAD /health`
 
-Public operational status, never user data: read an operational Firestore path
-(absence is acceptable) and validate the private Storage health marker. Perform
-no writes and bound the dependency checks to five seconds. Return `200` with
-`{"status":"ok"}` or `503` with `{"status":"degraded"}`; HEAD has no body.
-All responses, including method refusals, MUST be `private, no-store`. Dependency
-identities and errors MUST NOT appear in the response. An operator provisions
-the marker before deploying the endpoint. This is dependency availability, not
-proof of private sign-in or document writes.
+Public operational status, never user data: read an operational Firestore path (absence is acceptable) and validate the private Storage health marker. Perform no writes and bound the dependency checks to five seconds. Return `200` with `{"status":"ok"}` or `503` with `{"status":"degraded"}`; HEAD has no body. All responses, including method refusals, MUST be `private, no-store`. Dependency identities and errors MUST NOT appear in the response. An operator provisions the marker before deploying the endpoint. This is dependency availability, not proof of private sign-in or document writes.
 
 ### `GET /config`
-Public. Returns `{ signInHint?: string }` — a deployment-authored sentence for
-the rejection screen. **Never the allowlist.**
+Public. Returns `{ signInHint?: string }` — a deployment-authored sentence for the rejection screen. **Never the allowlist.**
 
 ### `GET /content/[~<k>/][!run/]:docId/:versionId/*`
 Path after `versionId` is the relative file path; default `index.html`.
 
-An unlisted document's key may come as a first path segment `~<k>`, ahead of
-the document, as well as `?k=`. The viewer puts it in the path: a query string
-belongs to one URL, so the entry got it and every file the entry names by
-relative path was requested without it, and a signed-out reader of the link got
-the text and none of its images or stylesheets. A path segment is inherited by
-every relative reference. A document id never starts with `~`, so the segment
-is unambiguous (`contentPath` in `lib/http.ts`).
+An unlisted document's key may come as a first path segment `~<k>`, ahead of the document, as well as `?k=`. The viewer puts it in the path: a query string belongs to one URL, so the entry got it and every file the entry names by relative path was requested without it, and a signed-out reader of the link got the text and none of its images or stylesheets. A path segment is inherited by every relative reference. A document id never starts with `~`, so the segment is unambiguous (`contentPath` in `lib/http.ts`).
 
 After the key may come `!run`, the **run variant**: the only address at which a document's own script may run (§6c, [ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). It is a path segment for the same reason the key is, and `!` never begins a document id. Asking is not being granted.
 
 1. Resolve the caller: `__session` cookie, else anonymous.
 2. Load `docs/{docId}`. If absent → `404`.
-3. Decide the caller's `readBasis` (§17): member, public, link (the path's or
-   the query's `k` matches the document's token) or grant (a signed-in caller's
-   current link grant). None → **`404`** (§1.4b).
+3. Decide the caller's `readBasis` (§17): member, public, link (the path's or the query's `k` matches the document's token) or grant (a signed-in caller's current link grant). None → **`404`** (§1.4b).
 4. Version must exist → else `404`.
 5. Stream `<storagePrefix>/<relPath>` from the committed version record with the Admin SDK; legacy records use `docs/{docId}/{versionId}`.
 
-Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`;
-`Cache-Control: private, no-store` for a member's or a grant's read,
-`public, max-age=300` for a read the URL alone decides — public, or unlisted
-with `k` — because a grant's URL carries no key and a shared cache keys on the
-URL; `X-Robots-Tag: noindex` when visibility is `unlisted`.
+Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`; `Cache-Control: private, no-store` for a member's or a grant's read, `public, max-age=300` for a read the URL alone decides — public, or unlisted with `k` — because a grant's URL carries no key and a shared cache keys on the URL; `X-Robots-Tag: noindex` when visibility is `unlisted`.
 
 **The script lock** (`lib/scriptlock.ts`). Every response carries `Content-Security-Policy: sandbox allow-same-origin`, whatever the document's trust, unless its type is one a browser never renders as a scripted document: raster pictures, sound, video, fonts, CSS, JavaScript, JSON, plain text, CSV, Markdown, PDF, zip, wasm and `application/octet-stream`. Every HTML and every XML type is locked (a browser may render a `+xml` type as an XML document, where an element in the XHTML namespace runs: WebKit does with `.atom` and `.rss`), and so is any type not on that list. The list is of what is harmless because a list of what is dangerous has to be complete to be safe: until 0.32.0 it named five types, and `.atom` and `.rss` ran on this origin in Safari and every browser on iOS, with about a hundred more `+xml` types left unlocked. A lock on a subresource is ignored, so it costs nothing there. So a document's bytes opened any way but the app's frame (a pasted address, a popup, an `<object>`) render inert. Inside the frame it is the frame's own sandbox, and changes nothing. The run variant lifts it only for the document's current version, and only when the document is globally trusted or the caller's own `docs/{docId}/trust/{uid}` exists; a scriptable answer there is always `private, no-store`, because it depends on who asked, and the run variant always carries `frame-ancestors 'self'`. A request carrying `Service-Worker: script` is a `404`: a worker would outlive the page and serve without the lock.
 
@@ -279,173 +166,48 @@ Streamed with `file.createReadStream()`; large files are never buffered whole.
 
 ### `POST /thumb`, `GET /thumb/[~<k>/]:docId/:versionId/:key/:slot.jpg`
 
-A version's **thumbnails**: a cover for its workspace card and, for a deck, one
-image per slide for the rail. Nothing here renders a document, so they are
-captured in an editor's browser from the previews §6d builds, and stored so
-every member sees them without anybody rendering them again.
+A version's **thumbnails**: a cover for its workspace card and, for a deck, one image per slide for the rail. Nothing here renders a document, so they are captured in an editor's browser from the previews §6d builds, and stored so every member sees them without anybody rendering them again.
 
-- **`POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,…&r=<revision>`** — the
-  body is the JPEGs back to back, in slot order. `r` is the capture revision,
-  raised whenever capture changes what an image of the same bytes looks like;
-  any but the deployment's own is a `409`, so a page left open from an older
-  release cannot store what a newer capture exists to replace. Editors only: `isDocEditor`, not open
-  editing's wider `canEdit`, because a stored image is shown to every member.
-  `409` once expired to the caller — to everyone but its owner, who alone
-  still reads an expired document and so may store its cover — or when `v` is
-  not `currentVersion`. Each image must be a
-  JPEG by its own markers, at most 160 KiB and 1280 px a side; a cover is one
-  image, slides at most 100. The objects go in under a key minted per upload,
-  and a transaction makes that key the record's only if this kind is not yet
-  stored for `v` by this revision and the uploader is still an editor in its
-  fresh document snapshot. A downgrade or removal during upload is refused
-  with the same reader-aware `403`/`404` as an initial refusal; it changes no
-  thumbnail metadata and deletes only this upload's candidate key. A loser
-  deletes what it wrote. A newer
-  revision replaces an older one's images for the same version and deletes
-  their keys, so a capture that got an image wrong is not stuck with it until
-  the next version. Moving the record to a new version deletes the old
-  version's thumbnails. Never touches `updatedAt`.
-- **`GET /thumb/…`** — `contentProxy`, through the same gate as `/content`: an
-  expired document's thumbnails are a `404` to everyone but its owner. Serves
-  only what `docs/{docId}.thumb` names. `Cache-Control: private,
-  max-age=min(86400, seconds to expiry), immutable` for a member's or a grant's
-  read — the key in the URL means the bytes there never change, and the window
-  bounds what a removed member's browser keeps — and the `/content` policy for
-  a read the URL alone decides.
+- **`POST /thumb?doc=&v=&kind=cover|slides&sizes=<n>,…&r=<revision>`** — the body is the JPEGs back to back, in slot order. `r` is the capture revision, raised whenever capture changes what an image of the same bytes looks like; any but the deployment's own is a `409`, so a page left open from an older release cannot store what a newer capture exists to replace. Editors only: `isDocEditor`, not open editing's wider `canEdit`, because a stored image is shown to every member. `409` once expired to the caller — to everyone but its owner, who alone still reads an expired document and so may store its cover — or when `v` is not `currentVersion`. Each image must be a JPEG by its own markers, at most 160 KiB and 1280 px a side; a cover is one image, slides at most 100. The objects go in under a key minted per upload, and a transaction makes that key the record's only if this kind is not yet stored for `v` by this revision and the uploader is still an editor in its fresh document snapshot. A downgrade or removal during upload is refused with the same reader-aware `403`/`404` as an initial refusal; it changes no thumbnail metadata and deletes only this upload's candidate key. A loser deletes what it wrote. A newer revision replaces an older one's images for the same version and deletes their keys, so a capture that got an image wrong is not stuck with it until the next version. Moving the record to a new version deletes the old version's thumbnails. Never touches `updatedAt`.
+- **`GET /thumb/…`** — `contentProxy`, through the same gate as `/content`: an expired document's thumbnails are a `404` to everyone but its owner. Serves only what `docs/{docId}.thumb` names. `Cache-Control: private, max-age=min(86400, seconds to expiry), immutable` for a member's or a grant's read — the key in the URL means the bytes there never change, and the window bounds what a removed member's browser keeps — and the `/content` policy for a read the URL alone decides.
 
 ### `GET /d/:docId[/:versionId]`
-Serves the app shell — the same bytes Hosting would serve for any client
-route — and, when the document is readable **anonymously** (§17), with the
-document's own `<head>` spliced in for crawlers. The rules are `contentProxy`'s
-for an anonymous caller: private, expired, and unlisted without the exact `k`
-all get the generic shell, the owner included.
+Serves the app shell — the same bytes Hosting would serve for any client route — and, when the document is readable **anonymously** (§17), with the document's own `<head>` spliced in for crawlers. The rules are `contentProxy`'s for an anonymous caller: private, expired, and unlisted without the exact `k` all get the generic shell, the owner included.
 
-**It never authenticates.** The response may be cached at a public URL, so
-whatever it carries is what a stranger may see; a member's tab title comes
-from the client. Headers: `Content-Type: text/html`, `nosniff`;
-`Cache-Control: private, no-store` for the generic shell,
-`public, max-age=min(300, seconds to expiry)` for a document, plus
-`X-Robots-Tag: noindex` when it is unlisted. **200 in every case** — a private
-slug and an absent one are byte-identical (§1.4b). The function's only other
-answers are `405` for a method other than `GET`/`HEAD` and `503` when no shell
-has ever been adopted from Hosting (§17); a `403` with an HTML body is the
-platform refusing the invocation, not the function answering
-(`docs/operations/overview.md`). Accepts `?k=` exactly as `/content/**` does.
+**It never authenticates.** The response may be cached at a public URL, so whatever it carries is what a stranger may see; a member's tab title comes from the client. Headers: `Content-Type: text/html`, `nosniff`; `Cache-Control: private, no-store` for the generic shell, `public, max-age=min(300, seconds to expiry)` for a document, plus `X-Robots-Tag: noindex` when it is unlisted. **200 in every case** — a private slug and an absent one are byte-identical (§1.4b). The function's only other answers are `405` for a method other than `GET`/`HEAD` and `503` when no shell has ever been adopted from Hosting (§17); a `403` with an HTML body is the platform refusing the invocation, not the function answering (`docs/operations/overview.md`). Accepts `?k=` exactly as `/content/**` does.
 
 ### `GET /folder/:folderId`
-The same shell, from the same function, for a folder's page. When the folder's
-own public level, or its key in `?k=`, opens it and its reach has not ended
-(§17 "A folder's reach"), the head says the folder's name with the default
-card, and nothing read from inside it; `public, max-age=min(300, seconds to
-the reach's end)`, plus `X-Robots-Tag: noindex` and the meta form when a key
-opened it. Every other folder, absent and private alike, is the generic shell
-with `private, no-store`. A member's workspace at the same URL is the client's;
-the shell does not authenticate.
+The same shell, from the same function, for a folder's page. When the folder's own public level, or its key in `?k=`, opens it and its reach has not ended (§17 "A folder's reach"), the head says the folder's name with the default card, and nothing read from inside it; `public, max-age=min(300, seconds to the reach's end)`, plus `X-Robots-Tag: noindex` and the meta form when a key opened it. Every other folder, absent and private alike, is the generic shell with `private, no-store`. A member's workspace at the same URL is the client's; the shell does not authenticate.
 
 ### `POST /unlock`
-Body `{ docId, k? }`. What a reader who is not a member may know about a
-document, and the one place an unlisted document's key is exchanged for access.
+Body `{ docId, k? }`. What a reader who is not a member may know about a document, and the one place an unlisted document's key is exchanged for access.
 
-`200` with the reader projection — `public/{docId}`'s fields (§17) — when the caller's `readBasis` is `public`, `link` or `grant`, or
-`member` of a non-private document. A signed-in caller whose basis is `link`
-gets a link grant first (§4, §17). Everything else is **one identical `404`**
-with an empty body: absent, private (to its members too, who read
-`docs/{docId}` directly), unlisted without the key or with a wrong one, and a
-grant from before the link was rotated. `400` only for a missing or malformed
-`docId`, which says nothing about any document. Expiry is not checked, as in
-the projection: the reader is told a document expired rather than shown nothing.
+`200` with the reader projection — `public/{docId}`'s fields (§17) — when the caller's `readBasis` is `public`, `link` or `grant`, or `member` of a non-private document. A signed-in caller whose basis is `link` gets a link grant first (§4, §17). Everything else is **one identical `404`** with an empty body: absent, private (to its members too, who read `docs/{docId}` directly), unlisted without the key or with a wrong one, and a grant from before the link was rotated. `400` only for a missing or malformed `docId`, which says nothing about any document. Expiry is not checked, as in the projection: the reader is told a document expired rather than shown nothing.
 
-The key travels in the body, never the query, so it stays out of request logs.
-`Cache-Control: private, no-store` on every answer. The grant is read in the
-same round trip as the document whether or not either exists.
+The key travels in the body, never the query, so it stays out of request logs. `Cache-Control: private, no-store` on every answer. The grant is read in the same round trip as the document whether or not either exists.
 
-A document a folder's reach opens (§17 "A folder's reach") is answered with
-`viaFolder: true`, the level that reached it, `publicEdit: false` and
-`expiresAt` the end of that reader's access, and never mints a grant.
+A document a folder's reach opens (§17 "A folder's reach") is answered with `viaFolder: true`, the level that reached it, `publicEdit: false` and `expiresAt` the end of that reader's access, and never mints a grant.
 
-Body `{ folderId, k? }` instead answers one level of a folder its reach opens:
-`200 { folderId, name, visibility, expiresAt, path, folders, documents,
-truncated }`, where `path` runs from the outermost folder the request opens
-down to this one, `documents` carries `{ docId, title, currentVersion,
-updatedAt, words, cover }`, where `updatedAt` is when its current version was published, in epoch milliseconds, and `words` its count (§4), and leaves out documents whose own expiry has passed, and
-each list stops at 500 with `truncated` saying so. A key that matched, or a
-public level, whose date has passed is `200 { folderId, name, expiresAt,
-expired: true }` with nothing listed. Absent, private, a wrong key and a
-rotated one are the same empty `404`.
+Body `{ folderId, k? }` instead answers one level of a folder its reach opens: `200 { folderId, name, visibility, expiresAt, path, folders, documents, truncated }`, where `path` runs from the outermost folder the request opens down to this one, `documents` carries `{ docId, title, currentVersion, updatedAt, words, cover }`, where `updatedAt` is when its current version was published, in epoch milliseconds, and `words` its count (§4), and leaves out documents whose own expiry has passed, and each list stops at 500 with `truncated` saying so. A key that matched, or a public level, whose date has passed is `200 { folderId, name, expiresAt, expired: true }` with nothing listed. Absent, private, a wrong key and a rotated one are the same empty `404`.
 
 ### `POST /access`
-Body `{ docId, add?: [{ email, role }], remove?: string[] }`, where `role` is
-`"viewer"`, `"suggester"`, `"editor"` or `"approver"` (§13). `add` entries
-accept a plain email or a `team:{teamId}` grant (§18).
+Body `{ docId, add?: [{ email, role }], remove?: string[] }`, where `role` is `"viewer"`, `"suggester"`, `"editor"` or `"approver"` (§13). `add` entries accept a plain email or a `team:{teamId}` grant (§18).
 
-Owner-only. Applies deltas with set semantics (one role per principal; the owner
-is never removed and never stored in a role), expands team grants, folds in the
-parent folder chain, and writes the four grant lists `{ viewers, suggesters,
-editors, approvers }`, the four effective sets `{ members, suggesterMembers,
-editorMembers, approverMembers }` and `updatedAt` via the Admin SDK. The delta,
-current document, parent membership and referenced teams are read in the same
-Firestore transaction as the grant and effective-set write, so concurrent
-successful deltas compose. Records an
-entry in `docs/{docId}/acl` with the acting `Actor` (§17). Syncs the presence
-mirror (§16) and the public projection (§17).
+Owner-only. Applies deltas with set semantics (one role per principal; the owner is never removed and never stored in a role), expands team grants, folds in the parent folder chain, and writes the four grant lists `{ viewers, suggesters, editors, approvers }`, the four effective sets `{ members, suggesterMembers, editorMembers, approverMembers }` and `updatedAt` via the Admin SDK. The delta, current document, parent membership and referenced teams are read in the same Firestore transaction as the grant and effective-set write, so concurrent successful deltas compose. Records an entry in `docs/{docId}/acl` with the acting `Actor` (§17). Syncs the presence mirror (§16) and the public projection (§17).
 
 `200 { viewers, suggesters, editors, approvers, members }`.
 
-`GET /access?docId=` answers the owner's share panel: which grants the
-document inherits, and from which folder (§13). Owner-only, refused as a read
-is. `200 { inherited: [{ folderId, path, principal, role }], inheritedReach:
-[{ folderId, path, visibility, expiresAt }] }`: every grant on the document's
-folder and on each folder above it, nearest folder first and highest role
-first within each, and every folder above whose link or public level reaches
-it (§17), ended ones included so the panel can say so. `path` names only the levels the caller can
-open and writes `…` for the rest, as `filedIn` does. `Cache-Control: private,
-no-store` on every answer, the refusals included.
+`GET /access?docId=` answers the owner's share panel: which grants the document inherits, and from which folder (§13). Owner-only, refused as a read is. `200 { inherited: [{ folderId, path, principal, role }], inheritedReach: [{ folderId, path, visibility, expiresAt }] }`: every grant on the document's folder and on each folder above it, nearest folder first and highest role first within each, and every folder above whose link or public level reaches it (§17), ended ones included so the panel can say so. `path` names only the levels the caller can open and writes `…` for the rest, as `filedIn` does. `Cache-Control: private, no-store` on every answer, the refusals included.
 
 ### `POST /draft`, `GET /draft/**`, `POST /commit`
-Editor-gated (`canEdit`, which on an unlisted open-editing document accepts the
-caller's link grant), Admin-SDK only, versions immutable — a commit always
-mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
+Editor-gated (`canEdit`, which on an unlisted open-editing document accepts the caller's link grant), Admin-SDK only, versions immutable — a commit always mints a NEW `vN+1`. A refused caller gets `404` unless they may read (§1.4b).
 
-- **`POST /draft`** — `{ docId, baseVersion, entry?, html, liveEpoch?, causal? }`. `409 { currentVersion }`
-  when `baseVersion !== currentVersion`. Uploads an isolated immutable snapshot
-  and transactionally selects it in `docs/{docId}.draft.storagePrefix`, checking
-  the current base, edit authority and expiry again after the upload. A browser
-  captures `liveEpoch` at edit entry; a retired epoch returns `409 { liveReset }`.
-  Shared saves carry a bounded `causal` history: the elected seed's SHA-256,
-  Yjs insertion vector and deletion intervals. An older or equal history is an
-  idempotent `200` retaining the current draft; concurrent histories return
-  `409 { draftChanged }` until merged, and different seed generations refuse
-  with `liveReset`. The server stores deletion intervals as JSON to avoid
-  Firestore's nested-array restriction. For a
-  Markdown-sourced document the edited HTML is
-  converted to Markdown server-side and `index.md` is what is stored (§11).
-- **`GET /draft/:docId/*`** — serves the draft prefix, **falling back** to
-  the current version's stored bundle for non-entry assets the draft does not
-  carry. An absent selected draft entry refuses with `409 { draftChanged }`,
-  rather than silently serving older published content. Legacy drafts without
-  a storage pointer retain their historical prefix. `private, no-store`.
-- **`POST /commit`** — `{ docId, baseVersion }`. `409` if stale, if there is no
-  draft, or if any annotation on the current version is unresolved
-  (`{ unresolvedCount, pendingSuggestions }`; the message says which kind holds
-  it, since only an approver can clear a pending suggestion, §6a). Assembles base assets + edited entry, re-renders
-  Markdown if applicable, hashes with the §9 framing, **dedups against the current version's `contentHash`**
-  (identical current bytes → no-op, clear the draft, `deduped: true`). Matching
-  an older version is a restoration, not a no-op. Changed current content uploads and,
-  in one transaction, creates `versions/{vN+1}`, bumps `currentVersion` and
-  clears `draft`. Both the mint and dedup transactions require the exact
-  snapshot originally read; a newer save returns `409 { draftChanged }` and
-  stays intact. Cleanup deletes only the replaced snapshot's own files.
-  Every retirement, including an identical-byte draft commit, advances the
-  document's opaque `liveEpoch` atomically. Access mirrors and public reader
-  metadata refresh before cleanup removes only that retired epoch's live log.
-  Unknown transaction errors retain uploaded candidates: a lost response may
-  hide a successful commit, whose referenced bytes must survive.
+- **`POST /draft`** — `{ docId, baseVersion, entry?, html, liveEpoch?, causal? }`. `409 { currentVersion }` when `baseVersion !== currentVersion`. Uploads an isolated immutable snapshot and transactionally selects it in `docs/{docId}.draft.storagePrefix`, checking the current base, edit authority and expiry again after the upload. A browser captures `liveEpoch` at edit entry; a retired epoch returns `409 { liveReset }`. Shared saves carry a bounded `causal` history: the elected seed's SHA-256, Yjs insertion vector and deletion intervals. An older or equal history is an idempotent `200` retaining the current draft; concurrent histories return `409 { draftChanged }` until merged, and different seed generations refuse with `liveReset`. The server stores deletion intervals as JSON to avoid Firestore's nested-array restriction. For a Markdown-sourced document the edited HTML is converted to Markdown server-side and `index.md` is what is stored (§11).
+- **`GET /draft/:docId/*`** — serves the draft prefix, **falling back** to the current version's stored bundle for non-entry assets the draft does not carry. An absent selected draft entry refuses with `409 { draftChanged }`, rather than silently serving older published content. Legacy drafts without a storage pointer retain their historical prefix. `private, no-store`.
+- **`POST /commit`** — `{ docId, baseVersion }`. `409` if stale, if there is no draft, or if any annotation on the current version is unresolved (`{ unresolvedCount, pendingSuggestions }`; the message says which kind holds it, since only an approver can clear a pending suggestion, §6a). Assembles base assets + edited entry, re-renders Markdown if applicable, hashes with the §9 framing, **dedups against the current version's `contentHash`** (identical current bytes → no-op, clear the draft, `deduped: true`). Matching an older version is a restoration, not a no-op. Changed current content uploads and, in one transaction, creates `versions/{vN+1}`, bumps `currentVersion` and clears `draft`. Both the mint and dedup transactions require the exact snapshot originally read; a newer save returns `409 { draftChanged }` and stays intact. Cleanup deletes only the replaced snapshot's own files. Every retirement, including an identical-byte draft commit, advances the document's opaque `liveEpoch` atomically. Access mirrors and public reader metadata refresh before cleanup removes only that retired epoch's live log. Unknown transaction errors retain uploaded candidates: a lost response may hide a successful commit, whose referenced bytes must survive.
 
 ### `POST /suggestion`
-Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, and
-the only writer of an annotation's `suggestion` field. `private, no-store`.
-Anonymous `401`; a caller who may not read `404` (§1.4b); an expired document
-`409`.
+Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, and the only writer of an annotation's `suggestion` field. `private, no-store`. Anonymous `401`; a caller who may not read `404` (§1.4b); an expired document `409`.
 
 | `op` | Body | Who | Refused with |
 |---|---|---|---|
@@ -456,124 +218,52 @@ Anonymous `401`; a caller who may not read `404` (§1.4b); an expired document
 | `accept` | `annId` | an approver, in the app | `409` no draft of this version; idempotent once accepted |
 | `reject` | `annId, reason?` | an approver, in the app | idempotent once rejected |
 
-`claim`, `accept` and `reject` refuse a token with `403`: here an accept
-records what the approver's browser has already applied, which a token cannot
-have done. An agent decides through its tools instead, which check the same
-role (§19). `revise` and `withdraw` take one: each changes only the caller's
-own pending proposal, and neither destroys anything.
-`create` answers `{ annId, versionId }`; the others `{ state }`.
+`claim`, `accept` and `reject` refuse a token with `403`: here an accept records what the approver's browser has already applied, which a token cannot have done. An agent decides through its tools instead, which check the same role (§19). `revise` and `withdraw` take one: each changes only the caller's own pending proposal, and neither destroys anything. `create` answers `{ annId, versionId }`; the others `{ state }`.
 
 ### Workspace endpoints
-- **`POST /publish` (`createDoc`)** — raw body is the uploaded file; metadata in
-  the query string (`?filename=&title=&id=&folderId=&marking=`). Accepts a single
-  `.html`, a `.md`/`.markdown`, or a `.zip`. Mints `v1`, `trusted: false`.
-  `title` is optional: for HTML the document's own `<title>` (read by the §17
-  head scanner, else `og:title`) is the default, then the file name without its
-  extension; for Markdown, the first level-one heading. The browser upload
-  dialog and file-drop paths leave `title` absent unless the uploader enters
-  one, so both use these defaults. `id` is optional too:
-  the docId to publish at, refused with a `400` before anything is stored if it
-  breaks the rules in §4. A taken `id` is not refused; see §4.
+- **`POST /publish` (`createDoc`)** — raw body is the uploaded file; metadata in the query string (`?filename=&title=&id=&folderId=&marking=`). Accepts a single `.html`, a `.md`/`.markdown`, or a `.zip`. Mints `v1`, `trusted: false`. `title` is optional: for HTML the document's own `<title>` (read by the §17 head scanner, else `og:title`) is the default, then the file name without its extension; for Markdown, the first level-one heading. The browser upload dialog and file-drop paths leave `title` absent unless the uploader enters one, so both use these defaults. `id` is optional too: the docId to publish at, refused with a `400` before anything is stored if it breaks the rules in §4. A taken `id` is not refused; see §4.
 
-  **`?update=<docId>[&k=]`** publishes a new version of that document instead,
-  through the same `reviseDocument` as `update_document` (§19). It is how the
-  app's "Upload a new version…" publishes a file from disk — from the viewer's
-  menu, a dropped file, or the workspace card — and the one way to revise with a
-  `.zip`, because the tools take text. It takes
-  `isDocEditor`, not `canEdit`: uploading a bundle into a document is a
-  re-upload in all but name, which open editing does not extend to. `id`,
-  `folderId` and `title` with it are a `400`; a refused caller gets the usual
-  `404`/`403` (§1.4b); an expired document a `409`. Given `baseVersion`, the
-  version the file was revised from, another version being current is a
-  `409 { error, currentVersion }`. A pending suggestion on the current version
-  is a `409 { error, pendingSuggestions }`, a draft holding an accepted
-  suggestion a `409 { error, acceptedInDraft }`, and anybody having the document
-  open in the editor a `409 { error, editors }` (§6a). A new version withdraws
-  trust, as every update through a token does (§6c), and drops the draft it
-  replaced (§16). Answers `{ docId, versionId, contentHash, fileCount, bytes,
-  deduped }`.
+  **`?update=<docId>[&k=]`** publishes a new version of that document instead, through the same `reviseDocument` as `update_document` (§19). It is how the app's "Upload a new version…" publishes a file from disk — from the viewer's menu, a dropped file, or the workspace card — and the one way to revise with a `.zip`, because the tools take text. It takes `isDocEditor`, not `canEdit`: uploading a bundle into a document is a re-upload in all but name, which open editing does not extend to. `id`, `folderId` and `title` with it are a `400`; a refused caller gets the usual `404`/`403` (§1.4b); an expired document a `409`. Given `baseVersion`, the version the file was revised from, another version being current is a `409 { error, currentVersion }`. A pending suggestion on the current version is a `409 { error, pendingSuggestions }`, a draft holding an accepted suggestion a `409 { error, acceptedInDraft }`, and anybody having the document open in the editor a `409 { error, editors }` (§6a). A new version withdraws trust, as every update through a token does (§6c), and drops the draft it replaced (§16). Answers `{ docId, versionId, contentHash, fileCount, bytes, deduped }`.
 - **`POST /folder` (`createFolder`)** — `{ name, parentId? }`.
-- **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`;
-  owner-only; cascade-recomputes the whole subtree. `GET
-  /folder-access?folderId=` answers as `GET /access` does, `inheritedReach`
-  included, from the folder's parent up: a folder's own grants are already its
-  direct ones.
-- **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document
-  deletion is deliberately unsupported (`400`). Renaming a document takes
-  `canEdit`; **moving it is its owner's alone** (`canManageSharing`, `403` with a reason otherwise), because filing a document into a folder makes that folder's members its members and lets its link and public level reach it: whoever moves a document decides who may read it, as sharing does. Until 0.32.0 any editor could, so an editor could file the owner's private document into a folder of their own, then share or publish that folder, and became an approver of it besides. **Moving a folder** to a new parent is likewise its owner's (`canManageFolder`): the new parent's readers reach the whole subtree. Renaming a folder takes `canEditFolder`.
-- **`POST /fork` (`forkDoc`)** — `{ op: "create" | "lineage", docId, k?, ... }`
-  (§21). `create` is `canRead`-gated on the source (a link grant or `k` counts;
-  `404` otherwise) and takes `versionId?`, `folderId?`, `title?`; the fork is
-  owner-only, private and `trusted: false`. `lineage` answers where a document
-  came from, as far as the caller may see, and its forks for its owner. Both
-  answer per caller, so the handler sets `noStore` first.
+- **`POST /folder-access` (`setFolderAccess`)** — same delta shape as `/access`; owner-only; cascade-recomputes the whole subtree. `GET /folder-access?folderId=` answers as `GET /access` does, `inheritedReach` included, from the folder's parent up: a folder's own grants are already its direct ones.
+- **`POST /organize`** — `{ kind, id, op, targetFolderId?, name? }`. Document deletion is deliberately unsupported (`400`). Renaming a document takes `canEdit`; **moving it is its owner's alone** (`canManageSharing`, `403` with a reason otherwise), because filing a document into a folder makes that folder's members its members and lets its link and public level reach it: whoever moves a document decides who may read it, as sharing does. Until 0.32.0 any editor could, so an editor could file the owner's private document into a folder of their own, then share or publish that folder, and became an approver of it besides. **Moving a folder** to a new parent is likewise its owner's (`canManageFolder`): the new parent's readers reach the whole subtree. Renaming a folder takes `canEditFolder`.
+- **`POST /fork` (`forkDoc`)** — `{ op: "create" | "lineage", docId, k?, ... }` (§21). `create` is `canRead`-gated on the source (a link grant or `k` counts; `404` otherwise) and takes `versionId?`, `folderId?`, `title?`; the fork is owner-only, private and `trusted: false`. `lineage` answers where a document came from, as far as the caller may see, and its forks for its owner. Both answer per caller, so the handler sets `noStore` first.
 - **`POST /trust`** — global trust (§6c): lifting the sandbox takes a superadmin owner in the browser's session, and a token is refused (`403`) whoever holds it; any owner, by any credential, may restore the sandbox.
 - **`POST /marking`** — owner-only export marking (§20).
-- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }`
-  (§17). `{ folderId, visibility, expiresAt? }` sets a folder's own level and
-  expiry, recomputes its subtree, and answers `{ visibility, linkToken,
-  expiresAt }`; a folder has no open editing. Omitting `expiresAt` preserves the current deadline; explicit `null` clears it.
-- **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the
-  body for an unlisted document; without a read basis it is the `404` an absent
-  id gets, and nothing is counted.
+- **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }` (§17). `{ folderId, visibility, expiresAt? }` sets a folder's own level and expiry, recomputes its subtree, and answers `{ visibility, linkToken, expiresAt }`; a folder has no open editing. Omitting `expiresAt` preserves the current deadline; explicit `null` clears it.
+- **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the body for an unlisted document; without a read basis it is the `404` an absent id gets, and nothing is counted.
 - **`GET /activity?docId=…&before=…` (`recordView`)** — one page of a document's Activity panel, newest first: `{ items, next }`, editors only, `private, no-store`. See §17.
-- **`GET /download/:docId/:versionId`** — `canRead`-gated zip of the version;
-  accepts `?k=` as `/content/**` does.
+- **`GET /download/:docId/:versionId`** — `canRead`-gated zip of the version; accepts `?k=` as `/content/**` does.
 
 ### Account, team and token endpoints
 - **`POST /verify/start`**, **`POST /verify/complete`** — §14.
 - **`POST /team`**, **`POST /team-members`** — §18.
-- **`POST /tokens`** — `{ op: "create"|"revoke"|"list", ... }` — §19. A browser
-  session for all three; a personal token as its own bearer may `revoke` itself
-  and nothing else (§23).
-- **`POST /mcp`** — streamable HTTP MCP endpoint; a personal access token or a
-  connected app's access token — §19, §23.
-- **`GET /.well-known/oauth-protected-resource[/mcp]`**,
-  **`GET /.well-known/oauth-authorization-server`**, **`POST /oauth/register`**,
-  **`POST /oauth/token`** — the `oauth` function — §23. The token endpoint
-  takes a code, a refresh token, or, where the deployment trusts an issuer, an
-  organisation's identity assertion (§23, ADR 0026).
-- **`POST /oauth/consent`** — the `oauthConsent` function, signed-in account's
-  ID token only — §23.
-- **`GET /sitemap.xml`** — public documents only.
+- **`POST /tokens`** — `{ op: "create"|"revoke"|"list", ... }` — §19. A browser session for all three; a personal token as its own bearer may `revoke` itself and nothing else (§23).
+- **`POST /mcp`** — streamable HTTP MCP endpoint; a personal access token or a connected app's access token — §19, §23.
+- **`GET /.well-known/oauth-protected-resource[/mcp]`**, **`GET /.well-known/oauth-authorization-server`**, **`POST /oauth/register`**, **`POST /oauth/token`** — the `oauth` function — §23. The token endpoint takes a code, a refresh token, or, where the deployment trusts an issuer, an organisation's identity assertion (§23, ADR 0026).
+- **`POST /oauth/consent`** — the `oauthConsent` function, signed-in account's ID token only — §23.
+- **`GET /sitemap.xml`** — the site's own public pages (`/`, `/terms`, `/privacy`, undated), then public documents.
+- **`GET /robots.txt`** — not a function. A static file at `app/public/robots.txt`, because a crawler that gets a 5xx here stops crawling the site, and the build fills in the deployment's address (`tools/stamp-deployment.mjs`). One group for every bot: everything public is open, and a named group would lift every rule for the bots it names. `/content/` stays open, or no crawler could read a document, and a keyed link stays open, because a crawler must fetch it to see its `noindex`.
 
 ---
 
 ## 3. Auth flow (web app)
 
-1. Sign in with Google or GitHub (`signInWithPopup`). The Google provider sets
-   `prompt: "select_account"` — without it, a rejected account is silently
-   reused on the next attempt and the screen appears dead.
-2. GitHub requests the `user:email` scope explicitly. Without it Firebase
-   receives no email for users who keep theirs private, and an email-keyed ACL
-   cannot grant anything to a user with no email.
-3. `auth/account-exists-with-different-credential` triggers the linking flow
-   (§14). One account per email is the intended invariant, not a limitation.
-4. Get the ID token and `POST /session` to set `__session` — required so the
-   same-origin iframe can load gated `/content/**`. After a popup the sign-in
-   makes this call itself, and the listener leaves it alone. After a Google
-   popup it includes `googleIdToken` when Google's address differs from the
-   account's (§14 "An address Google renames"). Only the newest of two
-   overlapping calls decides the gate.
+1. Sign in with Google or GitHub (`signInWithPopup`). The Google provider sets `prompt: "select_account"` — without it, a rejected account is silently reused on the next attempt and the screen appears dead.
+2. GitHub requests the `user:email` scope explicitly. Without it Firebase receives no email for users who keep theirs private, and an email-keyed ACL cannot grant anything to a user with no email.
+3. `auth/account-exists-with-different-credential` triggers the linking flow (§14). One account per email is the intended invariant, not a limitation.
+4. Get the ID token and `POST /session` to set `__session` — required so the same-origin iframe can load gated `/content/**`. After a popup the sign-in makes this call itself, and the listener leaves it alone. After a Google popup it includes `googleIdToken` when Google's address differs from the account's (§14 "An address Google renames"). Only the newest of two overlapping calls decides the gate.
 5. Re-`POST /session` on every `onIdTokenChanged`.
 6. Sign out: `DELETE /session`, then `auth.signOut()`.
-7. On `moving`, wait on `accountMoves/{jobId}` while the gate stays `loading`,
-   showing the address being moved to, and ignore the listener meanwhile. On
-   `done`, run `signInWithCredential` with the same Google token, which is a
-   fresh sign-in past the move's revocation. On `blocked`, say why and sync as
-   before. A signed-in account whose Google `providerData` address differs
-   from its own is offered the move, through `reauthenticateWithPopup`.
+7. On `moving`, wait on `accountMoves/{jobId}` while the gate stays `loading`, showing the address being moved to, and ignore the listener meanwhile. On `done`, run `signInWithCredential` with the same Google token, which is a fresh sign-in past the move's revocation. On `blocked`, say why and sync as before. A signed-in account whose Google `providerData` address differs from its own is offered the move, through `reauthenticateWithPopup`.
 
-The app talks to Firestore directly for doc lists, annotations and comments
-(gated by `firestore.rules`). It loads document CONTENT only through the
-`/content/**` proxy.
+The app talks to Firestore directly for doc lists, annotations and comments (gated by `firestore.rules`). It loads document CONTENT only through the `/content/**` proxy.
 
 ---
 
 ## 4. Firestore data model
 
-`app/src/types.ts` is the typed source of truth; this section is normative about
-meaning.
+`app/src/types.ts` is the typed source of truth; this section is normative about meaning.
 
 ```
 docs/{docId}                                   DocMeta
@@ -598,140 +288,48 @@ accountMoves/{jobId}                           AccountMove      (server-written;
 verifications/{uid}                            Verification     (server-only, §14)
 ```
 
-**An `Annotation` with a `suggestion` field is a suggested edit** (§22):
-`suggestion: { replacement, state: "pending" | "accepted" | "rejected" |
-"withdrawn", claim?, decidedBy?, decidedAt?, revisions? }`, where `decidedBy`
-and `decidedAt` say who closed it — an approver deciding, or its author
-withdrawing — and when, and `revisions` holds, oldest first, what each change
-its author made replaced: `{ replacement, note?, at, actor, operationId? }`, the note only
-when a new one replaced the author's own. Its `resolved` is `false` while pending and `true` once closed, so
-it counts as an open thread everywhere one is counted.
-Only `POST /suggestion` writes the field. A **`Comment`** may carry
-`opensSuggestion` (the thread's first comment) and `generated` (text the server
-wrote rather than the author), and no client may write either.
+**An `Annotation` with a `suggestion` field is a suggested edit** (§22): `suggestion: { replacement, state: "pending" | "accepted" | "rejected" | "withdrawn", claim?, decidedBy?, decidedAt?, revisions? }`, where `decidedBy` and `decidedAt` say who closed it — an approver deciding, or its author withdrawing — and when, and `revisions` holds, oldest first, what each change its author made replaced: `{ replacement, note?, at, actor, operationId? }`, the note only when a new one replaced the author's own. Its `resolved` is `false` while pending and `true` once closed, so it counts as an open thread everywhere one is counted. Only `POST /suggestion` writes the field. A **`Comment`** may carry `opensSuggestion` (the thread's first comment) and `generated` (text the server wrote rather than the author), and no client may write either.
 
-A browser writes feedback with **exactly** the fields the app sends, and the
-rules list them: an `Annotation` is `{ annId, anchor, authorUid, authorEmail,
-actor, color, resolved, createdAt }`, created with `resolved: false`, and a
-`Comment` is `{ commentId, body, authorUid, authorEmail, actor, createdAt }`.
-`createdAt` is the server's clock (`request.time`), never the client's. After
-that a reader may change an annotation's `resolved`, together with
-`resolvedBy: { uid, email, channel: "web" }`, which must be the reader. The
-change log reports it as who resolved or reopened the thread, and an agent's
-resolve writes the same field with its own actor. A comment's author may change
-its `body` and nothing else. Everything else on these records is written by the
-server, through the Admin SDK.
+A browser writes feedback with **exactly** the fields the app sends, and the rules list them: an `Annotation` is `{ annId, anchor, authorUid, authorEmail, actor, color, resolved, createdAt }`, created with `resolved: false`, and a `Comment` is `{ commentId, body, authorUid, authorEmail, actor, createdAt }`. `createdAt` is the server's clock (`request.time`), never the client's. After that a reader may change an annotation's `resolved`, together with `resolvedBy: { uid, email, channel: "web" }`, which must be the reader. The change log reports it as who resolved or reopened the thread, and an agent's resolve writes the same field with its own actor. A comment's author may change its `body` and nothing else. Everything else on these records is written by the server, through the Admin SDK.
 
-**`events/{eventId}`** is the change log an agent reads through `get_changes`
-(§19, ADR 0016). Its fields:
+**`events/{eventId}`** is the change log an agent reads through `get_changes` (§19, ADR 0016). Its fields:
 - `at`: when the event was written, by the server's clock;
-- `type`: what changed, for example `comment.added`, `thread.resolved`,
-  `suggestion.accepted`, `version.withdrawn`, `doc.renamed` or `access.changed`;
+- `type`: what changed, for example `comment.added`, `thread.resolved`, `suggestion.accepted`, `version.withdrawn`, `doc.renamed` or `access.changed`;
 - `audience`: `readers`, `editors` or `owner`;
 - optionally `version`, `threadId` and `commentId`;
 - `actor`: `{ uid, channel, tokenId?, via? }`, with no email (`via` is the credential in words, §17; a withdrawal's actor is `operator`);
 - `data`: small values, never a body.
 
 How events are written:
-- **Triggers** (`recordVersionEvent`, `recordThreadEvent`, `recordCommentEvent`)
-  create them under the CloudEvent's id, so a redelivery writes nothing.
-- **Endpoints** that change the document record create them in the same batch
-  as the change.
+- **Triggers** (`recordVersionEvent`, `recordThreadEvent`, `recordCommentEvent`) create them under the CloudEvent's id, so a redelivery writes nothing.
+- **Endpoints** that change the document record create them in the same batch as the change.
 - **Never:** no client reads or writes the log, and nothing deletes from it.
 
-A saved cursor, `users/{uid}/cursors/{tokenId}~{docId}`, is `{ cursor, docId,
-tokenId, updatedAt }`: the last cursor `get_changes` gave that credential for
-that document. It is server-only.
+A saved cursor, `users/{uid}/cursors/{tokenId}~{docId}`, is `{ cursor, docId, tokenId, updatedAt }`: the last cursor `get_changes` gave that credential for that document. It is server-only.
 
-**`accountMoves/{jobId}`** is `{ uid, from, to, state, reason?, requestedAt,
-finishedAt? }`. It is one account's move to the address Google renamed it to
-(§14). `state` is `pending`, `done` or `blocked`, and `reason` is
-`address-taken` or `stale`. The id is `{uid}~{sha256(to) prefix}`, so a second
-tab finds the first one's job. `POST /session` creates it, and the
-`moveAccount` trigger finishes it. Its own account may `get` it, to know when
-to sign in again. No client lists or writes one.
+**`accountMoves/{jobId}`** is `{ uid, from, to, state, reason?, requestedAt, finishedAt? }`. It is one account's move to the address Google renamed it to (§14). `state` is `pending`, `done` or `blocked`, and `reason` is `address-taken` or `stale`. The id is `{uid}~{sha256(to) prefix}`, so a second tab finds the first one's job. `POST /session` creates it, and the `moveAccount` trigger finishes it. Its own account may `get` it, to know when to sign in again. No client lists or writes one.
 
 **`verifyTargets/{addressHash}`** is `{ sentAt }`: when codes went to one address in the last day, keyed by `sha256(address)` so the record names no address (§14). Server-only: a client that could clear it could guess at an address with as many accounts as it has.
 
 **`verifications/{uid}`** is `{ hash, email, expiresAt, attempts, sentAt, reservationId, attemptIds? }`: the one code an account has asked for to prove an address (§14). It is server-only, its own account included, because `hash` is `sha256(uid:code)` and a six-digit code's hash is the code to whoever reads it. It was kept on `users/{uid}` as `verification` until 0.29.1, where its account could read it; that field is no longer read, stays unwritable by clients, and is cleared when a verification completes or an account moves.
 
-**`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an
-unlisted document's key, and `token` is the one it presented. It counts only
-while that is still `linkToken`, so rotating the link revokes every grant
-without touching one. Written only by `POST /unlock`; no client reads or writes
-it (§17).
+**`linkGrants/{uid}`** is `{ uid, token, grantedAt }`: this account presented an unlisted document's key, and `token` is the one it presented. It counts only while that is still `linkToken`, so rotating the link revokes every grant without touching one. Written only by `POST /unlock`; no client reads or writes it (§17).
 
-**`members`** is the EFFECTIVE read set: the union of `ownerEmail`, every
-direct grant list, the parent folder chain's grants, and the expansion of any
-`team:{id}` grant — all lowercased. It is the array the doc list queries. The
-owner is always in it. `viewers`, `suggesters`, `editors` and `approvers` remain
-the DIRECT grants and are the record of intent; `members` is the record of
-reality.
+**`members`** is the EFFECTIVE read set: the union of `ownerEmail`, every direct grant list, the parent folder chain's grants, and the expansion of any `team:{id}` grant — all lowercased. It is the array the doc list queries. The owner is always in it. `viewers`, `suggesters`, `editors` and `approvers` remain the DIRECT grants and are the record of intent; `members` is the record of reality.
 
-**`suggesterMembers`**, **`editorMembers`** and **`approverMembers`** are the
-EFFECTIVE sets of the three upper roles, each containing the one above it
-(§13). `editorMembers` missing on legacy records ⇒ fall back to `editors`; the
-other two missing ⇒ empty, which is correct, since nobody held those roles
-before the sets existed.
+**`suggesterMembers`**, **`editorMembers`** and **`approverMembers`** are the EFFECTIVE sets of the three upper roles, each containing the one above it (§13). `editorMembers` missing on legacy records ⇒ fall back to `editors`; the other two missing ⇒ empty, which is correct, since nobody held those roles before the sets existed.
 
-**`trusted`** is GLOBAL trust: it controls whether the viewer sandboxes the
-content iframe FOR EVERY READER. Every publish through `publishNewDocument` —
-browser upload, fork, the end-user CLI and MCP alike — creates it `false`;
-only the operator script `scripts/publish.mjs`, which runs with Admin
-credentials, creates it `true`; afterwards the owner flips it via `/trust`.
-`commitVersion` leaves it untouched, so trust PERSISTS across in-app edits.
-Missing ⇒ treated as trusted.
+**`trusted`** is GLOBAL trust: it controls whether the viewer sandboxes the content iframe FOR EVERY READER. Every publish through `publishNewDocument` — browser upload, fork, the end-user CLI and MCP alike — creates it `false`; only the operator script `scripts/publish.mjs`, which runs with Admin credentials, creates it `true`; afterwards the owner flips it via `/trust`. `commitVersion` leaves it untouched, so trust PERSISTS across in-app edits. Missing ⇒ treated as trusted.
 
-**`stats`** is the denormalized usage rollup, so the workspace list renders
-counts with no extra reads and any member can see the AGGREGATE. Written only by
-the Admin SDK, always as a nested map under `set(..., { merge: true })` so the
-view writer and the edit writer never clobber each other.
-Reading identities never appear in this member-readable map. They live only in
-the editor-gated `views` and `viewers` collections; `lastViewedAt` is an
-anonymous aggregate timestamp. The one exception is a person's own rows: they
-may list their own `viewers` rows across documents, and nobody else's (§5
-"Your own reading"). Read writers delete the legacy
-`stats.lastViewedByEmail` field. An existing installation must also run
-`scripts/redact-reader-stats.mjs` to erase it from documents nobody reads again.
-`recordView` deliberately does NOT touch `updatedAt` — that field means "the record changed", and a read must not masquerade as a change.
+**`stats`** is the denormalized usage rollup, so the workspace list renders counts with no extra reads and any member can see the AGGREGATE. Written only by the Admin SDK, always as a nested map under `set(..., { merge: true })` so the view writer and the edit writer never clobber each other. Reading identities never appear in this member-readable map. They live only in the editor-gated `views` and `viewers` collections; `lastViewedAt` is an anonymous aggregate timestamp. The one exception is a person's own rows: they may list their own `viewers` rows across documents, and nobody else's (§5 "Your own reading"). Read writers delete the legacy `stats.lastViewedByEmail` field. An existing installation must also run `scripts/redact-reader-stats.mjs` to erase it from documents nobody reads again. `recordView` deliberately does NOT touch `updatedAt` — that field means "the record changed", and a read must not masquerade as a change.
 
-**`thumb`** is `{ versionId, rev?, cover?, slides?: { key, count } }`: which
-version's thumbnails are stored, by which capture revision (absent is the
-first), and under which keys (§2 `POST /thumb`). Storage holds
-them at `docs/{docId}/thumbs/{versionId}/{key}/{cover|s<n>}.jpg` — beside the
-version's prefix, never under it, because everything that reads a version (the
-next commit's content hash, a fork, the download) takes every object under
-`docs/{docId}/bundles/{attempt}/`, selected by `DocVersion.storagePrefix`;
-legacy records use `docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with
-`updatedAt`: a captured image is not a publish. It may name an older version
-than `currentVersion` until an editor next opens the document, and the workspace
-shows that cover meanwhile.
+**`thumb`** is `{ versionId, rev?, cover?, slides?: { key, count } }`: which version's thumbnails are stored, by which capture revision (absent is the first), and under which keys (§2 `POST /thumb`). Storage holds them at `docs/{docId}/thumbs/{versionId}/{key}/{cover|s<n>}.jpg` — beside the version's prefix, never under it, because everything that reads a version (the next commit's content hash, a fork, the download) takes every object under `docs/{docId}/bundles/{attempt}/`, selected by `DocVersion.storagePrefix`; legacy records use `docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with `updatedAt`: a captured image is not a publish. It may name an older version than `currentVersion` until an editor next opens the document, and the workspace shows that cover meanwhile.
 
-`stats.apiReads` counts automated reads. They never enter `stats.views` or
-`stats.totalMs`: reading *time* is a human concept and an agent fetching a
-document forty times would otherwise turn both into noise (§17).
+`stats.apiReads` counts automated reads. They never enter `stats.views` or `stats.totalMs`: reading *time* is a human concept and an agent fetching a document forty times would otherwise turn both into noise (§17).
 
-**Versions** are immutable, but for the word count the version trigger adds once (`words`, below), and mint as `v{max(N)+1}` over EXISTING version
-documents, so a withdrawn id is re-used by the next commit. `views/{sessionId}
-.versionId` may therefore carry a `"{versionId}-deleted"` tombstone, written by
-`delete-version.mjs`, so old and new sessions are never conflated under one id.
-Withdrawing a version also deletes its thumbnails and clears a `thumb` naming
-it, since a re-minted id would otherwise inherit them.
+**Versions** are immutable, but for the word count the version trigger adds once (`words`, below), and mint as `v{max(N)+1}` over EXISTING version documents, so a withdrawn id is re-used by the next commit. `views/{sessionId} .versionId` may therefore carry a `"{versionId}-deleted"` tombstone, written by `delete-version.mjs`, so old and new sessions are never conflated under one id. Withdrawing a version also deletes its thumbnails and clears a `thumb` naming it, since a re-minted id would otherwise inherit them.
 
-Every publish attempt uploads into its own immutable bundle prefix. The
-version record's `storagePrefix` selects those bytes only after the transaction
-commits; a competing or refused upload cannot replace them. All content,
-source, download, fork and subsequent-edit reads follow that pointer. Older
-records without a pointer retain their original version-based path.
-If a transaction commits but loses its acknowledgement, an SDK retry recognizes
-that attempt's unique version prefix before applying new-write guards. It
-acknowledges the already-published version without repointing a later head.
-A refusal on a retry cannot prove an earlier attempt did not commit, so bytes
-from an attempted transaction are retained when its outcome remains uncertain.
-After a known terminal refusal, a fresh transactional read of the document's
-draft and every retained version may prove its unique candidate unreferenced;
-only that proof permits cleanup. A failed lookup or an unknown transport error
-retains the bytes, and a later head never hides a historical version's pointer.
+Every publish attempt uploads into its own immutable bundle prefix. The version record's `storagePrefix` selects those bytes only after the transaction commits; a competing or refused upload cannot replace them. All content, source, download, fork and subsequent-edit reads follow that pointer. Older records without a pointer retain their original version-based path. If a transaction commits but loses its acknowledgement, an SDK retry recognizes that attempt's unique version prefix before applying new-write guards. It acknowledges the already-published version without repointing a later head. A refusal on a retry cannot prove an earlier attempt did not commit, so bytes from an attempted transaction are retained when its outcome remains uncertain. After a known terminal refusal, a fresh transactional read of the document's draft and every retained version may prove its unique candidate unreferenced; only that proof permits cleanup. A failed lookup or an unknown transport error retains the bytes, and a later head never hides a historical version's pointer.
 
 `createdAt` is set once. `updatedAt` is bumped by any change to the record: a publish, and also a rename, a share, trust, a marking or a folder recompute. So it is not "last updated" in a reader's sense.
 
@@ -739,24 +337,7 @@ retains the bytes, and a later head never hides a historical version's pointer.
 
 **`words`** on a version is its entry's word count, counted once by the same trigger from the first 4 MB of the stored entry, a ranged read, and copied onto a fork's first version, whose bytes are the same: the body's text outside scripts, styles, SVG, templates, comments and navigation, segmented by `Intl.Segmenter`, so a language written without spaces counts its words (`lib/head.ts countWords`). Reading time is words ÷ 238 a minute, rounded up, at least one (`app/src/readingTime.ts`). It is an estimate of a sitting; Activity's "time spent reading" is the measured one. A version may also carry `summaryRequestedAt`, the backfill's marker, which means nothing else.
 
-**A docId** is the document's address, `/d/{docId}`, and never changes. The
-publisher may ask for one (`id` on `/publish`, on `publish_document`, and
-`--id` in the CLI); otherwise it is `slugify(title)`. An asked-for id must be
-lowercase letters and digits with single hyphens between them, at most 60
-characters: exactly what `slugify` produces, because the id is also a Realtime
-Database key, an unencoded link and a quoted download filename. If the id is
-taken the document is still created, at `{id}-{six random [a-z0-9]}`. An id is
-taken if a record holds it or if bytes are already stored under it: a new
-document's bytes are written only where no object exists yet, and a refused
-write moves the document to a suffixed id.
-The publisher learns that the id was taken and nothing more; the suffix is
-random, so it no longer says how many share the name. The returned `docId` is
-the answer; callers must not assume they got what they asked for.
-`publish_document` also returns the `requestedId` (the one asked for, or the
-title's slug) and `idTaken`, which says outright what comparing the two would
-tell the caller anyway. Ids minted
-before this rule, `-2`, `-3` and so on, keep their addresses. Rename changes
-`title` and `slug`, never the docId.
+**A docId** is the document's address, `/d/{docId}`, and never changes. The publisher may ask for one (`id` on `/publish`, on `publish_document`, and `--id` in the CLI); otherwise it is `slugify(title)`. An asked-for id must be lowercase letters and digits with single hyphens between them, at most 60 characters: exactly what `slugify` produces, because the id is also a Realtime Database key, an unencoded link and a quoted download filename. If the id is taken the document is still created, at `{id}-{six random [a-z0-9]}`. An id is taken if a record holds it or if bytes are already stored under it: a new document's bytes are written only where no object exists yet, and a refused write moves the document to a suffixed id. The publisher learns that the id was taken and nothing more; the suffix is random, so it no longer says how many share the name. The returned `docId` is the answer; callers must not assume they got what they asked for. `publish_document` also returns the `requestedId` (the one asked for, or the title's slug) and `idTaken`, which says outright what comparing the two would tell the caller anyway. Ids minted before this rule, `-2`, `-3` and so on, keep their addresses. Rename changes `title` and `slug`, never the docId.
 
 **The Trash** ([ADR 0024](adr/0024-deletion-goes-through-a-trash.md)). `trashed` is set on a document or a folder while it is in the Trash: `{ at, by, batch, with? }`. `by` is a uid, never an address: only a document's owner trashes it and only a folder's owner trashes a folder, so "by you" or "with the folder, by its owner" says all there is. `batch` is shared by everything trashed together. `with: { folderId, name }` names the folder an item went with, as it was named then, because its owner may not be able to read that folder in the Trash; it is absent on the item that was trashed itself. Restore writes `null`. Only a map is the Trash (`lib/acl.ts isTrashed`, the rules' `isTrashed(d)`).
 
@@ -782,20 +363,13 @@ query(collection(db, "docs"),
       orderBy("createdAt", "desc"))
 ```
 
-One query suffices because the owner, inherited folder grants and expanded team
-grants are all already in `members`. The composite index is declared in
-`firestore.indexes.json`. A document in the Trash stays in its owner's results, whose `members` it still names, and leaves everyone else's; the workspace shows it under Trash, not in its folder (§4 "The Trash").
+One query suffices because the owner, inherited folder grants and expanded team grants are all already in `members`. The composite index is declared in `firestore.indexes.json`. A document in the Trash stays in its owner's results, whose `members` it still names, and leaves everyone else's; the workspace shows it under Trash, not in its folder (§4 "The Trash").
 
-The matching `list` rule must be **statically provable from the query
-constraints** — rules are not filters. That forbids a transformed expression
-like `email.lower()` in the rule, which is why members are stored lowercased as
-an invariant. **Any change that makes `members` something other than a flat
-array of lowercased emails breaks this rule and therefore the entire workspace.**
+The matching `list` rule must be **statically provable from the query constraints** — rules are not filters. That forbids a transformed expression like `email.lower()` in the rule, which is why members are stored lowercased as an invariant. **Any change that makes `members` something other than a flat array of lowercased emails breaks this rule and therefore the entire workspace.**
 
 ### Your own reading
 
-Recent (§13) asks for the documents its reader read lately, from their own rows
-of the per-person rollup (§4):
+Recent (§13) asks for the documents its reader read lately, from their own rows of the per-person rollup (§4):
 
 ```js
 query(collectionGroup(db, "viewers"),
@@ -804,29 +378,15 @@ query(collectionGroup(db, "viewers"),
       limit(100))
 ```
 
-The rule allows `list` on `/{path=**}/viewers/{viewerId}` when the stored `uid`
-is the caller's and the identity gate passes, and nothing more: the
-per-document `get` stays the editors'. Its collection-group index is declared in
-`firestore.indexes.json`. A recursive match cannot name its parent, so this
-holds only while `viewers` names one collection, docs/{docId}/viewers, which
-`tools/viewers-collection.test.mjs` pins. A row outlives access to its
-document, and says only what its reader saw; the app shows only documents the
-workspace query above also returns
-([ADR 0027](adr/0027-a-reader-lists-their-own-reading.md)).
+The rule allows `list` on `/{path=**}/viewers/{viewerId}` when the stored `uid` is the caller's and the identity gate passes, and nothing more: the per-document `get` stays the editors'. Its collection-group index is declared in `firestore.indexes.json`. A recursive match cannot name its parent, so this holds only while `viewers` names one collection, docs/{docId}/viewers, which `tools/viewers-collection.test.mjs` pins. A row outlives access to its document, and says only what its reader saw; the app shows only documents the workspace query above also returns ([ADR 0027](adr/0027-a-reader-lists-their-own-reading.md)).
 
 ---
 
 ## 6. Annotation mechanics
 
-The document renders in `<iframe src="/content/{docId}/{versionId}/{entry}">`.
-Because it is same-origin, the parent app drives annotation directly on
-`iframe.contentDocument`. **The proxy injects nothing.**
+The document renders in `<iframe src="/content/{docId}/{versionId}/{entry}">`. Because it is same-origin, the parent app drives annotation directly on `iframe.contentDocument`. **The proxy injects nothing.**
 
-A browser comment belongs to the current version the frame displays. Existing
-feedback stays on its original version after publication; historical versions
-are read-only archives (§24). A pinned reader can open the latest version to
-comment. MCP `add_comment` selects the current head and rechecks it atomically
-(§19).
+A browser comment belongs to the current version the frame displays. Existing feedback stays on its original version after publication; historical versions are read-only archives (§24). A pinned reader can open the latest version to comment. MCP `add_comment` selects the current head and rechecks it atomically (§19).
 
 **An engine may deliver the parent no events from the frame.** WebKit (Safari, and every browser on an iPhone) never calls a listener the parent adds to a document whose frame is sandboxed without `allow-scripts`, which is every untrusted document: not `selectionchange`, `click`, `input`, `keydown`, nor a custom event. Measured in the system WebKit of Safari 27, where all of them went unheard and a reader who selected text on an iPhone was offered nothing. Chrome delivers them all. What WebKit still allows is reading, and a MutationObserver made from the frame's own window. So `viewer/frameWatch.ts` asks each loaded document once, by dispatching a probe its own listener should hear, and where it is not heard every watch samples instead from the parent's timer (`SAMPLE_MS`, 150 ms): the selection, the scroll, the viewport, focus. Each consumer then gets the same callback either way. The few signals that are gestures and nothing else are recovered from what a gesture does:
 
@@ -840,269 +400,75 @@ comment. MCP `add_comment` selects the current head and rechecks it atomically
 | Arrow keys with focus inside a slide, a file dropped onto the document | **not recovered**: the deck's own controls and the upload dialog remain |
 
 - On `load`: inject one `<style>` into the iframe head for `.bshd-hl`.
-- Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus
-  `dom-anchor-text-position` as the fallback, both scoped to the **nearest
-  ancestor element carrying an `id`**, stored as `anchor.elementId`. Selectors
-  are computed relative to that element so they survive content above it
-  changing.
-- Rehydrate: find the element by `elementId`, `toRange` the quote selector
-  within it; **if the range is inside a collapsed `<details>`, open it first**,
-  then wrap in `<mark class="bshd-hl" data-bshd-ann="...">` — or in a `<tspan>`
-  carrying the same class and attribute when the text node lives inside SVG
-  text, because SVG renders no foreign child of `<text>` and a `<mark>` there
-  paints nothing.
-- Wrapping is per-text-node, so existing element nodes are never destroyed or
-  re-parented. Highlights are presentational and are NEVER persisted.
-- Selecting a thread brings its passage into view, centred, **unless it is
-  already in view** — the usual reason it is being that the selection came
-  from clicking the highlight, which is under the pointer. Once per selection:
-  a redraw for a peer's comment landing must not pull back a reader who has
-  scrolled on. The thread card does the same in the panel, in the other
-  direction.
-- **A `strict` anchor is never resolved by position.** An agent's comment
-  (§19) is anchored on the server, by its quote, without a DOM: `elementId` is
-  empty, `exact` is whitespace-collapsed, and its offsets are local to one
-  block rather than positions in the body. So it is rehydrated with the
-  strict resolver suggestions use (§22) — the exact text, whitespace
-  normalised, or nothing — and one that does not resolve is orphaned. The
-  fuzzy resolver would truncate a quote whose source wraps a line, and its
-  position fallback would highlight the wrong words.
-- **A resolved annotation is not drawn.** Resolving is how a reader says a
-  passage is dealt with, so its mark comes off the prose; the thread stays in
-  the panel and can be reopened there. An agent resolves through a tool, which
-  leaves a note in the thread saying so (§19). A resolved annotation is skipped before
-  its anchor is resolved, so it is never reported as orphaned either.
-- **The panel starts collapsed unless there is a thread to read.** Its default
-  is decided once per document, by the version's first annotation snapshot:
-  open when a thread is unresolved, collapsed otherwise — resolved threads are
-  hidden until asked for, so they do not count. Until that snapshot lands it
-  is closed. Whichever comes first, the snapshot or the reader's toggle, wins,
-  and later annotation snapshots do not change the answer: a comment landing
-  later does not reopen a panel the reader closed, and a new version of the
-  same document does not collapse one they had open. Starting a comment or
-  explicitly selecting a highlight opens its thread regardless; on a phone
-  that selection also switches to the Comments pane.
-- **A click that carries a comment intent never reaches the document's own
-  scripts.** A drag that selects text ends in a `click`, and a click on a
-  highlight is the thread's. Both are stopped in the capture phase before any
-  listener the document registered — the selection's at the frame *window*,
-  which sits above the document in the propagation path and so runs first
-  whatever the document attached, and whenever; the highlight's by the
-  listener that already claims it. Propagation is stopped, the default action
-  is not: a link still navigates (see the next point) and a `<summary>` still
-  toggles. This is what keeps a deck that advances on click (§6d) on the slide
-  being annotated.
-- **A link out of the document opens beside it.** A link that leaves the
-  version — another site, the app's own pages, another version — opens in a new
-  tab from the parent, with `noopener,noreferrer`, and its default action in the
-  frame is prevented. Left to the frame, a plain link replaced the document
-  inside the viewer with somebody else's page (often a framing refusal), and a
-  sandboxed frame may not open a tab at all, so `target="_blank"` did nothing.
-  A fragment link scrolls, and a link to another file of the same version — a
-  bundle's own pages — still navigates the frame. `attachOutboundLinks`, on the
-  frame window in the capture phase, reading mode only: in the editor a click
-  on a link places the caret.
-  Reading mode only, with the rest of the layer: the edit frame runs no script
-  and the caret must never lose a click.
+- Selection → anchor: `dom-anchor-text-quote` (`fromRange`/`toRange`) plus `dom-anchor-text-position` as the fallback, both scoped to the **nearest ancestor element carrying an `id`**, stored as `anchor.elementId`. Selectors are computed relative to that element so they survive content above it changing.
+- Rehydrate: find the element by `elementId`, `toRange` the quote selector within it; **if the range is inside a collapsed `<details>`, open it first**, then wrap in `<mark class="bshd-hl" data-bshd-ann="...">` — or in a `<tspan>` carrying the same class and attribute when the text node lives inside SVG text, because SVG renders no foreign child of `<text>` and a `<mark>` there paints nothing.
+- Wrapping is per-text-node, so existing element nodes are never destroyed or re-parented. Highlights are presentational and are NEVER persisted.
+- Selecting a thread brings its passage into view, centred, **unless it is already in view** — the usual reason it is being that the selection came from clicking the highlight, which is under the pointer. Once per selection: a redraw for a peer's comment landing must not pull back a reader who has scrolled on. The thread card does the same in the panel, in the other direction.
+- **A `strict` anchor is never resolved by position.** An agent's comment (§19) is anchored on the server, by its quote, without a DOM: `elementId` is empty, `exact` is whitespace-collapsed, and its offsets are local to one block rather than positions in the body. So it is rehydrated with the strict resolver suggestions use (§22) — the exact text, whitespace normalised, or nothing — and one that does not resolve is orphaned. The fuzzy resolver would truncate a quote whose source wraps a line, and its position fallback would highlight the wrong words.
+- **A resolved annotation is not drawn.** Resolving is how a reader says a passage is dealt with, so its mark comes off the prose; the thread stays in the panel and can be reopened there. An agent resolves through a tool, which leaves a note in the thread saying so (§19). A resolved annotation is skipped before its anchor is resolved, so it is never reported as orphaned either.
+- **The panel starts collapsed unless there is a thread to read.** Its default is decided once per document, by the version's first annotation snapshot: open when a thread is unresolved, collapsed otherwise — resolved threads are hidden until asked for, so they do not count. Until that snapshot lands it is closed. Whichever comes first, the snapshot or the reader's toggle, wins, and later annotation snapshots do not change the answer: a comment landing later does not reopen a panel the reader closed, and a new version of the same document does not collapse one they had open. Starting a comment or explicitly selecting a highlight opens its thread regardless; on a phone that selection also switches to the Comments pane.
+- **A click that carries a comment intent never reaches the document's own scripts.** A drag that selects text ends in a `click`, and a click on a highlight is the thread's. Both are stopped in the capture phase before any listener the document registered — the selection's at the frame *window*, which sits above the document in the propagation path and so runs first whatever the document attached, and whenever; the highlight's by the listener that already claims it. Propagation is stopped, the default action is not: a link still navigates (see the next point) and a `<summary>` still toggles. This is what keeps a deck that advances on click (§6d) on the slide being annotated.
+- **A link out of the document opens beside it.** A link that leaves the version — another site, the app's own pages, another version — opens in a new tab from the parent, with `noopener,noreferrer`, and its default action in the frame is prevented. Left to the frame, a plain link replaced the document inside the viewer with somebody else's page (often a framing refusal), and a sandboxed frame may not open a tab at all, so `target="_blank"` did nothing. A fragment link scrolls, and a link to another file of the same version — a bundle's own pages — still navigates the frame. `attachOutboundLinks`, on the frame window in the capture phase, reading mode only: in the editor a click on a link places the caret. Reading mode only, with the rest of the layer: the edit frame runs no script and the caret must never lose a click.
 
-  The test is what *this gesture* did, not whether text is selected: the
-  selection is noted at pointer-down and compared at click, and only a click
-  that changed it is stopped. Measured in Chrome, that is the line that
-  matters. A click that dismisses a selection collapses it on mouse-up, before
-  `click`, and is an ordinary click. A selection stranded on a slide the arrow
-  keys moved off is never collapsed — hidden text cannot be hit-tested — and
-  is the same selection at both moments, so it passes; stopping on "text is
-  selected" swallowed every click from then on. A click with no pointer-down
-  before it — keyboard activation, a script's own synthetic click — is nobody
-  selecting text and passes as well.
+  The test is what *this gesture* did, not whether text is selected: the selection is noted at pointer-down and compared at click, and only a click that changed it is stopped. Measured in Chrome, that is the line that matters. A click that dismisses a selection collapses it on mouse-up, before `click`, and is an ordinary click. A selection stranded on a slide the arrow keys moved off is never collapsed — hidden text cannot be hit-tested — and is the same selection at both moments, so it passes; stopping on "text is selected" swallowed every click from then on. A click with no pointer-down before it — keyboard activation, a script's own synthetic click — is nobody selecting text and passes as well.
 
 ### 6a. Inline editing
 
 The one path that writes content, and it is explicit and server-mediated.
 
-- Edit mode points the iframe at `/draft/{docId}/{entry}`, sets
-  `body.contentEditable`, and shows a WYSIWYG toolbar driven by `execCommand`.
-- **The edit frame is unconditionally script-free**, whatever `trusted` says.
-  `editing` is part of the iframe `key`, so toggling edit mode REMOUNTS the
-  frame — sandboxing is decided at parse time. Without this, the bundle's own JS
-  runs in the frame being serialized: its generated DOM is persisted as static
-  markup while the generator stays in place, so every later render appends
-  another copy, and any node the script rewrites on load silently discards the
-  editor's typed change.
-- A deck that sizes its slides with its own script renders at full size in the
-  script-free edit frame, and centred in a narrower frame its slides start at a
-  negative offset nothing can scroll to. While editing, the frame is laid out at
-  the width the slides' content reaches — measured once per load and latched,
-  as `paged` is — and the iframe ELEMENT is scaled to the stage
-  (`useFrameFit`). The document is not touched.
-- Containers the author left empty for their script to fill are outlined in edit
-  mode. Marking is an **attribute** (`data-bshd-empty`) plus one injected
-  stylesheet, **never an inserted node**, so no placeholder content can reach the
-  saved bytes.
-- Before serializing, `serializeCleanHtml` strips every app injection from a
-  CLONE: highlight marks, the injected stylesheets, the peer-presence overlay,
-  placeholder marking, and the editor's temporary body `contenteditable` and
-  `spellcheck` overrides. The body's original attribute values (including
-  absence) and authored descendant attributes survive. App injections carry
-  `data-bshd` with a value from `OWN_MARKERS` and are stripped as a class — the
-  value check is what makes the namespace safe against a bundle that happens to
-  use the same attribute.
-- The round trip preserves the authored DOM plus the edit, not the original
-  source spelling. The browser parser and HTML serializer may normalize
-  whitespace outside the document body or equivalent HTML syntax. They must
-  not add editing decoration, remove authored elements or change their meaning.
-- Serialization also drops any `script/style/link/meta/base` absent from the
-  load-time asset inventory (`captureAssetTags`, taken in `onLoad` before any
-  injection). That removes nodes a BROWSER EXTENSION added to the same-origin
-  frame. It is sound only because the edit frame is script-free.
-- A commit is refused when the pre-commit draft save failed. Publishing anyway
-  would promote the PREVIOUS draft bytes while reporting success.
-- Leaving edit mode saves only an edit the autosave has not yet taken. Any
-  save creates a draft, so a save on the way out of an unchanged session
-  would leave a draft that differs from nothing.
-- Concurrent suggestion accepts compare the draft snapshot at the write. A
-  conflicting accept rereads and reapplies its change before retrying, so
-  every accepted decision is present in the resulting draft. A changed quote
-  or version refuses instead of recording an unapplied acceptance.
-- While a draft exists, an editor reading the **published head** reads the
-  draft, under a banner that says so — who saved it last, and when — and a
-  version label that reads `vN · draft`. The banner is the only signal: the
-  frame cannot carry one. An editor who opens an older version reads that
-  version; the draft is built on the head (`readsDraft`).
-- An open editor retains the version and live epoch it entered, even when
-  another publisher changes the document record. Local and remotely merged
-  edits both schedule autosave. Queued DOM mutations are flushed before the
-  history stamp and matching HTML are captured in one synchronous turn.
-- Entering Edit first prepares an authenticated draft session with only its
-  version, entry, live epoch and opaque snapshot revision. The iframe GET
-  validates those identities against the same snapshot used to resolve its
-  immutable bytes. A changed or refused read stays non-editable and offers
-  Reload draft; it is never treated as an empty document to save.
-- A whole-document save without a causal history compares that revision in
-  the write transaction. A newer snapshot refuses the replacement, preserving
-  both stored bytes and the editor's unsaved DOM until an explicit reload.
-  A successful replacement retires the prior live epoch; its response advances
-  the solo writer's next save revision and epoch without remounting the frame.
-  Legacy API callers without a revision still compare the snapshot read by
-  their request, while browser editors always supply their loaded revision.
-- A remembered-link draft save and a no-change draft publication keep a bounded
-  operation receipt (§17) when the SDK retries after losing the commit
-  acknowledgement. Their original successful result and captured retirement
-  survive a later save, publication, or access change. A retry acknowledges the
-  earlier write and cleans only its replaced snapshot; it never restores an
-  earlier head, draft, or editing session. An unconfirmed earlier attempt keeps
-  its bytes until their absence from every durable pointer is established.
-- Autosave is debounced to `POST /draft`. "Save as new version" calls
-  `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in
-  `lib/draft.ts`), allowed only when every comment on the current version is
-  resolved. Annotations are version-scoped, so the new version starts
-  comment-free and the old version keeps its comments.
-- **No version is minted while a suggestion on the current one is pending**,
-  through ANY account channel: the in-app commit, `/publish?update=`, the CLI
-  and `update_document` alike. Publishing past it would leave it undecided on a
-  version nobody reads — a rejection nobody chose to make — and only an approver
-  may decide it. The gate is asked after the content-hash dedup, so an
-  identical update stays a no-op, and before anything is uploaded
-  (`lib/review.ts`).
-- **No update replaces a draft that holds an accepted change.** Accepting puts
-  the change in the draft (§22), and `/publish?update=`, the CLI and
-  `update_document` mint a version from their own bytes and delete the draft.
-  So while the current version's draft exists and a suggestion on that version
-  is accepted, they refuse with `409 { error, acceptedInDraft }` and say to
-  publish the draft first, asked before anything is uploaded and again inside
-  the transaction that would delete it. The in-app commit publishes the draft
-  itself and is not held.
-- **No update is made under somebody's editor.** `/publish?update=`, the CLI
-  and `update_document` are refused with `409 { error, editors }` while anybody
-  has the document open in the editor, whose typing the new version would
-  throw away. A read of presence that fails refuses too, rather than guess
-  nobody is there. The question is asked after the dedup, so an identical
-  update stays a no-op, and before anything is uploaded (`lib/presence.ts`).
-  Once the version is current, the draft's files and its live log are dropped
-  (§16); a refused or deduplicated update leaves both alone. A race remains,
-  as for an agent's accept (§22): somebody who opens the editor between the
-  question and the new version loses what they type in that window.
-- The comment gate stays on the in-app commit alone, because
-  the agent loop revises a document in answer to its open comments, and
-  closing them is not what publishing the answer waits for (§19).
+- Edit mode points the iframe at `/draft/{docId}/{entry}`, sets `body.contentEditable`, and shows a WYSIWYG toolbar driven by `execCommand`.
+- **The edit frame is unconditionally script-free**, whatever `trusted` says. `editing` is part of the iframe `key`, so toggling edit mode REMOUNTS the frame — sandboxing is decided at parse time. Without this, the bundle's own JS runs in the frame being serialized: its generated DOM is persisted as static markup while the generator stays in place, so every later render appends another copy, and any node the script rewrites on load silently discards the editor's typed change.
+- A deck that sizes its slides with its own script renders at full size in the script-free edit frame, and centred in a narrower frame its slides start at a negative offset nothing can scroll to. While editing, the frame is laid out at the width the slides' content reaches — measured once per load and latched, as `paged` is — and the iframe ELEMENT is scaled to the stage (`useFrameFit`). The document is not touched.
+- Containers the author left empty for their script to fill are outlined in edit mode. Marking is an **attribute** (`data-bshd-empty`) plus one injected stylesheet, **never an inserted node**, so no placeholder content can reach the saved bytes.
+- Before serializing, `serializeCleanHtml` strips every app injection from a CLONE: highlight marks, the injected stylesheets, the peer-presence overlay, placeholder marking, and the editor's temporary body `contenteditable` and `spellcheck` overrides. The body's original attribute values (including absence) and authored descendant attributes survive. App injections carry `data-bshd` with a value from `OWN_MARKERS` and are stripped as a class — the value check is what makes the namespace safe against a bundle that happens to use the same attribute.
+- The round trip preserves the authored DOM plus the edit, not the original source spelling. The browser parser and HTML serializer may normalize whitespace outside the document body or equivalent HTML syntax. They must not add editing decoration, remove authored elements or change their meaning.
+- Serialization also drops any `script/style/link/meta/base` absent from the load-time asset inventory (`captureAssetTags`, taken in `onLoad` before any injection). That removes nodes a BROWSER EXTENSION added to the same-origin frame. It is sound only because the edit frame is script-free.
+- A commit is refused when the pre-commit draft save failed. Publishing anyway would promote the PREVIOUS draft bytes while reporting success.
+- Leaving edit mode saves only an edit the autosave has not yet taken. Any save creates a draft, so a save on the way out of an unchanged session would leave a draft that differs from nothing.
+- Concurrent suggestion accepts compare the draft snapshot at the write. A conflicting accept rereads and reapplies its change before retrying, so every accepted decision is present in the resulting draft. A changed quote or version refuses instead of recording an unapplied acceptance.
+- While a draft exists, an editor reading the **published head** reads the draft, under a banner that says so — who saved it last, and when — and a version label that reads `vN · draft`. The banner is the only signal: the frame cannot carry one. An editor who opens an older version reads that version; the draft is built on the head (`readsDraft`).
+- An open editor retains the version and live epoch it entered, even when another publisher changes the document record. Local and remotely merged edits both schedule autosave. Queued DOM mutations are flushed before the history stamp and matching HTML are captured in one synchronous turn.
+- Entering Edit first prepares an authenticated draft session with only its version, entry, live epoch and opaque snapshot revision. The iframe GET validates those identities against the same snapshot used to resolve its immutable bytes. A changed or refused read stays non-editable and offers Reload draft; it is never treated as an empty document to save.
+- A whole-document save without a causal history compares that revision in the write transaction. A newer snapshot refuses the replacement, preserving both stored bytes and the editor's unsaved DOM until an explicit reload. A successful replacement retires the prior live epoch; its response advances the solo writer's next save revision and epoch without remounting the frame. Legacy API callers without a revision still compare the snapshot read by their request, while browser editors always supply their loaded revision.
+- A remembered-link draft save and a no-change draft publication keep a bounded operation receipt (§17) when the SDK retries after losing the commit acknowledgement. Their original successful result and captured retirement survive a later save, publication, or access change. A retry acknowledges the earlier write and cleans only its replaced snapshot; it never restores an earlier head, draft, or editing session. An unconfirmed earlier attempt keeps its bytes until their absence from every durable pointer is established.
+- Autosave is debounced to `POST /draft`. "Save as new version" calls `POST /commit` (or, from an agent, `commit_draft`; both are `commitDraft` in `lib/draft.ts`), allowed only when every comment on the current version is resolved. Annotations are version-scoped, so the new version starts comment-free and the old version keeps its comments.
+- **No version is minted while a suggestion on the current one is pending**, through ANY account channel: the in-app commit, `/publish?update=`, the CLI and `update_document` alike. Publishing past it would leave it undecided on a version nobody reads — a rejection nobody chose to make — and only an approver may decide it. The gate is asked after the content-hash dedup, so an identical update stays a no-op, and before anything is uploaded (`lib/review.ts`).
+- **No update replaces a draft that holds an accepted change.** Accepting puts the change in the draft (§22), and `/publish?update=`, the CLI and `update_document` mint a version from their own bytes and delete the draft. So while the current version's draft exists and a suggestion on that version is accepted, they refuse with `409 { error, acceptedInDraft }` and say to publish the draft first, asked before anything is uploaded and again inside the transaction that would delete it. The in-app commit publishes the draft itself and is not held.
+- **No update is made under somebody's editor.** `/publish?update=`, the CLI and `update_document` are refused with `409 { error, editors }` while anybody has the document open in the editor, whose typing the new version would throw away. A read of presence that fails refuses too, rather than guess nobody is there. The question is asked after the dedup, so an identical update stays a no-op, and before anything is uploaded (`lib/presence.ts`). Once the version is current, the draft's files and its live log are dropped (§16); a refused or deduplicated update leaves both alone. A race remains, as for an agent's accept (§22): somebody who opens the editor between the question and the new version loses what they type in that window.
+- The comment gate stays on the in-app commit alone, because the agent loop revises a document in answer to its open comments, and closing them is not what publishing the answer waits for (§19).
 
 ### 6b. Presence and live collaboration
 
-Shared **awareness** and shared **document state** are both in scope. Several
-people may type into one document at the same time; their edits merge and every
-copy converges ([ADR 0010](adr/0010-crdt-for-shared-document-state.md)).
+Shared **awareness** and shared **document state** are both in scope. Several people may type into one document at the same time; their edits merge and every copy converges ([ADR 0010](adr/0010-crdt-for-shared-document-state.md)).
 
-Document state is a **Yjs** CRDT, bound to the DOM by `app/src/crdt/binding.ts`.
-The binding imposes no schema, which is what keeps §6a's guarantee intact: a
-`Y.XmlElement` is a name, a string map and a child list, so a hand-authored
-document with inline SVG and a `<details>` tree is mirrored exactly rather than
-normalized into an editor's model. The **normative** property is that a document
-survives a round trip through the wire format byte-identical; the sample bundles
-are the fixtures that hold it.
+Document state is a **Yjs** CRDT, bound to the DOM by `app/src/crdt/binding.ts`. The binding imposes no schema, which is what keeps §6a's guarantee intact: a `Y.XmlElement` is a name, a string map and a child list, so a hand-authored document with inline SVG and a `<details>` tree is mirrored exactly rather than normalized into an editor's model. The **normative** property is that a document survives a round trip through the wire format byte-identical; the sample bundles are the fixtures that hold it.
 
-Text edits preserve the browser's `beforeinput` target range (or its selection
-when target ranges are unavailable), provided the unchanged text around that
-range matches the observed mutation. This keeps a newly typed or replaced
-letter distinct from an equal adjacent letter in the CRDT. A concurrent
-deletion of the old letter cannot remove or reorder the newly typed one.
-Mutations without a matching input range use the minimal text diff.
+Text edits preserve the browser's `beforeinput` target range (or its selection when target ranges are unavailable), provided the unchanged text around that range matches the observed mutation. This keeps a newly typed or replaced letter distinct from an equal adjacent letter in the CRDT. A concurrent deletion of the old letter cannot remove or reorder the newly typed one. Mutations without a matching input range use the minimal text diff.
 
-A live co-editor autosave is confirmation of merged work and does not offer a
-competing-copy notice. Saves from outside the live editor still offer that
-choice. A newer-version announcement names the current head only and is shown
-only while the reader remains on an older version.
+A live co-editor autosave is confirmation of merged work and does not offer a competing-copy notice. Saves from outside the live editor still offer that choice. A newer-version announcement names the current head only and is shown only while the reader remains on an older version.
 
-Deleting an element removes its descendants, including concurrent edits within
-that element. Deleting a text range removes the character identities the writer
-observed. Unseen concurrent insertions in a surviving parent remain once at the
-cut; they are not silently discarded as if the deleting writer had selected
-them. If those insertions reached the writer before deletion, they are observed
-text and are deleted too. Across paragraphs, removed parents take their
-concurrent descendants with them; the surviving parent keeps its unseen text.
-All peers converge to the same result, with untouched text kept in place.
+Deleting an element removes its descendants, including concurrent edits within that element. Deleting a text range removes the character identities the writer observed. Unseen concurrent insertions in a surviving parent remain once at the cut; they are not silently discarded as if the deleting writer had selected them. If those insertions reached the writer before deletion, they are observed text and are deleted too. Across paragraphs, removed parents take their concurrent descendants with them; the surviving parent keeps its unseen text. All peers converge to the same result, with untouched text kept in place.
 
 ### 6c. Trust and the untrusted-content sandbox
 
-Browser upload makes untrusted publishers possible, so the same-origin iframe is
-not unconditionally safe: a bundle's JS could read the viewer's Firebase auth
-token from the app origin's storage. The viewer therefore renders with
-`sandbox="allow-same-origin"` (NO `allow-scripts`) whenever the document is not
-effectively trusted. Same-origin is retained so the parent can still drive
-annotation and editing; scripts are disabled so an untrusted bundle cannot
-exfiltrate the token.
+Browser upload makes untrusted publishers possible, so the same-origin iframe is not unconditionally safe: a bundle's JS could read the viewer's Firebase auth token from the app origin's storage. The viewer therefore renders with `sandbox="allow-same-origin"` (NO `allow-scripts`) whenever the document is not effectively trusted. Same-origin is retained so the parent can still drive annotation and editing; scripts are disabled so an untrusted bundle cannot exfiltrate the token.
 
 **Two trust scopes, split by who bears the risk.** Effective trust for a reader is `meta.trusted === true || personalTrust(uid)`. An absent flag is untrusted.
 
 - **GLOBAL** (`docs.trusted`, `POST /trust`) — un-sandboxes for EVERY reader, which lets the document's author act as each of them. So it is a **superadmin's**, on a document they own: `BIKESHED_SUPERADMINS`, deployment configuration, never committed ([ADR 0021](adr/0021-a-documents-script-runs-only-with-consent.md)). It is decided in the browser: a personal access token or a connected app is refused even when its person is a superadmin owner, because the hand on a token may be an agent acting on text it was given, and the decision lets the author act as every reader. Any owner may restore the sandbox, by any credential. `GET /trust?docId=` tells an owner whether they may lift it, false for a token; the dialog offers it only then.
-- **PERSONAL** (`docs/{docId}/trust/{uid}`) — un-sandboxes only in the granting
-  user's own browser. The sole session exposed to that bundle's JS is their own,
-  so **any reader may grant it to themselves**. Client-written under an own-uid
-  rule. It NEVER writes `meta.trusted`.
+- **PERSONAL** (`docs/{docId}/trust/{uid}`) — un-sandboxes only in the granting user's own browser. The sole session exposed to that bundle's JS is their own, so **any reader may grant it to themselves**. Client-written under an own-uid rule. It NEVER writes `meta.trusted`.
 
-The viewer surfaces trust ONLY when it would change something: the document is
-still sandboxed for this reader AND the loaded DOM actually contains `<script>`
-tags. Static uploads therefore never prompt. Nor does a reader whose own answer
-is not in yet, who may already have decided.
+The viewer surfaces trust ONLY when it would change something: the document is still sandboxed for this reader AND the loaded DOM actually contains `<script>` tags. Static uploads therefore never prompt. Nor does a reader whose own answer is not in yet, who may already have decided.
 
-**The first load waits for the reader's own answer.** The sandbox is read at
-parse time, so a frame that loads before this reader's personal grant is known
-loads sandboxed, and loads again when the grant lands. A reading frame's first
-load therefore waits for that answer, within three limits:
+**The first load waits for the reader's own answer.** The sandbox is read at parse time, so a frame that loads before this reader's personal grant is known loads sandboxed, and loads again when the grant lands. A reading frame's first load therefore waits for that answer, within three limits:
 
-- **Only when it could matter.** The document is not globally trusted and an
-  account is known. A globally trusted document and an anonymous reader never wait.
-- **Never on auth.** A link opens before sign-in has decided (§17). A key
-  holder whose grant turns up after auth decides still loads twice.
-- **Bounded.** At most `PERSONAL_TRUST_WAIT_MS`. Past it, the frame loads
-  sandboxed and remounts when the answer lands, as it did before it waited.
+- **Only when it could matter.** The document is not globally trusted and an account is known. A globally trusted document and an anonymous reader never wait.
+- **Never on auth.** A link opens before sign-in has decided (§17). A key holder whose grant turns up after auth decides still loads twice.
+- **Bounded.** At most `PERSONAL_TRUST_WAIT_MS`. Past it, the frame loads sandboxed and remounts when the answer lands, as it did before it waited.
 
-A frame that has loaded is never taken away to wait. A reader who signs in to
-comment keeps the document and their selection.
+A frame that has loaded is never taken away to wait. A reader who signs in to comment keeps the document and their selection.
 
-A peer draft save preserves the reader's scroll checkpoint across overlapping
-reloads. When the selected passage still exists unchanged, the replacement
-frame restores that passage and its Comment/Suggest edit toolbar. A removed
-passage must not turn into a selection of different words.
+A peer draft save preserves the reader's scroll checkpoint across overlapping reloads. When the selected passage still exists unchanged, the replacement frame restores that passage and its Comment/Suggest edit toolbar. A removed passage must not turn into a selection of different words.
 
 **Trust never carries into a new version.** Every new version withdraws both scopes, the global flag and every personal grant, in the same transaction that makes it current: a commit in the app, the owner's included, and every update through a token, which is an upload in all but name (`update_document`, `POST /publish?update=`). A reader trusted the scripts they had seen, not whatever somebody publishes next. A deduplicated update mints nothing and changes nothing. Re-upload and fork still make FRESH `trusted: false` documents.
 
@@ -1110,140 +476,33 @@ This replaces two earlier rules. The first, "trust propagates across in-app edit
 
 **The frame's sandbox is not the only lock.** Every scriptable content response carries the same sandbox as a header (§2 "The script lock"), so the bytes opened outside the frame run nothing either. An unsandboxed frame loads the **run variant** (`/content/[~k/]!run/…`), and the server unlocks it only for global trust or this reader's own grant, which is why a grant counts in the viewer only once the server has it. **Trust is for the current version.** Either scope is granted while one version is current and withdrawn when another becomes current, so the scripts somebody vouched for are the head's: an older version never runs, at the run variant or in the viewer, trusted or not. Until 0.32.0 the run variant ignored the version, so trusting the head again also ran an older version nobody had vouched for under that grant, an editor's whose commit had withdrawn trust at the time. **A draft never runs its script**, for anyone: `/draft` is always locked and a draft-reading frame always sandboxed.
 
-A sandboxed document may therefore be one whose scripts were the only thing
-that would have BUILT it. The viewer distinguishes "this document has no
-slides" from "this document has no slides yet" and says which, because the
-first is a fact about the document and the second is a decision the reader can
-undo.
+A sandboxed document may therefore be one whose scripts were the only thing that would have BUILT it. The viewer distinguishes "this document has no slides" from "this document has no slides yet" and says which, because the first is a fact about the document and the second is a decision the reader can undo.
 
 ### 6d. Decks and presentation
 
-There is no slide model and no deck format. A **slide** is a region the author
-already treated as one, found by reading the loaded DOM (`app/src/viewer/deck.ts`).
-Detection is an ordered list of rules, not one selector, because real decks
-disagree: roughly half carry no `id` on a slide and roughly half never use the
-class `slide`, and those two sets do not overlap. Three properties are
-normative:
+There is no slide model and no deck format. A **slide** is a region the author already treated as one, found by reading the loaded DOM (`app/src/viewer/deck.ts`). Detection is an ordered list of rules, not one selector, because real decks disagree: roughly half carry no `id` on a slide and roughly half never use the class `slide`, and those two sets do not overlap. Three properties are normative:
 
-- **Reading order is DOM order.** Ids and index attributes are display labels.
-  Decks exist whose sections are numbered out of order, and whose ids are bare
-  numerals whose `#id` form is not a valid selector, so no selector is ever
-  built from an id.
-- **Detection never runs the document.** It reads markup, which is what makes
-  it work in the sandboxed case that needs it most.
-- **A document that is not a deck is unaffected.** Candidates must be siblings
-  of one parent. A recognized deck with at least two slides gets a navigator
-  when its slides measure as pages; a single slide does not. The lower-confidence
-  rules for uniform or id-bearing prose sections still require three candidates.
+- **Reading order is DOM order.** Ids and index attributes are display labels. Decks exist whose sections are numbered out of order, and whose ids are bare numerals whose `#id` form is not a valid selector, so no selector is ever built from an id.
+- **Detection never runs the document.** It reads markup, which is what makes it work in the sandboxed case that needs it most.
+- **A document that is not a deck is unaffected.** Candidates must be siblings of one parent. A recognized deck with at least two slides gets a navigator when its slides measure as pages; a single slide does not. The lower-confidence rules for uniform or id-bearing prose sections still require three candidates.
 
-Navigation **scrolls** the document and never styles it, so §7's rule stands
-unchanged — with one measured exception. A deck that runs its own JavaScript
-usually **stacks** its slides, every one at `position:absolute; inset:0` with
-one shown at a time, and on that shape scrolling to a slide changes nothing.
-When every slide's rect shares a top, navigation instead presses the arrow keys
-the deck already answers to, dispatched into the frame, and reads position from
-which slide is *shown* (`display`, `visibility`, `opacity`, a translating
-`transform` — the same four the preview undoes) with the deck's own attribute
-changes and transition/animation completion or cancellation as signals, since
-nothing scrolls. Completion re-reads computed visibility after the outgoing
-slide stops painting, so each settled keypress advances the navigator with the
-deck. That is the deck's own contract;
-the hash is not one (`#5`, `#/4`, `#/step-id` and `#slide=5` are all in the
-wild), and toggling the deck's class would style a document this app does not
-own. The one input a deck's script is denied is the click that carries a
-reader's comment intent — a drag that selected text, or a click on a
-highlight — which §6 stops before the deck sees it, so a deck that advances
-on click stays on the slide being annotated. A stacked deck that takes no arrow keys cannot be driven from the rail and
-falls back to the scroll, which leaves it exactly where it was. The navigator —
-rail, overview and arrow keys alike — appears only when slides measure about
-one viewport tall. On a document whose sections are
-taller, taking the arrow keys would leave the reader unable to scroll within a
-section, and a thumbnail of a section three screens deep is a smudge nobody can
-read. That measurement is **latched per document load**: the rail's own width
-narrows the frame, so a navigator that re-decided on every resize could unmount
-itself, widen the frame, reappear, and oscillate. Keys are bound on both the
-parent and the frame document, because an iframe's key events never reach the
-parent, and yield to `defaultPrevented` so a trusted deck's own navigation wins.
-`o` opens and closes the overview, and Escape closes it; with the overview shut,
-Escape is left untouched for whatever else is listening — presentation mode's
-fullscreen exit, a menu, a dialog.
+Navigation **scrolls** the document and never styles it, so §7's rule stands unchanged — with one measured exception. A deck that runs its own JavaScript usually **stacks** its slides, every one at `position:absolute; inset:0` with one shown at a time, and on that shape scrolling to a slide changes nothing. When every slide's rect shares a top, navigation instead presses the arrow keys the deck already answers to, dispatched into the frame, and reads position from which slide is *shown* (`display`, `visibility`, `opacity`, a translating `transform` — the same four the preview undoes) with the deck's own attribute changes and transition/animation completion or cancellation as signals, since nothing scrolls. Completion re-reads computed visibility after the outgoing slide stops painting, so each settled keypress advances the navigator with the deck. That is the deck's own contract; the hash is not one (`#5`, `#/4`, `#/step-id` and `#slide=5` are all in the wild), and toggling the deck's class would style a document this app does not own. The one input a deck's script is denied is the click that carries a reader's comment intent — a drag that selected text, or a click on a highlight — which §6 stops before the deck sees it, so a deck that advances on click stays on the slide being annotated. A stacked deck that takes no arrow keys cannot be driven from the rail and falls back to the scroll, which leaves it exactly where it was. The navigator — rail, overview and arrow keys alike — appears only when slides measure about one viewport tall. On a document whose sections are taller, taking the arrow keys would leave the reader unable to scroll within a section, and a thumbnail of a section three screens deep is a smudge nobody can read. That measurement is **latched per document load**: the rail's own width narrows the frame, so a navigator that re-decided on every resize could unmount itself, widen the frame, reappear, and oscillate. Keys are bound on both the parent and the frame document, because an iframe's key events never reach the parent, and yield to `defaultPrevented` so a trusted deck's own navigation wins. `o` opens and closes the overview, and Escape closes it; with the overview shut, Escape is left untouched for whatever else is listening — presentation mode's fullscreen exit, a menu, a dialog.
 
 **In one column the rail is a drawer over the slide it lists.** It is closed when a deck opens, and picking a slide or tapping beside it closes it. While editing it stays out, because the editor's toolbar has no control to bring it back.
 
-**Previews are a separate document.** The rail and the overview render each
-slide into a parent-built `srcDoc` iframe, scaled down, carrying the document's
-own stylesheets minus every `data-bshd` node, and a `<base>` pointing at the
-content proxy. A preview renders the slide **in the CSS context it was written
-in**: every ancestor up to `<body>` is reproduced, shallowly, with its
-attributes, and `html` and `body` keep theirs. A deck whose slides take their
-width from a container rule, or whose slides live inside `<svg><foreignObject>`,
-has no layout at all without them. For the same reason a preview forces only
-visibility — never position, inset, margin or size — and forces `display` or
-`transform` only where the live document shows that is what hides the slide.
-Every preview in one deck is laid out at **one** size, the reader's own frame
-viewport, so the same media queries resolve and the rail cannot go ragged.
+**Previews are a separate document.** The rail and the overview render each slide into a parent-built `srcDoc` iframe, scaled down, carrying the document's own stylesheets minus every `data-bshd` node, and a `<base>` pointing at the content proxy. A preview renders the slide **in the CSS context it was written in**: every ancestor up to `<body>` is reproduced, shallowly, with its attributes, and `html` and `body` keep theirs. A deck whose slides take their width from a container rule, or whose slides live inside `<svg><foreignObject>`, has no layout at all without them. For the same reason a preview forces only visibility — never position, inset, margin or size — and forces `display` or `transform` only where the live document shows that is what hides the slide. Every preview in one deck is laid out at **one** size, the reader's own frame viewport, so the same media queries resolve and the rail cannot go ragged.
 
-A preview shows a slide in its **final state**, not its first frame. Decks
-animate a slide's content in when the slide is shown, and a preview is never
-shown anything: it loads once and runs no script. So every animation in a
-preview is zero-length — already over, its fill mode deciding what stays — and
-transitions are off. Content a deck keeps hidden until its script marks the
-slide active never animates at all there, so once the preview has loaded,
-whatever inside the slide still computes to `opacity:0` or `visibility:hidden`
-is marked and forced visible, skipping `position:fixed` chrome with its subtree.
-Like the slide rule, only those two layout-neutral properties are forced.
-Decoration is stripped from the copy by the same function the serializer uses:
-highlights are unwrapped to their text and our own nodes removed by value, so
-one reader's annotations never appear in a preview.
+A preview shows a slide in its **final state**, not its first frame. Decks animate a slide's content in when the slide is shown, and a preview is never shown anything: it loads once and runs no script. So every animation in a preview is zero-length — already over, its fill mode deciding what stays — and transitions are off. Content a deck keeps hidden until its script marks the slide active never animates at all there, so once the preview has loaded, whatever inside the slide still computes to `opacity:0` or `visibility:hidden` is marked and forced visible, skipping `position:fixed` chrome with its subtree. Like the slide rule, only those two layout-neutral properties are forced. Decoration is stripped from the copy by the same function the serializer uses: highlights are unwrapped to their text and our own nodes removed by value, so one reader's annotations never appear in a preview.
 
-The same previews are what a **stored thumbnail** (§2 `POST /thumb`) is
-captured from: in an editor's browser, once per version, rendered in a frame of
-the app's own and rasterised to JPEG. A deck's cover is its first slide and its
-rail is every slide; any other document's cover is its first screen. Every
-stored image is laid out at one fixed stage, 1280×720, whoever captured it, so
-an editor on a phone does not decide every member's cards are portrait — and
-shows the document as a reader who prefers light sees it, whatever the
-capturing browser prefers, so an editor running their system dark does not
-decide every member's cards are dark. A document that declares itself dark is
-dark by design and stays so; only `prefers-color-scheme` is answered. A
-capture happens only on the published head, read rather than edited, with no
-draft, by an editor, on a document that has not expired or is the editor's
-own — and only when the
-editor's frame runs scripts exactly when everyone's does. A reader who trusted
-a document for themselves runs its scripts with their own access, and those
-scripts could paint something of theirs into the page that a stored image would
-then show to every member.
+The same previews are what a **stored thumbnail** (§2 `POST /thumb`) is captured from: in an editor's browser, once per version, rendered in a frame of the app's own and rasterised to JPEG. A deck's cover is its first slide and its rail is every slide; any other document's cover is its first screen. Every stored image is laid out at one fixed stage, 1280×720, whoever captured it, so an editor on a phone does not decide every member's cards are portrait — and shows the document as a reader who prefers light sees it, whatever the capturing browser prefers, so an editor running their system dark does not decide every member's cards are dark. A document that declares itself dark is dark by design and stays so; only `prefers-color-scheme` is answered. A capture happens only on the published head, read rather than edited, with no draft, by an editor, on a document that has not expired or is the editor's own — and only when the editor's frame runs scripts exactly when everyone's does. A reader who trusted a document for themselves runs its scripts with their own access, and those scripts could paint something of theirs into the page that a stored image would then show to every member.
 
-A document nobody has opened since then would otherwise keep a placeholder
-for good, so the **workspace fills in missing covers** for the cards it shows,
-in an editor's browser, one at a time: it fetches the published entry once,
-parses it without running anything, and captures the first screen of the same
-page preview — for a deck, its first slide, since a deck without its script
-shows its slides in order. It takes only what the viewer would: an editor's,
-unexpired unless it is their own, with no cover stored for the current version
-by this capture. A
-document every reader runs the scripts of, and that has scripts, is left for
-an editor to open, since a capture that runs none could show everybody a page
-none of them sees; an untrusted document is sandboxed for every reader, so its
-first screen without scripts is exactly theirs.
+A document nobody has opened since then would otherwise keep a placeholder for good, so the **workspace fills in missing covers** for the cards it shows, in an editor's browser, one at a time: it fetches the published entry once, parses it without running anything, and captures the first screen of the same page preview — for a deck, its first slide, since a deck without its script shows its slides in order. It takes only what the viewer would: an editor's, unexpired unless it is their own, with no cover stored for the current version by this capture. A document every reader runs the scripts of, and that has scripts, is left for an editor to open, since a capture that runs none could show everybody a page none of them sees; an untrusted document is sandboxed for every reader, so its first screen without scripts is exactly theirs.
 
-Reading the published head, the rail and the overview show those **stored
-images** instead of building previews, when the record holds a rail for exactly
-this version with exactly as many slides as the deck on screen: one request per
-slide, kept by the browser for a day, rather than every slide's assets fetched
-again on every visit. Editing, a draft, another version or another slide count
-all use live previews, since the stored rail no longer describes what is on
-screen, and an image that will not load falls back to its live preview.
+Reading the published head, the rail and the overview show those **stored images** instead of building previews, when the record holds a rail for exactly this version with exactly as many slides as the deck on screen: one request per slide, kept by the browser for a day, rather than every slide's assets fetched again on every visit. Editing, a draft, another version or another slide count all use live previews, since the stored rail no longer describes what is on screen, and an image that will not load falls back to its live preview.
 
-Previews are sandboxed `allow-same-origin` with NO `allow-scripts`, even for a
-trusted document. Because a preview is a copy the app constructs and nothing
-serializes, the layout it forces on that copy is not a restyle of embedded
-content and cannot reach published bytes — and for the same reason the marker
-it uses to find the slide is set on the copy, never on the document being read.
+Previews are sandboxed `allow-same-origin` with NO `allow-scripts`, even for a trusted document. Because a preview is a copy the app constructs and nothing serializes, the layout it forces on that copy is not a restyle of embedded content and cannot reach published bytes — and for the same reason the marker it uses to find the slide is set on the copy, never on the document being read.
 
-Presentation mode hides app chrome with a class on `<body>` and requests
-fullscreen as an enhancement; the CSS state is what hides the chrome, and the
-app's state follows `fullscreenchange` rather than assuming it.
+Presentation mode hides app chrome with a class on `<body>` and requests fullscreen as an enhancement; the CSS state is what hides the chrome, and the app's state follows `fullscreenchange` rather than assuming it.
 
 ---
 
@@ -1268,19 +527,7 @@ app/src/
   hooks/{breakpoints.ts,useMediaQuery.ts}
 ```
 
-**Accessibility is a hard requirement:** visible focus indicators, targets
-≥44×44 CSS pixels on coarse pointers, colour is never the sole signal,
-`prefers-reduced-motion` honoured, WCAG AA contrast. A checkbox or radio may use
-its associated label as its hit area; inline links within prose retain their
-inline-target exception. Keyboard focus uses `:focus-visible`; when the browser
-focuses an iframe document without matching a focus pseudo-class on its host,
-the app reflects that focus with the same ring on the app-owned iframe. This
-indicator never decorates the authored document. On a touch screen a finger in the
-document focuses the frame too, so there only a Tab draws it. Dialogs contain Tab focus even
-when a focused control is disabled or removed, and restore their opener when
-closed. Reduced motion applies to every app-driven scroll, including review
-navigation and the slide rail. Presence mode shapes remain visibly painted in
-forced colours. Brand chrome only — **never restyle embedded document content.**
+**Accessibility is a hard requirement:** visible focus indicators, targets ≥44×44 CSS pixels on coarse pointers, colour is never the sole signal, `prefers-reduced-motion` honoured, WCAG AA contrast. A checkbox or radio may use its associated label as its hit area; inline links within prose retain their inline-target exception. Keyboard focus uses `:focus-visible`; when the browser focuses an iframe document without matching a focus pseudo-class on its host, the app reflects that focus with the same ring on the app-owned iframe. This indicator never decorates the authored document. On a touch screen a finger in the document focuses the frame too, so there only a Tab draws it. Dialogs contain Tab focus even when a focused control is disabled or removed, and restore their opener when closed. Reduced motion applies to every app-driven scroll, including review navigation and the slide rail. Presence mode shapes remain visibly painted in forced colours. Brand chrome only — **never restyle embedded document content.**
 
 **On a touch screen the selection controls dock at the bottom.** A phone draws its own Copy/Share menu just above a selection, which is where Comment and Suggest edit float on a fine pointer, and covers them. Where `(pointer: coarse)` matches, they are a bar fixed to the bottom of the screen, 16px from each side and clear of the home indicator, and the suggestion form opens as a sheet at the top of the screen, because iOS draws its keyboard over the page without moving anything, and a form anchored to the bottom would open behind it. Both lie above the consent card. In one column, a tapped highlight's thread and the Comments tab both open the comments pane, which clears the selection, because iOS goes on drawing it and its handles over the pane once the frame is hidden.
 
@@ -1321,7 +568,7 @@ functions/src/
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,trash,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
-  lib/{head,html,htmltext,http,health,marking,thumbs,shell,scriptlock,transaction-receipts,mcp-transport}.ts
+  lib/{head,html,htmltext,http,health,marking,thumbs,shell,sitemap,scriptlock,transaction-receipts,mcp-transport}.ts
   lib/{versions,latest,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
   lib/accountmove.ts
@@ -1332,140 +579,48 @@ functions/src/
   oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token,assertion,managed}.ts
 ```
 
-- `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session
-  cookie, or a personal access token.
-- `lib/acl.ts` — `readBasis`, `canRead`, `isDocEditor`, `canEdit`,
-  `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST
-  mirror `firestore.rules` `canRead()`** for a caller with an account; they are
-  tested on both sides. `tokenMatches` is the only place a link token is
-  compared, and a wiring test holds it there; `keyMatchesHash` is the only
-  place a folder's key is, against the hash its `reach` stores. `readAccess`
-  adds a folder's reach to `readBasis`, for read paths only (§17). `isFrozen`
-  is expired or in the Trash, the one question every read and write path asks
-  (`frozenForReader` for reads, which leaves the owner in; `frozenWrite` for
-  the 409 a write answers, which names the Trash before the expiry), and
-  `isTrashed` is what the rules mirror as `isTrashed(d)` (§4 "The Trash").
-  `isPurged` is a tombstone, which no path may write to merely because it
-  exists (§4 "Deleted forever").
-- `lib/trash.ts` — moving a document or a folder to the Trash and back: who
-  may, the batch a folder shares with everything it takes, and where Restore
-  puts each item (§4 "The Trash").
-- `lib/purge.ts` — deleting forever: the tombstone, what an early purge and
-  the daily job each take, and what goes to an owner's root instead (§4
-  "Deleted forever"). `lib/purgecode.ts` is the emailed code that confirms an
-  early one: for one thing, once, kept where no client can read it.
+- `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session cookie, or a personal access token.
+- `lib/acl.ts` — `readBasis`, `canRead`, `isDocEditor`, `canEdit`, `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST mirror `firestore.rules` `canRead()`** for a caller with an account; they are tested on both sides. `tokenMatches` is the only place a link token is compared, and a wiring test holds it there; `keyMatchesHash` is the only place a folder's key is, against the hash its `reach` stores. `readAccess` adds a folder's reach to `readBasis`, for read paths only (§17). `isFrozen` is expired or in the Trash, the one question every read and write path asks (`frozenForReader` for reads, which leaves the owner in; `frozenWrite` for the 409 a write answers, which names the Trash before the expiry), and `isTrashed` is what the rules mirror as `isTrashed(d)` (§4 "The Trash"). `isPurged` is a tombstone, which no path may write to merely because it exists (§4 "Deleted forever").
+- `lib/trash.ts` — moving a document or a folder to the Trash and back: who may, the batch a folder shares with everything it takes, and where Restore puts each item (§4 "The Trash").
+- `lib/purge.ts` — deleting forever: the tombstone, what an early purge and the daily job each take, and what goes to an owner's root instead (§4 "Deleted forever"). `lib/purgecode.ts` is the emailed code that confirms an early one: for one thing, once, kept where no client can read it.
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
-- `lib/writeAuthority.ts` — transaction-local expiry, the Trash and edit permission, including
-  a current link grant read, before uploaded content becomes the selected draft or version (§17).
+- `lib/writeAuthority.ts` — transaction-local expiry, the Trash and edit permission, including a current link grant read, before uploaded content becomes the selected draft or version (§17).
 
-- `lib/accountmove.ts` — believing Google's word for an account's new address,
-  and the job that moves the account and everything naming its old address
-  (§14 "An address Google renames"). `lib/rename.ts` is the other kind of
-  rename: a document's title.
-- `lib/reach.ts` — the Firestore half of a folder's reach: the folder a read
-  path loads only after the document's own basis said no, and the one level of
-  a folder a stranger holding its link is shown (§13, §17).
+- `lib/accountmove.ts` — believing Google's word for an account's new address, and the job that moves the account and everything naming its old address (§14 "An address Google renames"). `lib/rename.ts` is the other kind of rename: a document's title.
+- `lib/reach.ts` — the Firestore half of a folder's reach: the folder a read path loads only after the document's own basis said no, and the one level of a folder a stranger holding its link is shown (§13, §17).
 - `lib/hash.ts` — the §9 framing, byte-identical to `scripts/lib/hash.mjs`.
-- `lib/head.ts` — what a document's own `<head>` and first words say about it
-  (§17 "Link previews"): an `indexOf`-driven scanner over the entry's first
-  256 KiB, linear on adversarial input, with no HTML parser.
-- `lib/html.ts` — escaping for markup the functions emit into the app shell;
-  separate from the Markdown renderer's escaper, whose bytes are part of the
-  content hash.
+- `lib/head.ts` — what a document's own `<head>` and first words say about it (§17 "Link previews"): an `indexOf`-driven scanner over the entry's first 256 KiB, linear on adversarial input, with no HTML parser.
+- `lib/html.ts` — escaping for markup the functions emit into the app shell; separate from the Markdown renderer's escaper, whose bytes are part of the content hash.
 - `lib/scriptlock.ts` — whether a document's own script may run in a response: the lock every scriptable content and draft response carries, the run variant that alone can lift it, and who may trust a document for everyone (§2, §6c; ADR 0021).
-- `lib/shell.ts` — the `docShell` decision, the page composed from it, the
-  splice into the shell template, and the runtime fetch of the shell from
-  Hosting; the handler in `index.ts` is glue.
-- Bucket name: `BIKESHED_BUCKET` → `config/deploy.json` → `${projectId}-content`.
-  **The Firebase default bucket is never assumed** (§14 of the risk register:
-  `${projectId}.appspot.com` is wrong for post-2024 projects and
-  `.firebasestorage.app` is wrong for pre-2024 ones).
-- Never leak whether a document exists to a caller who may not read it: 401/404
-  before 403 on read-only byte paths (§1.4b).
+- `lib/shell.ts` — the `docShell` decision, the page composed from it, the splice into the shell template, and the runtime fetch of the shell from Hosting; the handler in `index.ts` is glue.
+- `lib/sitemap.ts` — what `/sitemap.xml` says, given the public documents the handler read.
+- Bucket name: `BIKESHED_BUCKET` → `config/deploy.json` → `${projectId}-content`. **The Firebase default bucket is never assumed** (§14 of the risk register: `${projectId}.appspot.com` is wrong for post-2024 projects and `.firebasestorage.app` is wrong for pre-2024 ones).
+- Never leak whether a document exists to a caller who may not read it: 401/404 before 403 on read-only byte paths (§1.4b).
 
 ---
 
 ## 9. Scripts ownership and the content-hash framing
 
-`scripts/` is Node ESM using `node:util parseArgs` and `firebase-admin`.
-Admin is initialized **lazily**, so every `--dry-run` path runs without
-credentials. Project id from `--project`, `GCLOUD_PROJECT`, or `.firebaserc`.
-Publishing, access, withdrawal and teardown await their owned Admin app's
-cleanup on success or failure; the realtime connection must not keep a completed
-command alive. A dry run initializes no client and its cleanup is a no-op.
+`scripts/` is Node ESM using `node:util parseArgs` and `firebase-admin`. Admin is initialized **lazily**, so every `--dry-run` path runs without credentials. Project id from `--project`, `GCLOUD_PROJECT`, or `.firebaserc`. Publishing, access, withdrawal and teardown await their owned Admin app's cleanup on success or failure; the realtime connection must not keep a completed command alive. A dry run initializes no client and its cleanup is a no-op.
 
-Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`,
-`delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows
-and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17), `summarize-documents.mjs` (marks each current version not yet counted or summarized, so the version trigger catches it up; §4). Shared helpers in `scripts/lib/`: `args`, `email`,
-`firebase`, `hash`, `membership`, `operator-writes`, `withdraw-version`,
-`transaction-receipts`, `endpoints`.
+Scripts: `setup.mjs`, `teardown.mjs`, `publish.mjs`, `set-access.mjs`, `delete-version.mjs`, `reconcile-visibility.mjs` (removes `public/{docId}` rows and `editAccess/{docId}/*` keys a document's visibility no longer earns; §17), `summarize-documents.mjs` (marks each current version not yet counted or summarized, so the version trigger catches it up; §4). Shared helpers in `scripts/lib/`: `args`, `email`, `firebase`, `hash`, `membership`, `operator-writes`, `withdraw-version`, `transaction-receipts`, `endpoints`.
 
-These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19).
-They authenticate with the Admin SDK and require `--account` explicitly on every
-real run; the CLI authenticates with a personal access token over HTTPS.
+These are **operator** tools — distinct from the end-user `bikeshed` CLI (§19). They authenticate with the Admin SDK and require `--account` explicitly on every real run; the CLI authenticates with a personal access token over HTTPS.
 
-Operator access deltas use the same transaction boundary as endpoints: the
-current document, parent and team inputs are read together before grants and
-membership are written. `set-access` awaits the presence and editing mirror
-refresh attempt before completing, for both grants and removals; the delivery
-limitation in §16 still applies. Local verification on a healthy configured
-transport exercises the actual operator command and the grantee's content,
-presence and live-log access after each transition. A mutation keeps a bounded
-operation receipt (§17) on the document until its native transaction resolves,
-so an acknowledgement retry cannot replay an old grant over a later revocation.
-Read-only listing creates no receipt or other write. The operator and Functions
-receipt helpers share golden behavior for deadlines, pruning and independent cleanup.
+Operator access deltas use the same transaction boundary as endpoints: the current document, parent and team inputs are read together before grants and membership are written. `set-access` awaits the presence and editing mirror refresh attempt before completing, for both grants and removals; the delivery limitation in §16 still applies. Local verification on a healthy configured transport exercises the actual operator command and the grantee's content, presence and live-log access after each transition. A mutation keeps a bounded operation receipt (§17) on the document until its native transaction resolves, so an acknowledgement retry cannot replay an old grant over a later revocation. Read-only listing creates no receipt or other write. The operator and Functions receipt helpers share golden behavior for deadlines, pruning and independent cleanup.
 
-Operator publishing uploads to a unique immutable
-bundle with create-only Storage writes, then selects and creates a version in
-a Firestore transaction. A content hash matching the current version returns that version;
-restoring an older version's bytes creates a new version, preserving history;
-a different publish from a base that advanced during upload refuses and must
-be rerun. Current sharing is preserved during version selection. Unselected
-attempt bundles can remain unreferenced; they never overwrite selected bytes.
-A transaction retry after a lost acknowledgement recognizes the operator's
-own immutable version prefix and retains the successful replacement receipt;
-it does not turn that replacement into a duplicate that skips cleanup. A
-withdrawal records its captured retirement result in a bounded operation receipt
-on the document, so a later publication changing the head and epoch cannot erase
-that proof. Acknowledging either completed operation does not repeat its writes,
-repoint a later head or erase a later draft.
+Operator publishing uploads to a unique immutable bundle with create-only Storage writes, then selects and creates a version in a Firestore transaction. A content hash matching the current version returns that version; restoring an older version's bytes creates a new version, preserving history; a different publish from a base that advanced during upload refuses and must be rerun. Current sharing is preserved during version selection. Unselected attempt bundles can remain unreferenced; they never overwrite selected bytes. A transaction retry after a lost acknowledgement recognizes the operator's own immutable version prefix and retains the successful replacement receipt; it does not turn that replacement into a duplicate that skips cleanup. A withdrawal records its captured retirement result in a bounded operation receipt on the document, so a later publication changing the head and epoch cannot erase that proof. Acknowledging either completed operation does not repeat its writes, repoint a later head or erase a later draft.
 
-An operator replacement also advances `liveEpoch` and clears the current draft
-in that transaction. Its return value captures the retired epoch and exact
-draft prefix from the successful transaction attempt. Public replacements
-atomically refresh the existing projection's version, epoch and source/bundle
-metadata while preserving its bounded marking policy; a missing public
-projection refuses before any write. After the access mirror is refreshed,
-cleanup removes only the captured epoch and draft prefix. A legacy `initial`
-retirement additionally removes captured flat string entries, preserving
-every nested epoch map. A newer save or session cannot be swept up by this
-cleanup. A duplicate publish leaves its draft and epoch untouched, and an
-uncertain transaction result retains all candidate bytes.
+An operator replacement also advances `liveEpoch` and clears the current draft in that transaction. Its return value captures the retired epoch and exact draft prefix from the successful transaction attempt. Public replacements atomically refresh the existing projection's version, epoch and source/bundle metadata while preserving its bounded marking policy; a missing public projection refuses before any write. After the access mirror is refreshed, cleanup removes only the captured epoch and draft prefix. A legacy `initial` retirement additionally removes captured flat string entries, preserving every nested epoch map. A newer save or session cannot be swept up by this cleanup. A duplicate publish leaves its draft and epoch untouched, and an uncertain transaction result retains all candidate bytes.
 
-Version withdrawal resolves exact version and draft prefixes from captured metadata
-(with legacy-path fallbacks) before deleting bytes. The repoint transaction checks
-that the current version, doomed version bytes and draft have not changed, and
-that the retained version still exists. It refuses to delete a prefix referenced
-by a retained version. The same transaction updates the existing public
-projection's version, live epoch, entry, format, source/bundle metadata and publish time, or removes a stale projection
-for a private/unlisted document. A public document with a missing projection must
-be repaired before destructive withdrawal. This keeps anonymous readers on the
-retained version and prevents deletion of a newer draft created after the preview.
+Version withdrawal resolves exact version and draft prefixes from captured metadata (with legacy-path fallbacks) before deleting bytes. The repoint transaction checks that the current version, doomed version bytes and draft have not changed, and that the retained version still exists. It refuses to delete a prefix referenced by a retained version. The same transaction updates the existing public projection's version, live epoch, entry, format, source/bundle metadata and publish time, or removes a stale projection for a private/unlisted document. A public document with a missing projection must be repaired before destructive withdrawal. This keeps anonymous readers on the retained version and prevents deletion of a newer draft created after the preview.
 
 
-`publish.mjs` is exempt from the pending-suggestion gate (§6a): Admin
-credentials bypass every endpoint and rule, so a refusal there would be advice,
-not a boundary. It prints how many pending suggestions it leaves behind on the
-version it replaces instead of saying nothing.
+`publish.mjs` is exempt from the pending-suggestion gate (§6a): Admin credentials bypass every endpoint and rule, so a refusal there would be advice, not a boundary. It prints how many pending suggestions it leaves behind on the version it replaces instead of saying nothing.
 
 ### 9.1 The content hash (normative byte layout)
 
-`contentHash` is a sha256 over the bundle. Two independent implementations exist
-— `scripts/lib/hash.mjs` (ESM) and `functions/src/lib/hash.ts` (CommonJS) —
-because the two runtimes cannot share a module. They MUST agree byte for byte,
-or CLI-published and in-app-committed versions stop deduplicating and
-idempotency silently dies.
+`contentHash` is a sha256 over the bundle. Two independent implementations exist — `scripts/lib/hash.mjs` (ESM) and `functions/src/lib/hash.ts` (CommonJS) — because the two runtimes cannot share a module. They MUST agree byte for byte, or CLI-published and in-app-committed versions stop deduplicating and idempotency silently dies.
 
 ```
 files sorted ascending by POSIX relative path (byte order)
@@ -1475,20 +630,15 @@ for each file:
 digest hex
 ```
 
-The length-prefixed, domain-separated framing is what guarantees no two distinct
-`(relpath, bytes)` sequences can collide — including the trailing-space filename
-case that naive concatenation gets wrong.
+The length-prefixed, domain-separated framing is what guarantees no two distinct `(relpath, bytes)` sequences can collide — including the trailing-space filename case that naive concatenation gets wrong.
 
-Both implementations are asserted against a **shared golden-vector fixture**
-(`functions/test/fixtures/hash-vectors.json`), not against each other. A
-port-vs-port comparison drifts together; a fixture does not.
+Both implementations are asserted against a **shared golden-vector fixture** (`functions/test/fixtures/hash-vectors.json`), not against each other. A port-vs-port comparison drifts together; a fixture does not.
 
 ---
 
 ## 10. Brand tokens
 
-Twelve semantic tokens on `:root`, defined once in `app/src/styles/tokens.css`
-and mirrored in `app/src/brand/tokens.ts`:
+Twelve semantic tokens on `:root`, defined once in `app/src/styles/tokens.css` and mirrored in `app/src/brand/tokens.ts`:
 
 ```
 --color-bg --color-surface --color-line
@@ -1498,44 +648,27 @@ and mirrored in `app/src/brand/tokens.ts`:
 --color-annotation
 ```
 
-**No brand-named tokens.** A token called `--teal` cannot be re-themed without a
-rename, and every consumer then encodes a colour rather than a role.
+**No brand-named tokens.** A token called `--teal` cannot be re-themed without a rename, and every consumer then encodes a colour rather than a role.
 
-`--color-focus` appears **nowhere** but a focus indicator: `:focus-visible` or
-the app-owned iframe indicator described in §7. The ring is the only colour of
-its kind on the page. Shadows are tinted with the ink RGB, never
-neutral black.
+`--color-focus` appears **nowhere** but a focus indicator: `:focus-visible` or the app-owned iframe indicator described in §7. The ring is the only colour of its kind on the page. Shadows are tinted with the ink RGB, never neutral black.
 
-Typography is **one self-hosted variable font**. No font CDN: this product holds
-documents people mark confidential, and a CDN tells a third party the viewer's
-IP, user agent and referer on every page load. `app/src/brand/fonts.ts` exports
-one `FONT_FACE_CSS` used by both the stylesheet and the iframe injector.
+Typography is **one self-hosted variable font**. No font CDN: this product holds documents people mark confidential, and a CDN tells a third party the viewer's IP, user agent and referer on every page load. `app/src/brand/fonts.ts` exports one `FONT_FACE_CSS` used by both the stylesheet and the iframe injector.
 
 ### 10.1 DOM namespace
 
-All app-injected DOM uses the `bshd-` prefix, defined **once** in
-`app/src/brand/dom.ts`, which also exports `OWN_MARKERS` and `isOwnMarker(el)`.
+All app-injected DOM uses the `bshd-` prefix, defined **once** in `app/src/brand/dom.ts`, which also exports `OWN_MARKERS` and `isOwnMarker(el)`.
 
-This is a correctness constraint, not a cosmetic one: `serializeCleanHtml`
-*deletes* every `[data-bshd]` node it finds, so a namespace collision with an
-uploaded bundle would be silent data loss. The serializer removes a `[data-bshd]`
-node only when its VALUE is one we write.
+This is a correctness constraint, not a cosmetic one: `serializeCleanHtml` *deletes* every `[data-bshd]` node it finds, so a namespace collision with an uploaded bundle would be silent data loss. The serializer removes a `[data-bshd]` node only when its VALUE is one we write.
 
 ---
 
 ## 11. Markdown documents
 
-The editor offers only format-independent controls while the selected version's
-format is loading. Presentation controls enable only for confirmed HTML; old
-version responses cannot change the selected version's entry or format.
+The editor offers only format-independent controls while the selected version's format is loading. Presentation controls enable only for confirmed HTML; old version responses cannot change the selected version's entry or format.
 
-`.md` is a first-class source format: uploadable, WYSIWYG-editable, versioned,
-annotated, exported and counted exactly like an HTML bundle.
+`.md` is a first-class source format: uploadable, WYSIWYG-editable, versioned, annotated, exported and counted exactly like an HTML bundle.
 
-**Markdown compiles to an HTML bundle at write time, server-side, exactly once
-per version. The client never renders Markdown.** Every other invariant survives
-untouched, and there is no dual-implementation drift risk because there is only
-one implementation running in one place.
+**Markdown compiles to an HTML bundle at write time, server-side, exactly once per version. The client never renders Markdown.** Every other invariant survives untouched, and there is no dual-implementation drift risk because there is only one implementation running in one place.
 
 ### At rest
 
@@ -1544,59 +677,29 @@ docs/{docId}/{vN}/index.md      authored source, canonical
 docs/{docId}/{vN}/index.html    compiled entry, what the iframe loads
 ```
 
-`DocVersion` gains `format: "html" | "markdown"`, `sourceEntry?`, and
-`rendererVersion`. `entry` still points at the HTML, so `contentProxy`,
-`downloadBundle`, export and every ACL path are unchanged code.
+`DocVersion` gains `format: "html" | "markdown"`, `sourceEntry?`, and `rendererVersion`. `entry` still points at the HTML, so `contentProxy`, `downloadBundle`, export and every ACL path are unchanged code.
 
-Both files sit inside the hashed bundle, so §9 idempotency is preserved exactly.
-The corollary: **a renderer upgrade changes the rendered bytes and therefore
-mints a new version.** That is correct — the rendering is part of the artifact —
-and `rendererVersion` makes it auditable. The renderer is pinned to an exact
-version; a bump is a documented migration in this section.
+Both files sit inside the hashed bundle, so §9 idempotency is preserved exactly. The corollary: **a renderer upgrade changes the rendered bytes and therefore mints a new version.** That is correct — the rendering is part of the artifact — and `rendererVersion` makes it auditable. The renderer is pinned to an exact version; a bump is a documented migration in this section.
 
 ### Rendering
 
-CommonMark + GFM via `markdown-it`, no nondeterministic plugins. Output is a
-self-contained HTML document with an embedded stylesheet and **zero external
-URLs**.
+CommonMark + GFM via `markdown-it`, no nondeterministic plugins. Output is a self-contained HTML document with an embedded stylesheet and **zero external URLs**.
 
-- **Section wrapping.** Each heading and its subordinate content is wrapped in
-  `<section id="<slug>">` using GitHub-style slugs (lowercased, non-alphanumerics
-  → `-`, deduped `-1`/`-2`). Anchors scope to the nearest `id`-bearing ancestor,
-  so a flat heading stream would scope every highlight to `<body>`. This is not
-  cosmetic: it is what makes annotations survive edits.
-- **Raw HTML flows through the existing trust model.** Rendered output keeps raw
-  HTML including `<script>`, and the document obeys §6c unchanged. One concept,
-  not two.
+- **Section wrapping.** Each heading and its subordinate content is wrapped in `<section id="<slug>">` using GitHub-style slugs (lowercased, non-alphanumerics → `-`, deduped `-1`/`-2`). Anchors scope to the nearest `id`-bearing ancestor, so a flat heading stream would scope every highlight to `<body>`. This is not cosmetic: it is what makes annotations survive edits.
+- **Raw HTML flows through the existing trust model.** Rendered output keeps raw HTML including `<script>`, and the document obeys §6c unchanged. One concept, not two.
 
-The document stylesheet is **separate from the app's design tokens and must stay
-that way.** Chrome tokens never restyle document content.
+The document stylesheet is **separate from the app's design tokens and must stay that way.** Chrome tokens never restyle document content.
 
 ### Editing
 
 The editor still edits the rendered DOM via `execCommand`. Two changes:
 
-- **The palette is constrained to what Markdown can express.** Font family,
-  font size, text colour, highlight colour and both alignment controls are
-  **disabled with a tooltip explaining why**, never silently dropped. A control
-  that appears to work and then loses your formatting is worse than one that is
-  visibly unavailable.
-- **Save converts DOM → Markdown server-side** (`turndown` + `turndown-plugin-gfm`).
-  Converting in the function keeps it to one implementation and keeps the app's
-  dependency budget at seven.
+- **The palette is constrained to what Markdown can express.** Font family, font size, text colour, highlight colour and both alignment controls are **disabled with a tooltip explaining why**, never silently dropped. A control that appears to work and then loses your formatting is worse than one that is visibly unavailable.
+- **Save converts DOM → Markdown server-side** (`turndown` + `turndown-plugin-gfm`). Converting in the function keeps it to one implementation and keeps the app's dependency budget at seven.
 
-**Normalization is visible at version boundaries.** The first save normalizes
-(`*` bullets → `-`, setext → ATX, and a hard-wrapped paragraph becomes one
-line). After that first pass it MUST be idempotent:
-`md → html → md'`, then `md' → html' → md''` with `md' === md''`. That property
-is the contract, and it is what keeps editing a Markdown document from slowly
-destroying it.
+**Normalization is visible at version boundaries.** The first save normalizes (`*` bullets → `-`, setext → ATX, and a hard-wrapped paragraph becomes one line). After that first pass it MUST be idempotent: `md → html → md'`, then `md' → html' → md''` with `md' === md''`. That property is the contract, and it is what keeps editing a Markdown document from slowly destroying it.
 
-Normalization MUST NOT be lossy, and raw text is where it most easily is: the
-text inside an author's `<script>`, `<style>` and `<textarea>` comes back
-byte for byte, each on lines of its own where it stood as a block. Whitespace
-there is meaning — a line break ends a script's `//` comment — and the HTML to
-Markdown converter collapses whitespace in every other text node.
+Normalization MUST NOT be lossy, and raw text is where it most easily is: the text inside an author's `<script>`, `<style>` and `<textarea>` comes back byte for byte, each on lines of its own where it stood as a block. Whitespace there is meaning — a line break ends a script's `//` comment — and the HTML to Markdown converter collapses whitespace in every other text node.
 
 ---
 
@@ -1619,35 +722,17 @@ Markdown converter collapses whitespace in every other text node.
 | `npm run test:tools` | 0 failing |
 | `npm run test:e2e -- --self-test`, then `npm run test:e2e -- run --suite smoke` (opt-in) | 0 failing, then exit 0 |
 
-`npm run verify` runs every row except three: `test:rules:emulated`, which needs
-the emulators and starts them, the script dry-runs, which are run by hand, and
-the end-to-end suite, which is opt-in (`CONTRIBUTING.md` has the same table).
-The suite builds its own copy of the product from the tree on spare ports,
-needs Java, Mailpit and Chrome, and takes minutes and gigabytes, so neither
-`verify` nor CI runs it. It is run for a change the verification walkthrough
-covers (`docs/development/verification.md`, "Automated"; `e2e/README.md`).
+`npm run verify` runs every row except three: `test:rules:emulated`, which needs the emulators and starts them, the script dry-runs, which are run by hand, and the end-to-end suite, which is opt-in (`CONTRIBUTING.md` has the same table). The suite builds its own copy of the product from the tree on spare ports, needs Java, Mailpit and Chrome, and takes minutes and gigabytes, so neither `verify` nor CI runs it. It is run for a change the verification walkthrough covers (`docs/development/verification.md`, "Automated"; `e2e/README.md`).
 
-**The app MUST connect to the emulators** behind `VITE_USE_EMULATORS=1`
-(`connectAuthEmulator`, `connectFirestoreEmulator`, `connectDatabaseEmulator`).
-This is a requirement, not a convenience: it is the single thing that makes the
-quickstart cost nothing.
+**The app MUST connect to the emulators** behind `VITE_USE_EMULATORS=1` (`connectAuthEmulator`, `connectFirestoreEmulator`, `connectDatabaseEmulator`). This is a requirement, not a convenience: it is the single thing that makes the quickstart cost nothing.
 
-The Vite dev proxy MUST cover **every** endpoint but one, the `devProxy: false`
-row described at the end of this paragraph. Use anchored regex keys
-(`^/folder(\?.*)?$`) for exact endpoints and prefix rules only for `/content`,
-`/download`, `/draft`. A naive `/folder` prefix rule would proxy the client
-route `/folder/{id}` to the emulator and silently break folder deep-linking.
-A row with `devProxy: false` in `scripts/lib/endpoints.mjs` is a Hosting
-rewrite for a **client route** and is never proxied in dev: `/d` is rewritten
-to `docShell` in production, but in dev the shell is Vite's own, and the
-wiring test asserts the key is absent.
+The Vite dev proxy MUST cover **every** endpoint but one, the `devProxy: false` row described at the end of this paragraph. Use anchored regex keys (`^/folder(\?.*)?$`) for exact endpoints and prefix rules only for `/content`, `/download`, `/draft`. A naive `/folder` prefix rule would proxy the client route `/folder/{id}` to the emulator and silently break folder deep-linking. A row with `devProxy: false` in `scripts/lib/endpoints.mjs` is a Hosting rewrite for a **client route** and is never proxied in dev: `/d` is rewritten to `docShell` in production, but in dev the shell is Vite's own, and the wiring test asserts the key is absent.
 
 ---
 
 ## 13. Workspace: nested folders and inherited sharing
 
-Documents organize into nested folders with their own sharing. Inheritance is
-**denormalized, not resolved at read time**:
+Documents organize into nested folders with their own sharing. Inheritance is **denormalized, not resolved at read time**:
 
 ```
 approverMembers  = union(self owner,       self approvers,  parent.approverMembers)
@@ -1665,331 +750,120 @@ Four roles, one per principal, each able to do everything below it:
 | editor | `editors` | edit live, publish a version |
 | approver | `approvers` | accept or reject suggestions |
 
-Each set is built on the one above it, so `approverMembers ⊆ editorMembers ⊆
-suggesterMembers ⊆ members` holds by construction, even under a parent whose
-record predates a set. An approver is an editor because accepting a suggestion
-is replayed as an edit in their own session; the reverse would make a role
-that could accept text it could not type.
+Each set is built on the one above it, so `approverMembers ⊆ editorMembers ⊆ suggesterMembers ⊆ members` holds by construction, even under a parent whose record predates a set. An approver is an editor because accepting a suggestion is replayed as an edit in their own session; the reverse would make a role that could accept text it could not type.
 
-Because each node only needs its DIRECT parent's already-computed arrays, the
-cascade is a single BFS (`recomputeSubtree`), parent before child. Traversal
-queries discover ids; each node is recomputed in a transaction that rereads
-its current grants, parent membership and referenced teams. An older cascade
-cannot overwrite a newer membership from stale snapshots. Folder grant deltas
-and that folder's effective sets are committed together. Any folder-share
-change or move re-fans the affected subtree server-side. The
-doc-list query, its composite index and the `canRead`/`list` rules are
-UNCHANGED.
+Because each node only needs its DIRECT parent's already-computed arrays, the cascade is a single BFS (`recomputeSubtree`), parent before child. Traversal queries discover ids; each node is recomputed in a transaction that rereads its current grants, parent membership and referenced teams. An older cascade cannot overwrite a newer membership from stale snapshots. Folder grant deltas and that folder's effective sets are committed together. Any folder-share change or move re-fans the affected subtree server-side. The doc-list query, its composite index and the `canRead`/`list` rules are UNCHANGED.
 
-`folders/{folderId}` mirrors `DocMeta`'s ACL shape and adds `parentId`,
-`ancestors` (root-first) and `depth`, and `visibility`, `linkToken`,
-`expiresAt` and `reach` (§17 "A folder's reach"). Folder writes are Admin-SDK
-only.
+`folders/{folderId}` mirrors `DocMeta`'s ACL shape and adds `parentId`, `ancestors` (root-first) and `depth`, and `visibility`, `linkToken`, `expiresAt` and `reach` (§17 "A folder's reach"). Folder writes are Admin-SDK only.
 
 Deleting a folder is **owner-only** and moves it to the Trash with everything beneath it (§4 "The Trash"); nothing is orphaned, because nothing is removed. A document's owner moves it to the Trash the same way.
 
-**Filing is sharing, and it is silent.** A document filed into a folder is
-readable by everyone in the folder's `members`, and nobody is emailed:
-invitations go out only when sharing itself changes. So an agent that files a
-document is the only party that can tell the person who just gained access,
-and the agent surface says who that is:
+**Filing is sharing, and it is silent.** A document filed into a folder is readable by everyone in the folder's `members`, and nobody is emailed: invitations go out only when sharing itself changes. So an agent that files a document is the only party that can tell the person who just gained access, and the agent surface says who that is:
 - `list_folders` counts each folder's readers;
 - `get_folder` names them;
-- every write that files a document returns `filedIn` and `access`, read after
-  the write.
+- every write that files a document returns `filedIn` and `access`, read after the write.
 
-This discloses nothing new. The rules let a folder's members read its whole
-record, `members` included, and a team is named only to its own members, as the
-share panel names it (`lib/audience.ts`).
+This discloses nothing new. The rules let a folder's members read its whole record, `members` included, and a team is named only to its own members, as the share panel names it (`lib/audience.ts`).
 
-**Filing under a shared folder is sharing with strangers.** A folder that is
-unlisted or public opens everything beneath it to anyone holding its link, or
-to anyone (§17), whatever each document's own level and whoever owns it. The
-share panel of each document beneath says which folder reaches it
-(`inheritedReach`), and every write that files a document says so in `access`.
+**Filing under a shared folder is sharing with strangers.** A folder that is unlisted or public opens everything beneath it to anyone holding its link, or to anyone (§17), whatever each document's own level and whoever owns it. The share panel of each document beneath says which folder reaches it (`inheritedReach`), and every write that files a document says so in `access`.
 
-**The share panel says where access comes from.** A record holds only the
-flattened sets, so the panel asks `GET /access` or `GET /folder-access` (§2) and
-lists each inherited grant after the record's own, tagged with the folder it is
-made on. Those rows have no role select and no remove button: inherited access
-is changed on the folder, never under it. A person granted directly and through
-a folder gets both rows, because removing the direct grant leaves the other. The
-owner may be unable to open a folder above: its people are already in the
-record's own sets, so they are listed, but the folder is "a folder you cannot
-open", never its name.
+**The share panel says where access comes from.** A record holds only the flattened sets, so the panel asks `GET /access` or `GET /folder-access` (§2) and lists each inherited grant after the record's own, tagged with the folder it is made on. Those rows have no role select and no remove button: inherited access is changed on the folder, never under it. A person granted directly and through a folder gets both rows, because removing the direct grant leaves the other. The owner may be unable to open a folder above: its people are already in the record's own sets, so they are listed, but the folder is "a folder you cannot open", never its name.
 
 ### Grid and list
 
-The workspace shows its folders and documents as cards or as a list, and each
-kind of page remembers which. Cards are the default on Everything and in
-folders, where people browse and a cover is how a deck is recognised; rows on
-Recent and Shared with me, which span folders and are about time and people. A
-list row
-carries a small cover, the title and its chips, the owner ("You" for your own),
-the last update, the reads and the menu; a folder row its people, and it takes
-a dropped file as its card does. While a search is on, its results come from
-every folder, so a card and a row say where each is filed: "Everything" at the
-top, the folder's path, or "A folder you can't open" for a folder that is not
-the reader's, whose name is not theirs to see. The Name, Updated and Reads
-headers pick the matching sort. On a phone a row is the cover, the title and
-one line.
+The workspace shows its folders and documents as cards or as a list, and each kind of page remembers which. Cards are the default on Everything and in folders, where people browse and a cover is how a deck is recognised; rows on Recent and Shared with me, which span folders and are about time and people. A list row carries a small cover, the title and its chips, the owner ("You" for your own), the last update, the reads and the menu; a folder row its people, and it takes a dropped file as its card does. While a search is on, its results come from every folder, so a card and a row say where each is filed: "Everything" at the top, the folder's path, or "A folder you can't open" for a folder that is not the reader's, whose name is not theirs to see. The Name, Updated and Reads headers pick the matching sort. On a phone a row is the cover, the title and one line.
 
-The sort and each kind of page's layout are kept in the browser's own storage
-(`workspace/prefs.ts`) and never sent anywhere; where storage is blocked they
-last as long as the page. "Last read by anyone" sorts by `stats.lastViewedAt`,
-which any reader moves; a person's own reads are listed by Recent.
+The sort and each kind of page's layout are kept in the browser's own storage (`workspace/prefs.ts`) and never sent anywhere; where storage is blocked they last as long as the page. "Last read by anyone" sorts by `stats.lastViewedAt`, which any reader moves; a person's own reads are listed by Recent.
 
 ### Recent
 
-Signed in, `/` is Recent: the documents you read and the documents that got a
-new version, from the last 30 days, in one list ordered by whichever happened
-later, newest first. Your reads are your own `viewers` rows (§5 "Your own
-reading"), at most the 100 newest, fetched on each visit. A new version is the
-current version's publish, the time "Recently updated" sorts by, so a rename,
-a share or a draft save does not count. Only documents the workspace query
-returns appear: a row for a document you can no longer open, or one in the
-Trash, shows nothing (ADR 0027). Each row says why it is there, "You read it
-2h ago" or "New version 2h ago by …", and is marked "New since you read it"
-when its current version came after your last read and was not published by
-you. A version not summarized yet counts as somebody else's.
+Signed in, `/` is Recent: the documents you read and the documents that got a new version, from the last 30 days, in one list ordered by whichever happened later, newest first. Your reads are your own `viewers` rows (§5 "Your own reading"), at most the 100 newest, fetched on each visit. A new version is the current version's publish, the time "Recently updated" sorts by, so a rename, a share or a draft save does not count. Only documents the workspace query returns appear: a row for a document you can no longer open, or one in the Trash, shows nothing (ADR 0027). Each row says why it is there, "You read it 2h ago" or "New version 2h ago by …", and is marked "New since you read it" when its current version came after your last read and was not published by you. A version not summarized yet counts as somebody else's.
 
-Three quick filters combine: Opened by me (documents you have a read row for),
-Shared with me (owned by someone else) and New since I read. They are
-remembered with the sort and the layouts. When your reads cannot be fetched
-(the index still building after a deploy, offline, or eight seconds without an
-answer), Recent lists the new versions alone, disables the two filters that
-need reads, and says why. Recent has no sort; a search on it reaches every
-document and is sorted as anywhere else. A document shared with you whose last
-version is older than 30 days enters Recent once you open it or it gets a new
-version; Shared with me always lists it.
+Three quick filters combine: Opened by me (documents you have a read row for), Shared with me (owned by someone else) and New since I read. They are remembered with the sort and the layouts. When your reads cannot be fetched (the index still building after a deploy, offline, or eight seconds without an answer), Recent lists the new versions alone, disables the two filters that need reads, and says why. Recent has no sort; a search on it reaches every document and is sorted as anywhere else. A document shared with you whose last version is older than 30 days enters Recent once you open it or it gets a new version; Shared with me always lists it.
 
-Everything, the top of the folder tree, is at `/everything`. Signed out, `/` is
-the landing page, and a document's trail leads there rather than to sign-up.
+Everything, the top of the folder tree, is at `/everything`. Signed out, `/` is the landing page, and a document's trail leads there rather than to sign-up.
 
 ### Shared with me
 
-`/shared` lists every document somebody else owns that its reader can read,
-from every folder, with the usual sorts. Folders shared with you are already in
-the rail, so it lists none. It is where a document shared with you inside a
-folder you were not given can be found without its link or a search: Everything
-and the folder tree show only folders you can open.
+`/shared` lists every document somebody else owns that its reader can read, from every folder, with the usual sorts. Folders shared with you are already in the rail, so it lists none. It is where a document shared with you inside a folder you were not given can be found without its link or a search: Everything and the folder tree show only folders you can open.
 
 ---
 
 ## 14. Accounts, sign-up, and email
 
-GitHub auth, sign-up and transactional email are **one feature**, because GitHub
-is precisely the provider that does not hand us a verified email, and an
-email-keyed ACL cannot safely admit an unverified address.
+GitHub auth, sign-up and transactional email are **one feature**, because GitHub is precisely the provider that does not hand us a verified email, and an email-keyed ACL cannot safely admit an unverified address.
 
 ### Providers
 
 Both through Firebase Auth. GitHub MUST request `user:email`.
 
-**`email_verified` is not guaranteed.** The gate in every layer stays exactly
-`email_verified === true`; we do NOT introduce a second notion of verification.
-The app runs its own flow and, on success, the Admin SDK calls
-`updateUser({ emailVerified: true })` — writing Firebase's canonical field,
-which flows into the ID token on next refresh. **One gate, one source of truth,
-zero rules changes.**
+**`email_verified` is not guaranteed.** The gate in every layer stays exactly `email_verified === true`; we do NOT introduce a second notion of verification. The app runs its own flow and, on success, the Admin SDK calls `updateUser({ emailVerified: true })` — writing Firebase's canonical field, which flows into the ID token on next refresh. **One gate, one source of truth, zero rules changes.**
 
-**Account collision.** `auth/account-exists-with-different-credential` →
-`fetchSignInMethodsForEmail` → name the provider that owns the address → sign in
-with it → `linkWithCredential(pending)`. `users/{uid}.providers[]` records what
-is linked. One account per email is a correctness requirement: two accounts
-sharing an address would be an ACL bug.
+**Account collision.** `auth/account-exists-with-different-credential` → `fetchSignInMethodsForEmail` → name the provider that owns the address → sign in with it → `linkWithCredential(pending)`. `users/{uid}.providers[]` records what is linked. One account per email is a correctness requirement: two accounts sharing an address would be an ACL bug.
 
 ### Sign-up
 
-An empty workspace cache while the backend is unavailable remains loading; only
-a server answer establishes that there are no visible documents. This applies
-both to an owner's existing documents and documents shared before sign-in.
-Cached documents can still be shown, and a server-confirmed empty list clears
-them after revocation.
+An empty workspace cache while the backend is unavailable remains loading; only a server answer establishes that there are no visible documents. This applies both to an owner's existing documents and documents shared before sign-in. Cached documents can still be shown, and a server-confirmed empty list clears them after revocation.
 
-Password signup asks Firebase for the current password policy. While its answer
-is pending the form waits; a known-invalid password stays disabled with its
-requirements. If the policy request fails, the form explains that Auth will
-validate on submit and permits the attempt. It does not invent local policy or
-skip Auth's account-creation validation. A valid SDK verdict is sufficient even
-when no requirement rows are displayed. Responses for an older password cannot
-change the current password's verdict.
+Password signup asks Firebase for the current password policy. While its answer is pending the form waits; a known-invalid password stays disabled with its requirements. If the policy request fails, the form explains that Auth will validate on submit and permits the attempt. It does not invent local policy or skip Auth's account-creation validation. A valid SDK verdict is sufficient even when no requirement rows are displayed. Responses for an older password cannot change the current password's verdict.
 
 1. Choose a provider.
 2. If no email came back, collect one.
 3. If the email is unverified, send a code and **block until verified**.
-4. Create `users/{uid}` — done by `POST /session` on every sign-in, merged, so
-   it exists whichever provider verified the address (§2).
-5. Land in the workspace — **anything shared with you before you signed in is
-   already listed**, because the ACL is keyed by email.
+4. Create `users/{uid}` — done by `POST /session` on every sign-in, merged, so it exists whichever provider verified the address (§2).
+5. Land in the workspace — **anything shared with you before you signed in is already listed**, because the ACL is keyed by email.
 
-Step 3 is security-load-bearing: without it, signing in with an unverified
-address that matches a pending share would hand an attacker someone else's
-documents. This is the most tempting shortcut in the whole feature and is
-recorded as such in `docs/architecture/threat-model.md`.
+Step 3 is security-load-bearing: without it, signing in with an unverified address that matches a pending share would hand an attacker someone else's documents. This is the most tempting shortcut in the whole feature and is recorded as such in `docs/architecture/threat-model.md`.
 
 A challenge is kept in `verifications/{uid}` (§4), which no client can read. The five-guess budget only counts guesses made here, and a hash of a six-digit code falls to a million offline guesses in under a second, so a challenge an account could read would let it prove an address it does not hold.
 
-Verification challenges expire after fifteen minutes. Each challenge permits
-at most five wrong code comparisons; the next attempt, including the right
-code, is refused with 429 and retires the challenge. Concurrent attempts share
-that budget. A resend reserves at most one new challenge per account in sixty
-seconds, so concurrent requests produce one accepted request and one code
-mail; the others receive 429. And an ADDRESS is sent at most five codes in a rolling day, whichever accounts ask (`verifyTargets/{sha256(address)}`, §4): the sixth is 429 and mails nothing. Each code brings five fresh guesses and the sixty seconds are per account, so until 0.32.0 a hundred throwaway accounts could make 720,000 guesses a day at an address with shares waiting for it, about even odds of taking them all in a day; now an address gets 25 guesses a day. The cost is that anybody can keep an address from being verified by email for a day by asking for five codes for it, which mails its holder five codes they did not ask for. The reservation and attempt count are checked
-and updated transactionally. Email delivery and Firebase Auth updates happen
-outside transaction retries. A successful completion retires only the
-challenge it checked, preserving a newer challenge reserved while Auth was
-updating. An Auth failure leaves the checked challenge available for retry.
-A lost transaction acknowledgement does not reserve and mail another code or
-charge the same request for another wrong guess. Wrong-guess receipts belong
-to the challenge that was checked; a retry cannot spend a replacement
-challenge's budget.
+Verification challenges expire after fifteen minutes. Each challenge permits at most five wrong code comparisons; the next attempt, including the right code, is refused with 429 and retires the challenge. Concurrent attempts share that budget. A resend reserves at most one new challenge per account in sixty seconds, so concurrent requests produce one accepted request and one code mail; the others receive 429. And an ADDRESS is sent at most five codes in a rolling day, whichever accounts ask (`verifyTargets/{sha256(address)}`, §4): the sixth is 429 and mails nothing. Each code brings five fresh guesses and the sixty seconds are per account, so until 0.32.0 a hundred throwaway accounts could make 720,000 guesses a day at an address with shares waiting for it, about even odds of taking them all in a day; now an address gets 25 guesses a day. The cost is that anybody can keep an address from being verified by email for a day by asking for five codes for it, which mails its holder five codes they did not ask for. The reservation and attempt count are checked and updated transactionally. Email delivery and Firebase Auth updates happen outside transaction retries. A successful completion retires only the challenge it checked, preserving a newer challenge reserved while Auth was updating. An Auth failure leaves the checked challenge available for retry. A lost transaction acknowledgement does not reserve and mail another code or charge the same request for another wrong guess. Wrong-guess receipts belong to the challenge that was checked; a retry cannot spend a replacement challenge's budget.
 
 ### An address Google renames
 
-Firebase finds a returning Google user by Google's permanent account id
-(`sub`), and never rewrites the account's own `email`. When a Workspace admin
-renames somebody, for example from `ana@old.example` to `ana@new.example`,
-Google's tokens carry the new address while ours keep the old one. Anything
-shared with the new address is then invisible. So the account follows Google
-(ADR 0020).
+Firebase finds a returning Google user by Google's permanent account id (`sub`), and never rewrites the account's own `email`. When a Workspace admin renames somebody, for example from `ana@old.example` to `ana@new.example`, Google's tokens carry the new address while ours keep the old one. Anything shared with the new address is then invisible. So the account follows Google (ADR 0020).
 
-**Detecting it.** After a Google popup sign-in, the browser compares the
-address in Google's profile with the account's. Only when they differ does it
-send Google's ID token as `googleIdToken` on `POST /session` (§2). An ordinary
-sign-in costs nothing extra.
+**Detecting it.** After a Google popup sign-in, the browser compares the address in Google's profile with the account's. Only when they differ does it send Google's ID token as `googleIdToken` on `POST /session` (§2). An ordinary sign-in costs nothing extra.
 
-**Believing it.** The server, never the browser, decides. It accepts Google's
-token only if all of these hold:
-- its RS256 signature checks against Google's published keys, verified locally
-  and not through the throttled tokeninfo endpoint;
-- `iss` is Google, in either of its two spellings, and the token has not
-  expired;
-- `email_verified` is `"true"` as a string. Google writes it both ways, and
-  `"false"` is truthy;
-- `sub` is one of the Google ids in the caller's *verified* Firebase token
-  (`firebase.identities["google.com"]`);
+**Believing it.** The server, never the browser, decides. It accepts Google's token only if all of these hold:
+- its RS256 signature checks against Google's published keys, verified locally and not through the throttled tokeninfo endpoint;
+- `iss` is Google, in either of its two spellings, and the token has not expired;
+- `email_verified` is `"true"` as a string. Google writes it both ways, and `"false"` is truthy;
+- `sub` is one of the Google ids in the caller's *verified* Firebase token (`firebase.identities["google.com"]`);
 - the address passes §1.3 and the deployment's policy.
 
-`aud` is not checked: binding by `sub` means the most any token can do is align
-the caller's own account with what Google vouches for now. Under the Auth
-emulator, and only while `FIREBASE_AUTH_EMULATOR_HOST` is set, the emulator's
-unsigned token is read instead, under the same switch firebase-admin uses.
+`aud` is not checked: binding by `sub` means the most any token can do is align the caller's own account with what Google vouches for now. Under the Auth emulator, and only while `FIREBASE_AUTH_EMULATOR_HOST` is set, the emulator's unsigned token is read instead, under the same switch firebase-admin uses.
 
-**Moving.** `POST /session` creates `accountMoves/{jobId}` (§4) and answers
-`moving`. The `moveAccount` trigger does the work, with `retry: true` and a
-540-second budget, because Hosting cuts a request at sixty seconds. Every step
-finds its work by querying `members`, `admins` and token `email` for the old
-address, so a redelivery resumes wherever an attempt died. The steps, in order:
+**Moving.** `POST /session` creates `accountMoves/{jobId}` (§4) and answers `moving`. The `moveAccount` trigger does the work, with `retry: true` and a 540-second budget, because Hosting cuts a request at sixty seconds. Every step finds its work by querying `members`, `admins` and token `email` for the old address, so a redelivery resumes wherever an attempt died. The steps, in order:
 
-1. **Collision.** One account per address (§1). An account already holding the
-   new address that is unverified and password-only can never pass the gate,
-   so it owns nothing; it is deleted, as Firebase itself drops such an account
-   when a trusted provider vouches for the address. Any other holder ends the
-   job `blocked` with `address-taken`, and nothing changes. A pending
-   verification challenge is cleared, so an old code cannot undo the move.
-2. **Add.** The new address is added beside the old one everywhere the old is
-   named: team members and admins, and each grant list, taking the higher role
-   when both are present. On records the person owns, it is added as an
-   approver for now. Every record found is recomputed through
-   `refanTeam`, `recomputeSubtree` and `persistDocMembership`, without stamping
-   `updatedAt`, because a move is not a publish.
-3. **Commit.** `updateUser({ email, emailVerified: true })`, then
-   `revokeRefreshTokens`. The account is signed out everywhere. Personal tokens
-   minted under the old address are revoked, since one would act as that
-   address for good. Connected apps close at their next refresh (§23).
-4. **Remove.** `ownerEmail` moves to the new address, the old address is
-   dropped, and everything found is recomputed again. An owner is never also a
-   grant. Then `users/{uid}.email` moves, and presence is re-synced for every
-   document touched. The job is `done` once no `members` or `admins` on a
-   document, folder or team names the old address; otherwise it throws and is
-   retried.
+1. **Collision.** One account per address (§1). An account already holding the new address that is unverified and password-only can never pass the gate, so it owns nothing; it is deleted, as Firebase itself drops such an account when a trusted provider vouches for the address. Any other holder ends the job `blocked` with `address-taken`, and nothing changes. A pending verification challenge is cleared, so an old code cannot undo the move.
+2. **Add.** The new address is added beside the old one everywhere the old is named: team members and admins, and each grant list, taking the higher role when both are present. On records the person owns, it is added as an approver for now. Every record found is recomputed through `refanTeam`, `recomputeSubtree` and `persistDocMembership`, without stamping `updatedAt`, because a move is not a publish.
+3. **Commit.** `updateUser({ email, emailVerified: true })`, then `revokeRefreshTokens`. The account is signed out everywhere. Personal tokens minted under the old address are revoked, since one would act as that address for good. Connected apps close at their next refresh (§23).
+4. **Remove.** `ownerEmail` moves to the new address, the old address is dropped, and everything found is recomputed again. An owner is never also a grant. Then `users/{uid}.email` moves, and presence is re-synced for every document touched. The job is `done` once no `members` or `admins` on a document, folder or team names the old address; otherwise it throws and is retried.
 
-If the job dies before the commit, both addresses hold access. If it dies after,
-the new address does. Nobody loses anything either way.
+If the job dies before the commit, both addresses hold access. If it dies after, the new address does. Nobody loses anything either way.
 
-**The record of it.** Each document and folder that named the old address
-*directly* gets an `acl` entry with `reason: "address-moved"`, `added: [new]`
-and `removed: [old]`. Each such document also gets an `access.changed` event,
-written in the same transaction as the rewrite under a fixed id, so a
-redelivery writes neither twice. A record that only inherited the address did
-not change and gets neither. **History is not rewritten**: comments,
-annotations, versions, views, trust records and the change log keep the
-address they were written under, each with a uid beside it. A comment notice
-therefore finds a thread's earlier participants by `authorUid` and their
-current `users/{uid}.email`, and excludes the author the same way.
+**The record of it.** Each document and folder that named the old address *directly* gets an `acl` entry with `reason: "address-moved"`, `added: [new]` and `removed: [old]`. Each such document also gets an `access.changed` event, written in the same transaction as the rewrite under a fixed id, so a redelivery writes neither twice. A record that only inherited the address did not change and gets neither. **History is not rewritten**: comments, annotations, versions, views, trust records and the change log keep the address they were written under, each with a uid beside it. A comment notice therefore finds a thread's earlier participants by `authorUid` and their current `users/{uid}.email`, and excludes the author the same way.
 
-**The browser.** On `moving`, the app waits on its job record. On `done`, it
-signs in again with the same Google token (`signInWithCredential`), which is a
-fresh `auth_time` past the revocation. On `blocked`, it says another account
-already uses the address and carries on as before. An account that is signed
-in when the rename happens learns of it from `providerData`, and is offered the
-move.
+**The browser.** On `moving`, the app waits on its job record. On `done`, it signs in again with the same Google token (`signInWithCredential`), which is a fresh `auth_time` past the revocation. On `blocked`, it says another account already uses the address and carries on as before. An account that is signed in when the rename happens learns of it from `providerData`, and is offered the move.
 
-**Not covered.** GitHub and password accounts do not follow automatically,
-because GitHub does not vouch for addresses. An allowlist that rejects the
-*old* address stops the gate before the move is considered, so a deployment
-renaming its domain keeps both domains listed until everyone has moved. A
-share sent to the old address after the move goes to whoever proves that
-address, which is §1's ordinary rule; there are no aliases.
+**Not covered.** GitHub and password accounts do not follow automatically, because GitHub does not vouch for addresses. An allowlist that rejects the *old* address stops the gate before the move is considered, so a deployment renaming its domain keeps both domains listed until everyone has moved. A share sent to the old address after the move goes to whoever proves that address, which is §1's ordinary rule; there are no aliases.
 
 ### Email
 
-Sharing invitations use only the effective access added by that operation's
-transaction, comparing current grants against the same parent and team inputs.
-A document grant does not invite an already inherited reader; a folder grant
-does not invite people added by a later concurrent request. Native transaction
-retries retain that operation's committed before/after delta, even if another
-operation changes membership before the acknowledgement arrives; they neither
-repeat the mutation nor replace the original invitation delta.
+Sharing invitations use only the effective access added by that operation's transaction, comparing current grants against the same parent and team inputs. A document grant does not invite an already inherited reader; a folder grant does not invite people added by a later concurrent request. Native transaction retries retain that operation's committed before/after delta, even if another operation changes membership before the acknowledgement arrives; they neither repeat the mutation nor replace the original invitation delta.
 
-Exactly four messages: **invitation** (a new grant, never a re-grant),
-**verification**, **new comment**, and **a code to delete from the Trash**,
-sent only when an account asks for one, to its own address (§4 "Deleted
-forever"). Deliberately not built: digests, weekly
-summaries, a notification centre, unread badges, mention parsing, reminders,
-marketing. The change log an agent reads (§19, ADR 0016) is none of these. Nobody
-is told anything by it. It is written as a side effect of changes that happen
-anyway, and read only by whoever asks.
+Exactly four messages: **invitation** (a new grant, never a re-grant), **verification**, **new comment**, and **a code to delete from the Trash**, sent only when an account asks for one, to its own address (§4 "Deleted forever"). Deliberately not built: digests, weekly summaries, a notification centre, unread badges, mention parsing, reminders, marketing. The change log an agent reads (§19, ADR 0016) is none of these. Nobody is told anything by it. It is written as a side effect of changes that happen anyway, and read only by whoever asks.
 
-The comment email is bounded **by construction rather than by infrastructure**:
-one `onDocumentCreated` trigger; recipients = owner + prior thread participants −
-the author, restricted to people who still have read access when the notice is
-claimed. The transaction that claims the cooldown re-reads the document and
-the recipient's current link grant, including expiry and key rotation. A removed
-reader is not entitled to later passages or comments by having participated
-before. A per-(recipient, doc) cooldown lives on the user record. No queue, no
-scheduler, no cron. Per-user opt-out in `users/{uid}.emailNotifications`.
-A unique claim receipt distinguishes the winning notification from another
-call in the same millisecond. Its native retry still checks current opt-out,
-read authority and expiry before sending; a receipt cannot bypass revocation.
+The comment email is bounded **by construction rather than by infrastructure**: one `onDocumentCreated` trigger; recipients = owner + prior thread participants − the author, restricted to people who still have read access when the notice is claimed. The transaction that claims the cooldown re-reads the document and the recipient's current link grant, including expiry and key rotation. A removed reader is not entitled to later passages or comments by having participated before. A per-(recipient, doc) cooldown lives on the user record. No queue, no scheduler, no cron. Per-user opt-out in `users/{uid}.emailNotifications`. A unique claim receipt distinguishes the winning notification from another call in the same millisecond. Its native retry still checks current opt-out, read authority and expiry before sending; a receipt cannot bypass revocation.
 
-A suggested edit is a branch of the comment email, not a fourth message. Its
-opening comment is addressed to the owner and every approver − the author,
-subject to the same current-read-access check,
-because only they can decide it; the notice shows the quote and the proposed
-replacement, and the author's note if there was one. A decision is a short
-comment in the thread ("Accepted." / "Rejected: …"), which reaches the
-suggester the ordinary way; so is a withdrawal ("Withdrawn."), which reaches the
-owner and everybody who has written in the thread.
+A suggested edit is a branch of the comment email, not a fourth message. Its opening comment is addressed to the owner and every approver − the author, subject to the same current-read-access check, because only they can decide it; the notice shows the quote and the proposed replacement, and the author's note if there was one. A decision is a short comment in the thread ("Accepted." / "Rejected: …"), which reaches the suggester the ordinary way; so is a withdrawal ("Withdrawn."), which reaches the owner and everybody who has written in the thread.
 
-New suggestions have a cooldown of their own, apart from comments: a waiting
-suggestion holds back the next version until somebody decides it, so a comment
-email a minute earlier must not delay the notice of one, while a burst of
-suggestions — an agent may leave twenty — is still one email per window.
+New suggestions have a cooldown of their own, apart from comments: a waiting suggestion holds back the next version until somebody decides it, so a comment email a minute earlier must not delay the notice of one, while a burst of suggestions — an agent may leave twenty — is still one email per window.
 
-Templates are react-email components rendered with `@react-email/render`, pulled
-in via a **dynamic `import()` inside the send helper** so React never loads in
-`session`, `contentProxy` or any other hot path.
+Templates are react-email components rendered with `@react-email/render`, pulled in via a **dynamic `import()` inside the send helper** so React never loads in `session`, `contentProxy` or any other hot path.
 
-**Resend is optional, and that is a requirement.** The API key is a Firebase
-secret via `defineSecret`, never an env file. If unset, every send is a logged
-no-op and the app behaves exactly as it does with it — the quickstart must not
-require a Resend account. Sends are try/catch and never fail the request that
-triggered them. Each provider send has one ten-second deadline covering both
-response headers and the complete response body. On expiry the request is
-cancelled and the delivery failure is logged; persisted access remains granted,
-and later recipients can still receive their invitations.
+**Resend is optional, and that is a requirement.** The API key is a Firebase secret via `defineSecret`, never an env file. If unset, every send is a logged no-op and the app behaves exactly as it does with it — the quickstart must not require a Resend account. Sends are try/catch and never fail the request that triggered them. Each provider send has one ten-second deadline covering both response headers and the complete response body. On expiry the request is cancelled and the delivery failure is logged; persisted access remains granted, and later recipients can still receive their invitations.
 
 Comment bodies are rendered as **plain text with a link back**, never as HTML.
 
@@ -1997,70 +871,34 @@ Comment bodies are rendered as **plain text with a link back**, never as HTML.
 
 ## 15. Analytics
 
-Firebase Analytics, initialized **only when `VITE_FIREBASE_MEASUREMENT_ID` is
-present**. Clone the repo without one and there is no analytics, no
-`googletagmanager.com` request and no cookies.
+Firebase Analytics, initialized **only when `VITE_FIREBASE_MEASUREMENT_ID` is present**. Clone the repo without one and there is no analytics, no `googletagmanager.com` request and no cookies.
 
 Three things that are easy to get wrong:
 
-1. **`getAnalytics()` throws in unsupported environments.** Guard with
-   `isSupported()` (a Promise) and fall back to a no-op. Skip this and a browser
-   with third-party storage blocked can fail module init and take sign-in down.
+1. **`getAnalytics()` throws in unsupported environments.** Guard with `isSupported()` (a Promise) and fall back to a no-op. Skip this and a browser with third-party storage blocked can fail module init and take sign-in down.
 2. **Never under emulators.** `VITE_USE_EMULATORS=1` disables it outright.
-3. **Suppress the automatic page view.** `getAnalytics()` sends `page_location`,
-   the full URL, and this app's URLs are `/d/{docId}/{versionId}` — **the slug is
-   frequently the confidential thing**. Initialize with
-   `initializeAnalytics(app, { config: { send_page_view: false, page_title: "Bikeshed" } })`
-   and log route changes manually using the **route pattern**
-   (`/d/:docId/:versionId`). The `page_title` is pinned in the config because
-   the tab title is the document's (§17 "Link previews") and gtag attaches
-   `page_title` from `document.title` to every event, its own `session_start`,
-   `first_visit` and `user_engagement` included; the event builder pins it
-   again on every event the app logs.
+3. **Suppress the automatic page view.** `getAnalytics()` sends `page_location`, the full URL, and this app's URLs are `/d/{docId}/{versionId}` — **the slug is frequently the confidential thing**. Initialize with `initializeAnalytics(app, { config: { send_page_view: false, page_title: "Bikeshed" } })` and log route changes manually using the **route pattern** (`/d/:docId/:versionId`). The `page_title` is pinned in the config because the tab title is the document's (§17 "Link previews") and gtag attaches `page_title` from `document.title` to every event, its own `session_start`, `first_visit` and `user_engagement` included; the event builder pins it again on every event the app logs.
 
-**No document id, title, slug, folder name or email is ever sent to Analytics.**
-An assertion in the event-builder test enforces it.
+**No document id, title, slug, folder name or email is ever sent to Analytics.** An assertion in the event-builder test enforces it.
 
-Eleven events, enum and count parameters only: `page_view`, `login`, `sign_up`,
-`doc_publish`, `doc_open`, `annotation_create`, `comment_create`,
-`version_commit`, `export`, `share_grant`, `trust_grant`.
+Eleven events, enum and count parameters only: `page_view`, `login`, `sign_up`, `doc_publish`, `doc_open`, `annotation_create`, `comment_create`, `version_commit`, `export`, `share_grant`, `trust_grant`.
 
-This is **not** the product's first-party reading stats (§4). Those answer "who
-read this document and for how long" and live in the owner's own Firestore;
-Analytics answers "how is the product used" in aggregate. Neither grows to cover
-the other's job.
+This is **not** the product's first-party reading stats (§4). Those answer "who read this document and for how long" and live in the owner's own Firestore; Analytics answers "how is the product used" in aggregate. Neither grows to cover the other's job.
 
 ### Consent
 
-An earlier revision of this section stated that no banner was needed, "because
-there is no anonymous browsing to consent for except public documents, where
-analytics is not initialized for signed-out visitors."
+An earlier revision of this section stated that no banner was needed, "because there is no anonymous browsing to consent for except public documents, where analytics is not initialized for signed-out visitors."
 
-**Both halves of that were false once §17 landed.** Public and unlisted sharing
-created anonymous browsing, and `initAnalytics()` runs from a single effect at
-App mount for every visitor — signed in or not. A signed-out reader of a public
-document was getting `_ga` cookies having never been asked, and having no
-account for a preference to live on. Confirmed on a real deployment.
+**Both halves of that were false once §17 landed.** Public and unlisted sharing created anonymous browsing, and `initAnalytics()` runs from a single effect at App mount for every visitor — signed in or not. A signed-out reader of a public document was getting `_ga` cookies having never been asked, and having no account for a preference to live on. Confirmed on a real deployment.
 
-So consent is now a **per-visitor** decision, held per-visitor in
-`localStorage` (`app/src/consent.ts`), and it gates initialization itself:
+So consent is now a **per-visitor** decision, held per-visitor in `localStorage` (`app/src/consent.ts`), and it gates initialization itself:
 
-- Unanswered or declined ⇒ `resolve()` returns null and the measurement script
-  is **never fetched**. Not fetched-then-disabled: a request nobody sends cannot
-  be logged by anybody.
+- Unanswered or declined ⇒ `resolve()` returns null and the measurement script is **never fetched**. Not fetched-then-disabled: a request nobody sends cannot be logged by anybody.
 - A corrupted or unreadable store reads as unanswered. Silence is never a yes.
-- The banner appears only when a measurement id is configured. A deployment
-  without analytics never asks, because there would be nothing to consent to.
-- The **session cookie is out of scope and needs no consent** — it is strictly
-  necessary to serve a document to the person who asked for one, and asking
-  permission for the thing that makes the page work teaches people to click
-  Accept without reading.
+- The banner appears only when a measurement id is configured. A deployment without analytics never asks, because there would be nothing to consent to.
+- The **session cookie is out of scope and needs no consent** — it is strictly necessary to serve a document to the person who asked for one, and asking permission for the thing that makes the page work teaches people to click Accept without reading.
 
-Account-level opt-out (`users/{uid}.analyticsOptOut` →
-`setAnalyticsCollectionEnabled(false)`) remains, and answers a different
-question: it is per-account and travels across devices, where consent is
-per-device. Both must be satisfied, and an account opt-out cannot re-enable what
-consent denied, because there is no instance to enable.
+Account-level opt-out (`users/{uid}.analyticsOptOut` → `setAnalyticsCollectionEnabled(false)`) remains, and answers a different question: it is per-account and travels across devices, where consent is per-device. Both must be satisfied, and an account opt-out cannot re-enable what consent denied, because there is no instance to enable.
 
 ---
 
@@ -2068,34 +906,19 @@ consent denied, because there is no instance to enable.
 
 ### One colour per person
 
-`PresenceBar`'s deterministic per-email palette is the single source of peer
-identity, reused by the presence chip, the live caret and selection, the
-scroll-rail marker, the comment-thread accent, and the author edge on each
-persisted highlight. It is derived from the email, so it is stable between
-sessions. **Colour is never the only signal**: carets carry name labels, rail
-markers label on hover, presence chips encode mode by dot shape.
+`PresenceBar`'s deterministic per-email palette is the single source of peer identity, reused by the presence chip, the live caret and selection, the scroll-rail marker, the comment-thread accent, and the author edge on each persisted highlight. It is derived from the email, so it is stable between sessions. **Colour is never the only signal**: carets carry name labels, rail markers label on hover, presence chips encode mode by dot shape.
 
 The presence bar is one line that never scrolls, and on a phone it is a row of its own, there only while someone else is (§7). Each chip shows the person's whole name on one line. As many chips as fit beside the rest of the toolbar are shown, and the rest fold into a "+N" button that lists them, each with their dot, and follows whoever is chosen. A folded chip stays in the page, invisible and out of the tab order, so the fold is measured against widths that do not change with it and cannot oscillate.
 
 ### Ephemeral presence is an overlay, never inline DOM
 
-The most important constraint in this section. Persisted annotations wrap text
-nodes inline because they must flow with the text. **Ephemeral peer presence
-never touches the document DOM.** It renders into one absolutely-positioned,
-`pointer-events: none` container appended to the iframe body, holding per-peer
-caret bars and selection rectangles computed from `Range.getClientRects()` and
-repositioned by a single rAF loop.
+The most important constraint in this section. Persisted annotations wrap text nodes inline because they must flow with the text. **Ephemeral peer presence never touches the document DOM.** It renders into one absolutely-positioned, `pointer-events: none` container appended to the iframe body, holding per-peer caret bars and selection rectangles computed from `Range.getClientRects()` and repositioned by a single rAF loop.
 
 Three reasons this is not merely tidier:
 
-1. **Serialization safety.** One marked container is one `querySelector` to
-   strip, already covered by the `[data-bshd]` rule and the dev-only assertion.
-   Inline wrappers would be a third contamination class.
-2. **It cannot fight the editor.** Wrapping text nodes inside a `contentEditable`
-   lands in the browser's undo stack and can move the local caret. An overlay is
-   invisible to `execCommand`.
-3. **It survives rapid updates.** Repositioning rectangles is cheap;
-   re-wrapping text nodes five times a second is not.
+1. **Serialization safety.** One marked container is one `querySelector` to strip, already covered by the `[data-bshd]` rule and the dev-only assertion. Inline wrappers would be a third contamination class.
+2. **It cannot fight the editor.** Wrapping text nodes inside a `contentEditable` lands in the browser's undo stack and can move the local caret. An overlay is invisible to `execCommand`.
+3. **It survives rapid updates.** Repositioning rectangles is cheap; re-wrapping text nodes five times a second is not.
 
 ### Transport
 
@@ -2107,22 +930,9 @@ status/{docId}/y/{entry}        base64 shared-document update
 presenceAccess/{docId}/{emailKey}   server-maintained mirror, client-unreadable
 ```
 
-Each tab owns a random session key and an authenticated, immutable `uid` in
-its record. A second tab cannot replace or remove the first tab's record.
-Readers aggregate sessions by uid: any editing tab keeps the person in edit
-mode; focus and viewport come from the newest editing session, or the newest
-reading session when none edits. Legacy uid-keyed records remain readable and
-may be removed by their own uid during the transition. The withdrawn `lock`
-and `requests` nodes remain rejected.
+Each tab owns a random session key and an authenticated, immutable `uid` in its record. A second tab cannot replace or remove the first tab's record. Readers aggregate sessions by uid: any editing tab keeps the person in edit mode; focus and viewport come from the newest editing session, or the newest reading session when none edits. Legacy uid-keyed records remain readable and may be removed by their own uid during the transition. The withdrawn `lock` and `requests` nodes remain rejected.
 
-Leaving cancels queued presence updates and suppresses late connection callbacks.
-An authenticated session owner may delete only their own existing record even
-after revocation or expiry; writes still require current membership and identity
-checks. Announcing `mode: edit` additionally requires current editor access.
-The server's editing veto counts distinct currently authorized editor uids,
-so stale records from a completed downgrade or revocation cannot block a write.
-A failed mirror read refuses the write. This assumes successful mirror delivery;
-the existing delivery limitation below still applies.
+Leaving cancels queued presence updates and suppresses late connection callbacks. An authenticated session owner may delete only their own existing record even after revocation or expiry; writes still require current membership and identity checks. Announcing `mode: edit` additionally requires current editor access. The server's editing veto counts distinct currently authorized editor uids, so stale records from a completed downgrade or revocation cannot block a write. A failed mirror read refuses the write. This assumes successful mirror delivery; the existing delivery limitation below still applies.
 
 | Field | Updated on | Throttle |
 |---|---|---|
@@ -2131,152 +941,47 @@ the existing delivery limitation below still applies.
 | `composing` — `{ threadId \| "new" }` | comment input focus/blur | edge-triggered |
 | `mode` — view / edit | transition | edge-triggered |
 
-**The anchor machinery is reused verbatim.** A remote selection is an `Anchor`
-with a short lifetime: `describeAnchorFromSelection` on the sender,
-`rangeFromAnchor` on the receiver, then `getClientRects()`. No second resolution
-path, and it degrades gracefully when two peers are on slightly different draft
-revisions — exactly what quote-plus-position anchoring was built for.
+**The anchor machinery is reused verbatim.** A remote selection is an `Anchor` with a short lifetime: `describeAnchorFromSelection` on the sender, `rangeFromAnchor` on the receiver, then `getClientRects()`. No second resolution path, and it degrades gracefully when two peers are on slightly different draft revisions — exactly what quote-plus-position anchoring was built for.
 
 ### The presence mirror
 
-`functions/src/lib/presence.ts syncPresenceAccess` and its operator-script twin
-reread the latest document snapshot before writing the two server-only maps.
-Each map reserves `__revision`, a string containing Firestore `updateTime` as
-12 decimal second digits, a colon, and 9 nanosecond digits, plus `__expiresAt`
-(the expiry in epoch milliseconds, or zero for no expiry) and `__owner`
-(the normalized owner email) and `__liveEpoch` (the current live-session namespace,
-`initial` for a legacy document). A whole-node RTDB
-transaction replaces the grants only if its revision is at least the current
-validated revision. An older writer cannot restore access after a newer writer
-has completed. `editAccess` is updated before `presenceAccess`, withdrawing
-write access before read access during revocation.
+`functions/src/lib/presence.ts syncPresenceAccess` and its operator-script twin reread the latest document snapshot before writing the two server-only maps. Each map reserves `__revision`, a string containing Firestore `updateTime` as 12 decimal second digits, a colon, and 9 nanosecond digits, plus `__expiresAt` (the expiry in epoch milliseconds, or zero for no expiry) and `__owner` (the normalized owner email) and `__liveEpoch` (the current live-session namespace, `initial` for a legacy document). A whole-node RTDB transaction replaces the grants only if its revision is at least the current validated revision. An older writer cannot restore access after a newer writer has completed. `editAccess` is updated before `presenceAccess`, withdrawing write access before read access during revocation.
 
-A legacy node without metadata is accepted and gains the fence and expiry on
-its next sync. Until that sync, a legacy node has no realtime expiry deadline.
-Clients read individual email keys or `*` as boolean grants; the reserved
-metadata is server-only and the rules use its deadline and owner. The ordering
-guarantee requires all writers to use the fence: an older deployed writer can
-erase it, so mixed-version writers must drain before relying on the guarantee.
+A legacy node without metadata is accepted and gains the fence and expiry on its next sync. Until that sync, a legacy node has no realtime expiry deadline. Clients read individual email keys or `*` as boolean grants; the reserved metadata is server-only and the rules use its deadline and owner. The ordering guarantee requires all writers to use the fence: an older deployed writer can erase it, so mixed-version writers must drain before relying on the guarantee.
 
-The helper runs after document creation, forks, sharing and visibility changes,
-filing, subtree recomputation and team changes. It no-ops when RTDB is
-unconfigured, is wrapped in try/catch, and never fails the request. A backend
-failure can leave a stale mirror; the revision fence orders successful writes
-and is not a delivery queue.
+The helper runs after document creation, forks, sharing and visibility changes, filing, subtree recomputation and team changes. It no-ops when RTDB is unconfigured, is wrapped in try/catch, and never fails the request. A backend failure can leave a stale mirror; the revision fence orders successful writes and is not a delivery queue.
 
-It is keyed by **email, not uid**, because the server does not learn a grantee's
-uid until their first sign-in, and a share must work the moment it is granted.
+It is keyed by **email, not uid**, because the server does not learn a grantee's uid until their first sign-in, and a share must work the moment it is granted.
 
-The peer list is readable at `status/{docId}/peers` by members. Shared draft
-reads at `status/{docId}/y` and its epoch children require the editor mirror: viewers
-and suggesters cannot read unsaved keystrokes. The parent `status/{docId}` is
-not client-readable. A public open editor with `editAccess/*` may read and write
-`y`, but gains no access to members' peer presence. These rules apply independently
-of any UI affordance or the HTTP draft endpoint.
+The peer list is readable at `status/{docId}/peers` by members. Shared draft reads at `status/{docId}/y` and its epoch children require the editor mirror: viewers and suggesters cannot read unsaved keystrokes. The parent `status/{docId}` is not client-readable. A public open editor with `editAccess/*` may read and write `y`, but gains no access to members' peer presence. These rules apply independently of any UI affordance or the HTTP draft endpoint.
 
-Each epoch's parent accepts an editor's delete-only transaction while the
-document is unexpired. Non-delete entry writes require the current epoch. Its
-immutable `_seed` identifies
-the shared history; compaction preserves it. Publication and external draft
-replacement advance `liveEpoch` inside their Firestore transaction, refresh the
-access mirror, then remove only the captured old epoch. They never delete the
-`y` root or a newly joined session. Old sessions cannot write the new epoch.
-A legacy flat log blocks new editing until its existing editor saves and
-publishes; cleanup removes captured legacy strings while preserving epoch maps.
-A missing or different seed in a populated/stamped session also blocks editing
-with recovery instructions, instead of adopting stale HTML as a new history.
+Each epoch's parent accepts an editor's delete-only transaction while the document is unexpired. Non-delete entry writes require the current epoch. Its immutable `_seed` identifies the shared history; compaction preserves it. Publication and external draft replacement advance `liveEpoch` inside their Firestore transaction, refresh the access mirror, then remove only the captured old epoch. They never delete the `y` root or a newly joined session. Old sessions cannot write the new epoch. A legacy flat log blocks new editing until its existing editor saves and publishes; cleanup removes captured legacy strings while preserving epoch maps. A missing or different seed in a populated/stamped session also blocks editing with recovery instructions, instead of adopting stale HTML as a new history.
 
-Failed append bytes stay queued, merge with subsequent local deltas, and retry
-with bounded backoff. The toolbar says Off after a delivery failure and Shared
-once that queue drains. Done first saves durable HTML, then waits for its live
-updates to be acknowledged before leaving; a refused append or a 10-second
-acknowledgment deadline keeps the editor open with an explicit retry message.
-Remote edits received during that wait are saved before leaving too. The entire
-Done attempt has a 30-second deadline, including continuously arriving remote
-edits; expiry keeps the editor open and lets any in-flight save finish safely. Its
-deadline and completion apply only to the editing session that started it; changing
-documents cannot transfer an old save error or close the replacement editor. Normal
-navigation gives pending updates the same bounded drain before disposing the
-connection. Closing a page with pending live updates requests the browser's
-unsaved-work warning even when the HTTP draft save has succeeded; forced closure
-cannot promise delivery.
+Failed append bytes stay queued, merge with subsequent local deltas, and retry with bounded backoff. The toolbar says Off after a delivery failure and Shared once that queue drains. Done first saves durable HTML, then waits for its live updates to be acknowledged before leaving; a refused append or a 10-second acknowledgment deadline keeps the editor open with an explicit retry message. Remote edits received during that wait are saved before leaving too. The entire Done attempt has a 30-second deadline, including continuously arriving remote edits; expiry keeps the editor open and lets any in-flight save finish safely. Its deadline and completion apply only to the editing session that started it; changing documents cannot transfer an old save error or close the replacement editor. Normal navigation gives pending updates the same bounded drain before disposing the connection. Closing a page with pending live updates requests the browser's unsaved-work warning even when the HTTP draft save has succeeded; forced closure cannot promise delivery.
 
-An editing session returns the saved draft's validated causal frontier alongside
-its opaque revision. Before replacing that frame with live history, the client
-requires the log to include every saved item clock and deletion, with the same
-seed. A missing or incomparable frontier blocks editing and preserves the saved
-HTML. Leave editing releases this unbound session's presence without saving or
-retiring any live work. If the original tab cannot deliver the missing updates,
-the owner/approver can recover the durable draft with `bikeshed commit` or MCP
-`commit_draft` after all editors leave; normal publication gates still apply.
-That explicit publication retires the old epoch, so a new join seeds from the
-recovered version. No join automatically retires another editor's history.
-A configured transport that refuses initialization never enables the editor or
-falls back to a solo autosave. The encoded seed and each update are bounded at
-2,097,152 base64 characters (2 MiB), below the installed database SDK's 10 MiB
-leaf limit. An oversized seed blocks editing with the supported limit and an
-upload/reduction recovery path. This is a wire-update bound, not a promise that
-every document of a particular HTML byte size fits. An oversized compaction is
-skipped; its original seed and deltas remain available to later joiners.
+An editing session returns the saved draft's validated causal frontier alongside its opaque revision. Before replacing that frame with live history, the client requires the log to include every saved item clock and deletion, with the same seed. A missing or incomparable frontier blocks editing and preserves the saved HTML. Leave editing releases this unbound session's presence without saving or retiring any live work. If the original tab cannot deliver the missing updates, the owner/approver can recover the durable draft with `bikeshed commit` or MCP `commit_draft` after all editors leave; normal publication gates still apply. That explicit publication retires the old epoch, so a new join seeds from the recovered version. No join automatically retires another editor's history. A configured transport that refuses initialization never enables the editor or falls back to a solo autosave. The encoded seed and each update are bounded at 2,097,152 base64 characters (2 MiB), below the installed database SDK's 10 MiB leaf limit. An oversized seed blocks editing with the supported limit and an upload/reduction recovery path. This is a wire-update bound, not a promise that every document of a particular HTML byte size fits. An oversized compaction is skipped; its original seed and deltas remain available to later joiners.
 
 ### Concurrent editing
 
-Anyone who may edit a document may edit it at any time. There is no lock, no
-holder and no hand-off: edits merge, and every copy converges on the same
-document whatever order the updates arrive in.
+Anyone who may edit a document may edit it at any time. There is no lock, no holder and no hand-off: edits merge, and every copy converges on the same document whatever order the updates arrive in.
 
-**The lock this replaces is withdrawn.** It was a single-holder soft claim in
-`status/{docId}/lock` with observe mode for everyone else, and it is gone along
-with `requests/{uid}`, the idle release and the "Ask to edit" hand-off. The
-reasoning that chose it, and the reasoning that reversed it, are both in
-[ADR 0010](adr/0010-crdt-for-shared-document-state.md).
+**The lock this replaces is withdrawn.** It was a single-holder soft claim in `status/{docId}/lock` with observe mode for everyone else, and it is gone along with `requests/{uid}`, the idle release and the "Ask to edit" hand-off. The reasoning that chose it, and the reasoning that reversed it, are both in [ADR 0010](adr/0010-crdt-for-shared-document-state.md).
 
-A stale-base `409` means somebody published a new version while the editor
-was open. A separate draft-revision refusal protects whole-document saves
-from replacing a newer draft. A retired live epoch requires an explicit reload
-before saving again; a causal save waiting for concurrent live edits to merge
-keeps its current editor open and may retry after those edits arrive.
+A stale-base `409` means somebody published a new version while the editor was open. A separate draft-revision refusal protects whole-document saves from replacing a newer draft. A retired live epoch requires an explicit reload before saving again; a causal save waiting for concurrent live edits to merge keeps its current editor open and may retry after those edits arrive.
 
-**The log belongs to the draft.** When an editor opens a document, a log that
-contains the saved frame's causal frontier wins over the bytes it loaded,
-because it may hold edits they do not. Incomplete live history never replaces a
-fuller saved draft. So a write made outside the editor is refused while anybody is in it, and
-drops a log nobody is using: an agent's accept and `commit_draft` (§22), and
-every update, through `/publish?update=`, the CLI or `update_document` (§6a).
-An update deletes the draft's files with it; left in place, `/draft` would
-serve them. Without both, the next person to open the editor would bring the
-replaced draft back over the new version and autosave it.
+**The log belongs to the draft.** When an editor opens a document, a log that contains the saved frame's causal frontier wins over the bytes it loaded, because it may hold edits they do not. Incomplete live history never replaces a fuller saved draft. So a write made outside the editor is refused while anybody is in it, and drops a log nobody is using: an agent's accept and `commit_draft` (§22), and every update, through `/publish?update=`, the CLI or `update_document` (§6a). An update deletes the draft's files with it; left in place, `/draft` would serve them. Without both, the next person to open the editor would bring the replaced draft back over the new version and autosave it.
 
-Writes to the shared log are gated by `editAccess/{docId}`, a second mirror, of
-`editorMembers` — approvers included, since that set contains them (§13). A
-suggester is not in it, and never joins the shared log. A **public** open-editing document also carries the key `*`:
-any verified account. An **unlisted** one never does. The realtime rules cannot
-see a link's key, so `*` there would let any account write into a document it
-cannot name; its link holders edit through `/draft` instead, which can check
-their grant, and are not merged live with the members (§17).
-Their checked snapshot saves must not silently replace newer member work, and
-an accepted link-holder save fences members' older autosaves. A member who
-chooses Reload draft or Load theirs opens those accepted bytes in the new live
-epoch before resuming shared editing. Keeping an old editor open retains its
-local unsaved text; it does not override the server's snapshot or epoch refusal.
+Writes to the shared log are gated by `editAccess/{docId}`, a second mirror, of `editorMembers` — approvers included, since that set contains them (§13). A suggester is not in it, and never joins the shared log. A **public** open-editing document also carries the key `*`: any verified account. An **unlisted** one never does. The realtime rules cannot see a link's key, so `*` there would let any account write into a document it cannot name; its link holders edit through `/draft` instead, which can check their grant, and are not merged live with the members (§17). Their checked snapshot saves must not silently replace newer member work, and an accepted link-holder save fences members' older autosaves. A member who chooses Reload draft or Load theirs opens those accepted bytes in the new live epoch before resuming shared editing. Keeping an old editor open retains its local unsaved text; it does not override the server's snapshot or epoch refusal.
 
 ### The caret is still faster than the text
 
-Peer carets and selections update at 200 ms; the document merges as fast as
-updates arrive. The two are separate channels on purpose — the pointer is what
-the eye tracks, so it has to feel live, and it is ephemeral, so it must never
-touch the document DOM (see the overlay rule above).
+Peer carets and selections update at 200 ms; the document merges as fast as updates arrive. The two are separate channels on purpose — the pointer is what the eye tracks, so it has to feel live, and it is ephemeral, so it must never touch the document DOM (see the overlay rule above).
 
 ### Deliberately not built
 
-Per-character attribution or blame · cursor chat · voice and video · a live chat
-channel · presence for non-members · live co-editing through an unlisted link ·
-workspace-wide "who is online".
+Per-character attribution or blame · cursor chat · voice and video · a live chat channel · presence for non-members · live co-editing through an unlisted link · workspace-wide "who is online".
 
-Per-character attribution is the one worth naming twice: with the edit lock gone
-there are no hand-offs to record, so `draft.editSessions` no longer answers "who
-wrote v3" and nothing else does either. That is a known loss, recorded in ADR
-0010 rather than discovered.
+Per-character attribution is the one worth naming twice: with the edit lock gone there are no hand-offs to record, so `draft.editSessions` no longer answers "who wrote v3" and nothing else does either. That is a known loss, recorded in ADR 0010 rather than discovered.
 
 ---
 
@@ -2290,108 +995,38 @@ wrote v3" and nothing else does either. That is a known loss, recorded in ADR
 |---|---|---|---|
 | `private` | owner + members | no | `/d/{slug}` |
 | `unlisted` | anyone with the link | no: without `k`, indistinguishable from an absent id | `/d/{slug}?k={token}` |
-| `public` | anyone | indexed, in `sitemap.xml` | `/d/{slug}` |
+| `public` | anyone | indexed, in `sitemap.xml`, open to AI crawlers including training ones | `/d/{slug}` |
 
-**The private-bucket invariant is not weakened.** The bucket keeps uniform access
-and public-access-prevention; `contentProxy` stays the only path bytes take.
-"Public" means *the proxy will serve you without a cookie*.
+**The private-bucket invariant is not weakened.** The bucket keeps uniform access and public-access-prevention; `contentProxy` stays the only path bytes take. "Public" means *the proxy will serve you without a cookie*.
 
 ### Expiry
 
-`DocMeta.expiresAt: Timestamp | null`, default absent, set by the owner through
-`POST /visibility` alongside visibility and open editing — from the Share
-dialog, which holds the people, the three levels, the link, open editing and
-the expiry together. There is no separate "who can see it" dialog: it was one
-question asked from two menu entries, and the second was found only by reading
-the overflow menu. Folders share the same dialog, levels, link and expiry
-included and open editing not; what a folder's settings open, and what its
-expiry ends, is below ("A folder's reach"). One rule, for documents:
+`DocMeta.expiresAt: Timestamp | null`, default absent, set by the owner through `POST /visibility` alongside visibility and open editing — from the Share dialog, which holds the people, the three levels, the link, open editing and the expiry together. There is no separate "who can see it" dialog: it was one question asked from two menu entries, and the second was found only by reading the overflow menu. Folders share the same dialog, levels, link and expiry included and open editing not; what a folder's settings open, and what its expiry ends, is below ("A folder's reach"). One rule, for documents:
 
 > **An expired document is read-only, and visible only to its owner.**
 
-It is **not a deletion date.** This product does not delete documents (see
-`docs/architecture/overview.md`), so expiry cannot mean removal: the bytes, the versions,
-the annotations and the comments all survive, and clearing the date restores
-everything. The interface says so in those words, because "expire" reads as
-"delete" to most people and teaching the wrong model here is expensive.
+It is **not a deletion date.** This product does not delete documents (see `docs/architecture/overview.md`), so expiry cannot mean removal: the bytes, the versions, the annotations and the comments all survive, and clearing the date restores everything. The interface says so in those words, because "expire" reads as "delete" to most people and teaching the wrong model here is expensive.
 
-The owner keeps reading it because they set the date and are the only one who
-can move it; locking them out would make the setting unrecoverable rather than
-reversible. Everybody else gets the **same 404** a document they may not read
-gives them, so an expiry cannot be used to confirm that a slug exists. Writing
-is refused for everyone, the owner included — an expired document is frozen, and
-lifting the date is the single action that unfreezes it. One exception, and
-only one: the owner's browser may still store the document's thumbnails (§2
-`POST /thumb`). A cover is not the document, nothing about the document changes,
-and the owner is the one reader an expired document has left — so the owner's
-workspace keeps recognisable cards, and nobody else is ever shown them.
+The owner keeps reading it because they set the date and are the only one who can move it; locking them out would make the setting unrecoverable rather than reversible. Everybody else gets the **same 404** a document they may not read gives them, so an expiry cannot be used to confirm that a slug exists. Writing is refused for everyone, the owner included — an expired document is frozen, and lifting the date is the single action that unfreezes it. One exception, and only one: the owner's browser may still store the document's thumbnails (§2 `POST /thumb`). A cover is not the document, nothing about the document changes, and the owner is the one reader an expired document has left — so the owner's workspace keeps recognisable cards, and nobody else is ever shown them.
 
-**Expiry is not a Firestore read or list filter.** The workspace `list` rule has
-to be statically provable from the query's constraints (§5), and a query cannot filter
-on a field most documents do not have without dropping every document that does
-not have it. A member still sees the row, its title and its comments; what they
-cannot get is the document. Direct Firestore annotation and comment creates,
-updates (including resolve/reopen), and deletes compare the current document's
-expiry against `request.time` and are refused after it, including the owner's
-writes. An absent or null deadline permits the existing role and author checks;
-clearing expiry restores those permissions without giving an owner the right to
-rewrite or delete someone else's feedback. This is the same freeze as the HTTP
-and MCP write paths, not an exception for browser feedback. Realtime rules
-separately compare the mirrored expiry to the database server's `now`: after that moment only the owner reads
-peer presence and the shared draft, and no account can write the shared draft.
-Clearing or changing expiry refreshes these maps; no timer or job is needed.
+**Expiry is not a Firestore read or list filter.** The workspace `list` rule has to be statically provable from the query's constraints (§5), and a query cannot filter on a field most documents do not have without dropping every document that does not have it. A member still sees the row, its title and its comments; what they cannot get is the document. Direct Firestore annotation and comment creates, updates (including resolve/reopen), and deletes compare the current document's expiry against `request.time` and are refused after it, including the owner's writes. An absent or null deadline permits the existing role and author checks; clearing expiry restores those permissions without giving an owner the right to rewrite or delete someone else's feedback. This is the same freeze as the HTTP and MCP write paths, not an exception for browser feedback. Realtime rules separately compare the mirrored expiry to the database server's `now`: after that moment only the owner reads peer presence and the shared draft, and no account can write the shared draft. Clearing or changing expiry refreshes these maps; no timer or job is needed.
 
-HTTP and MCP enforce expiry using `isFrozen` in `lib/acl.ts`, which is expiry or the Trash (§4 "The Trash"), so every path below refuses a trashed document the same way:
-`contentProxy` (content and thumbnails alike), `downloadBundle`, `getDraft`,
-`saveDraft`, `commitVersion`, `saveThumbs`, `forkDoc`, `recordView`, `sitemap`
-and `docShell`, document rename/move in `organize`, plus the MCP tools. Content
-write transactions recheck the current deadline and edit authority after upload,
-so expiry or revocation during the upload refuses the metadata commit. A supplied
-MCP link key is compared with the current token inside that transaction; using
-it records no lasting grant. Bundle replacement keeps its stricter real-editor
-requirement through the final check, even when public editing is enabled. A fork
-is a read of every byte, so an expired source cannot be forked out from behind
-its date, and an expired document stops a lineage walk (§21).
+HTTP and MCP enforce expiry using `isFrozen` in `lib/acl.ts`, which is expiry or the Trash (§4 "The Trash"), so every path below refuses a trashed document the same way: `contentProxy` (content and thumbnails alike), `downloadBundle`, `getDraft`, `saveDraft`, `commitVersion`, `saveThumbs`, `forkDoc`, `recordView`, `sitemap` and `docShell`, document rename/move in `organize`, plus the MCP tools. Content write transactions recheck the current deadline and edit authority after upload, so expiry or revocation during the upload refuses the metadata commit. A supplied MCP link key is compared with the current token inside that transaction; using it records no lasting grant. Bundle replacement keeps its stricter real-editor requirement through the final check, even when public editing is enabled. A fork is a read of every byte, so an expired source cannot be forked out from behind its date, and an expired document stops a lineage walk (§21).
 
 Two details that are decisions rather than implementation:
 
-- **The public cache window is capped at the time remaining.** Revocation
-  latency is an accepted trade — a document made private again can be served
-  from cache for up to five minutes — but an expiry's moment is known in
-  advance, so serving past it would be a choice. `max-age` never outlives the
-  date.
-- **Nothing deletes the `public/{docId}` projection when the moment arrives.**
-  Expiry has no job, by decision (the one scheduled job, the Trash's, does
-  not touch it), so the projection *carries* the date (`expiresAt`, epoch
-  milliseconds) and the reader is told rather than shown an empty frame. A
-  title outliving its content is the honest cost of expiry having no job.
+- **The public cache window is capped at the time remaining.** Revocation latency is an accepted trade — a document made private again can be served from cache for up to five minutes — but an expiry's moment is known in advance, so serving past it would be a choice. `max-age` never outlives the date.
+- **Nothing deletes the `public/{docId}` projection when the moment arrives.** Expiry has no job, by decision (the one scheduled job, the Trash's, does not touch it), so the projection *carries* the date (`expiresAt`, epoch milliseconds) and the reader is told rather than shown an empty frame. A title outliving its content is the honest cost of expiry having no job.
 
-How the viewer says it, above a phone's width: a chip beside the version badge — the same one the
-workspace card shows — for every future date, escalating in wording and colour
-through the last week and past the date, read from `docs/{docId}` for a member
-and from the projection, or `/unlock`, for anyone else. Its tooltip, and a tap for anyone who
-cannot change the date, carry the not-deleted sentence and who can open it; the
-owner's tap opens the Share dialog. It never takes a row from the document: it
-was a banner above the frame for every future date, and a document set to
-expire next year gave up that row for eleven months.
+How the viewer says it, above a phone's width: a chip beside the version badge — the same one the workspace card shows — for every future date, escalating in wording and colour through the last week and past the date, read from `docs/{docId}` for a member and from the projection, or `/unlock`, for anyone else. Its tooltip, and a tap for anyone who cannot change the date, carry the not-deleted sentence and who can open it; the owner's tap opens the Share dialog. It never takes a row from the document: it was a banner above the frame for every future date, and a document set to expire next year gave up that row for eleven months.
 
-A date in the past is **refused**, not applied: accepting one would make "take
-this down now" a side effect of a typo in a year, and the intended way to take a
-document down immediately is to make it private, which is reversible in a way an
-accidental expiry is not. Dates beyond a hundred years are refused for the same
-class of reason — milliseconds pasted where seconds were meant land in the year
-55000, which looks like an expiry and is not one.
+A date in the past is **refused**, not applied: accepting one would make "take this down now" a side effect of a typo in a year, and the intended way to take a document down immediately is to make it private, which is reversible in a way an accidental expiry is not. Dates beyond a hundred years are refused for the same class of reason — milliseconds pasted where seconds were meant land in the year 55000, which looks like an expiry and is not one.
 
 ### An unlisted document needs its link
 
-> **Without the key, anyone who is not a member learns no more about an
-> unlisted document than about a private one.**
+> **Without the key, anyone who is not a member learns no more about an unlisted document than about a private one.**
 
-No title, no "unlisted", no viewer chrome, and one identical `404` on every
-surface: bytes, the reader projection, the view counter, the write endpoints,
-the agent tools and the security rules. The residual is the one private
-documents already carry — publishing at a taken id reveals that it is taken
-(§4) — and nothing more.
+No title, no "unlisted", no viewer chrome, and one identical `404` on every surface: bytes, the reader projection, the view counter, the write endpoints, the agent tools and the security rules. The residual is the one private documents already carry — publishing at a taken id reveals that it is taken (§4) — and nothing more.
 
 Who may read, decided once in `lib/acl.ts readBasis` and mirrored by the rules:
 
@@ -2402,32 +1037,15 @@ Who may read, decided once in `lib/acl.ts readBasis` and mirrored by the rules:
 | `link` | anyone whose request carries `k` equal to `linkToken`, in the query or, on `/content/`, as the `~<k>` path segment (§2) | yes: the URL carries the key |
 | `grant` | a signed-in account holding a current link grant | no: the URL carries no key |
 
-The key is compared in constant time, and an absent token never matches an
-absent key. The rules cannot see a URL, so a signed-in visitor who opens an
-unlisted document with its key is given a **link grant** by `POST /unlock` —
-`docs/{docId}/linkGrants/{uid}`, naming the token they presented — and the
-rules, the endpoints and the agent tools accept it in place of the key. It is
-what lets a link holder comment, and what lets them open the document again
-from a reply notification, which links without the key.
+The key is compared in constant time, and an absent token never matches an absent key. The rules cannot see a URL, so a signed-in visitor who opens an unlisted document with its key is given a **link grant** by `POST /unlock` — `docs/{docId}/linkGrants/{uid}`, naming the token they presented — and the rules, the endpoints and the agent tools accept it in place of the key. It is what lets a link holder comment, and what lets them open the document again from a reply notification, which links without the key.
 
-**Rotating the link revokes everything it granted.** Making the document private
-deletes its token and making it unlisted again mints a new one, so every old
-link and every grant stops working at once, without a cleanup pass. A grant is
-per account and cannot be revoked alone; that is the reversal condition in
-[ADR 0012](adr/0012-unlisted-needs-its-link.md).
+**Rotating the link revokes everything it granted.** Making the document private deletes its token and making it unlisted again mints a new one, so every old link and every grant stops working at once, without a cleanup pass. A grant is per account and cannot be revoked alone; that is the reversal condition in [ADR 0012](adr/0012-unlisted-needs-its-link.md).
 
-Open editing on an unlisted document reaches its link holders and nobody else,
-and not through the live log (§16).
+Open editing on an unlisted document reaches its link holders and nobody else, and not through the live log (§16).
 
 ### A folder's reach
 
-A folder has the document's three levels, its link and its expiry, set by its
-owner through `POST /visibility` with the same rules: the token is minted on
-becoming unlisted, kept while unlisted and deleted otherwise, so rotating
-revokes every link at once, and the same dates are refused. It has no open
-editing. What its settings open is **everything beneath it** — its documents
-and every subfolder's, including documents private on their own, owned by
-someone else, or filed later ([ADR 0019](adr/0019-folder-links-reach-their-subtree.md)).
+A folder has the document's three levels, its link and its expiry, set by its owner through `POST /visibility` with the same rules: the token is minted on becoming unlisted, kept while unlisted and deleted otherwise, so rotating revokes every link at once, and the same dates are refused. It has no open editing. What its settings open is **everything beneath it** — its documents and every subfolder's, including documents private on their own, owned by someone else, or filed later ([ADR 0019](adr/0019-folder-links-reach-their-subtree.md)).
 
 > **A folder's reach opens documents to read, and nothing else.**
 
@@ -2436,117 +1054,41 @@ someone else, or filed later ([ADR 0019](adr/0019-folder-links-reach-their-subtr
 | `folder-public` | anyone, on a document under a public folder | yes |
 | `folder-link` | anyone whose request carries the key of an unlisted folder above the document, in `k` as a document's key travels | yes, and `noindex` |
 
-Both come from `readAccess` in `lib/acl.ts`, only after the document's own
-`readBasis` has said no, and only on read paths: `contentProxy` (content and
-thumbnails), `downloadBundle`, `recordView`, `POST /unlock`, `forkDoc`,
-`docShell` and the agent read tools (§19). Every write keeps `canRead` and
-`canEdit`, which never look at a folder, so a folder's key cannot authorize a
-write by construction. No grant is minted, and the rules cannot see a folder's
-key: a folder reader, signed in or not, gets the document and not its
-comments, annotations or presence. The reader projection says
-`viaFolder: true`, and the viewer offers none of them.
+Both come from `readAccess` in `lib/acl.ts`, only after the document's own `readBasis` has said no, and only on read paths: `contentProxy` (content and thumbnails), `downloadBundle`, `recordView`, `POST /unlock`, `forkDoc`, `docShell` and the agent read tools (§19). Every write keeps `canRead` and `canEdit`, which never look at a folder, so a folder's key cannot authorize a write by construction. No grant is minted, and the rules cannot see a folder's key: a folder reader, signed in or not, gets the document and not its comments, annotations or presence. The reader projection says `viaFolder: true`, and the viewer offers none of them.
 
-**Reach is denormalized, as membership is.** Each folder stores `reach`, root
-first: its parent's, then `{ folderId, visibility, keyHash?, expiresAt }` for
-itself when it is not private. `recomputeSubtree` computes it in the same pass
-as membership. `keyHash` is sha256 of the token, compared by `keyMatchesHash`
-alone; a subfolder's members read its record, and must not learn the key to a
-folder above that they cannot open. A document stores nothing new: a read
-through a folder loads the document's own folder, one read, on a request its
-own level has already refused.
+**Reach is denormalized, as membership is.** Each folder stores `reach`, root first: its parent's, then `{ folderId, visibility, keyHash?, expiresAt }` for itself when it is not private. `recomputeSubtree` computes it in the same pass as membership. `keyHash` is sha256 of the token, compared by `keyMatchesHash` alone; a subfolder's members read its record, and must not learn the key to a folder above that they cannot open. A document stores nothing new: a read through a folder loads the document's own folder, one read, on a request its own level has already refused.
 
-**A folder's expiry ends its reach and nothing else.** After the date, its link
-and its public level open nothing, and a key holder asking `POST /unlock` for
-the folder is told it ended. Members read and edit as before, and nothing
-beneath is frozen. A document's own expiry wins over any folder. Every cached
-window, the shell's included, is cut at the earlier of the document's expiry
-and the end of the reach that opened it.
+**A folder's expiry ends its reach and nothing else.** After the date, its link and its public level open nothing, and a key holder asking `POST /unlock` for the folder is told it ended. Members read and edit as before, and nothing beneath is frozen. A document's own expiry wins over any folder. Every cached window, the shell's included, is cut at the earlier of the document's expiry and the end of the reach that opened it.
 
-**A document under a public folder is public.** It is mirrored to
-`public/{docId}` with `viaFolder: true`, `publicEdit: false` and `expiresAt`
-the end of a reader's access, which puts it in the sitemap, and the mirror is
-deleted when no public folder above it remains. Open editing, presence and the
-realtime `*` key stay the document's own: a public folder writes none.
+**A document under a public folder is public.** It is mirrored to `public/{docId}` with `viaFolder: true`, `publicEdit: false` and `expiresAt` the end of a reader's access, which puts it in the sitemap, and the mirror is deleted when no public folder above it remains. Open editing, presence and the realtime `*` key stay the document's own: a public folder writes none.
 
-**Revocation gains the cascade.** A document directly in a folder stops
-answering to a rotated key at once; a subfolder's, when the cascade reaches
-that subfolder. The five-minute window under "Caching" applies on top.
+**Revocation gains the cascade.** A document directly in a folder stops answering to a rotated key at once; a subfolder's, when the cascade reaches that subfolder. The five-minute window under "Caching" applies on top.
 
 ### Anonymous reads use a projection, not a rules exception
 
-Firestore rules cannot project fields, so letting an anonymous client `get` a
-public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail`
-and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying
-only `docId`, `title`, `slug`, `currentVersion`, `liveEpoch`, `entry`, `format`,
-`sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `updatedAt` (when the current version was published, from `latest`, §4, in epoch milliseconds, as the folder listing's) and `words` (its word count, for a reader's reading time; null until counted), never who published it, and `publishedAt`, the same instant as a timestamp, which the sitemap orders by and `POST /unlock` answers without — written by the same paths that
-recompute `members`, and **deleted the instant it stops being public**. The rule
-allows `get` of a public row only, and no `list`: an absent id and any other row
-are the same refusal. The source document, current version and projection
-set/delete share a Firestore transaction, so an older public snapshot cannot
-restore the projection after a newer visibility change has completed.
-A document under a public folder is public too, and mirrored with `viaFolder: true`. Its folder is read in that same transaction.
+Firestore rules cannot project fields, so letting an anonymous client `get` a public `docs/{docId}` would hand the world `members`, `viewers`, `ownerEmail` and `stats`. A **public** document is mirrored to **`public/{docId}`** carrying only `docId`, `title`, `slug`, `currentVersion`, `liveEpoch`, `entry`, `format`, `sourceEntry`, `fileCount`, `visibility`, `publicEdit`, `trusted`, `marking`, `expiresAt`, `viaFolder`, `forked`, `updatedAt` (when the current version was published, from `latest`, §4, in epoch milliseconds, as the folder listing's) and `words` (its word count, for a reader's reading time; null until counted), never who published it, and `publishedAt`, the same instant as a timestamp, which the sitemap orders by and `POST /unlock` answers without — written by the same paths that recompute `members`, and **deleted the instant it stops being public**. The rule allows `get` of a public row only, and no `list`: an absent id and any other row are the same refusal. The source document, current version and projection set/delete share a Firestore transaction, so an older public snapshot cannot restore the projection after a newer visibility change has completed. A document under a public folder is public too, and mirrored with `viaFolder: true`. Its folder is read in that same transaction.
 
-An **unlisted** document is not mirrored. Anything in `public/` is readable by
-whoever knows an id, and once was listable by anyone at all; an unlisted
-document's title belongs to the holders of its link. They get the same fields
-from `POST /unlock`, which checks the key. The bounded document marking is
-part of both reader shapes: exports use the owner's policy without exposing
-account defaults, member lists or version records. The current version's
-`sourceEntry` and `fileCount` offer the same permitted source and bundle
-downloads to these readers. `liveEpoch` names the non-secret editing generation
-for authorized editors. Changing a public document's marking or editing
-generation refreshes its projection.
+An **unlisted** document is not mirrored. Anything in `public/` is readable by whoever knows an id, and once was listable by anyone at all; an unlisted document's title belongs to the holders of its link. They get the same fields from `POST /unlock`, which checks the key. The bounded document marking is part of both reader shapes: exports use the owner's policy without exposing account defaults, member lists or version records. The current version's `sourceEntry` and `fileCount` offer the same permitted source and bundle downloads to these readers. `liveEpoch` names the non-secret editing generation for authorized editors. Changing a public document's marking or editing generation refreshes its projection.
 
-Everything else under `docs/**` still requires an account, even on a public
-document. Those records carry member lists and reviewer identities; publishing a
-document must not publish the people who reviewed it.
+Everything else under `docs/**` still requires an account, even on a public document. Those records carry member lists and reviewer identities; publishing a document must not publish the people who reviewed it.
 
 ### Anonymous is read-only. Always.
 
-Any write — comment, annotation, resolve, edit — requires a signed-in account,
-even on a public document whose owner enabled open editing. **`publicEdit`
-widens *who may edit* to "any verified account", never to "anyone".** It never
-relaxes `isVerifiedUser()`.
+Any write — comment, annotation, resolve, edit — requires a signed-in account, even on a public document whose owner enabled open editing. **`publicEdit` widens *who may edit* to "any verified account", never to "anyone".** It never relaxes `isVerifiedUser()`.
 
-An anonymous reader who selects text and tries to comment gets the sign-in sheet
-**with their selection preserved**, and the comment posts after sign-in. A
-"sign in to comment" that loses the selection is where this feature dies.
-Signing in leaves the page, so what is kept is the anchor, measured while the
-selection is there: in this tab's session storage, never the URL (§15), for half
-an hour. Back on the document through `next`, the thread is made on it once. If a
-new version came out in the meantime the reader is told, and selects again.
+An anonymous reader who selects text and tries to comment gets the sign-in sheet **with their selection preserved**, and the comment posts after sign-in. A "sign in to comment" that loses the selection is where this feature dies. Signing in leaves the page, so what is kept is the anchor, measured while the selection is there: in this tab's session storage, never the URL (§15), for half an hour. Back on the document through `next`, the thread is made on it once. If a new version came out in the meantime the reader is told, and selects again.
 
 ### Caching
 
-Gated content: `private, no-store`. Non-private content on the immutable
-`/content/{docId}/{versionId}/…` path: `public, max-age=300`. Versions are
-immutable so the bytes can never be stale; the real exposure is **revocation
-latency — making a document private again takes up to five minutes to
-propagate**, documented in `operations.md` beside the purge steps.
+Gated content: `private, no-store`. Non-private content on the immutable `/content/{docId}/{versionId}/…` path: `public, max-age=300`. Versions are immutable so the bytes can never be stale; the real exposure is **revocation latency — making a document private again takes up to five minutes to propagate**, documented in `operations.md` beside the purge steps.
 
-Stored thumbnails (§2 `GET /thumb`) are the one gated response a browser may
-keep: `private, max-age` of at most a day, capped at expiry, and `immutable`
-because their URL names a key that is never reused. A member's workspace then
-costs no function call per card on every visit. `private` keeps them out of
-every shared cache; what the window concedes is that someone removed from a
-document keeps, for up to a day, the images their own browser already held.
+Stored thumbnails (§2 `GET /thumb`) are the one gated response a browser may keep: `private, max-age` of at most a day, capped at expiry, and `immutable` because their URL names a key that is never reused. A member's workspace then costs no function call per card on every visit. `private` keeps them out of every shared cache; what the window concedes is that someone removed from a document keeps, for up to a day, the images their own browser already held.
 
-This is also the cost defence: every byte is proxied through a function, and
-public documents are where traffic spikes. A rate limiter is **deliberately not
-built**; Firebase App Check is the named hook if abuse materializes.
+This is also the cost defence: every byte is proxied through a function, and public documents are where traffic spikes. A rate limiter is **deliberately not built**; Firebase App Check is the named hook if abuse materializes.
 
 ### Link previews
 
-Hosting's static shell says "Bikeshed" in its `<head>` and nothing about the
-document, and a crawler runs no JavaScript, so a pasted link unfurled as the
-product. `/d/**` is therefore rewritten to `docShell` (§2), which serves the
-same shell to everyone and, only when the document is readable without an
-account, with the document's own head spliced in. The decision is
-`contentProxy`'s for an **anonymous** caller — no cookie, member or owner
-check — because the response may be cached at a public URL and whatever it
-carries is what a stranger may see. The owner of a private document gets the
-generic shell too; their tab title comes from the client
-([ADR 0011](adr/0011-document-page-through-a-function.md)).
+Hosting's static shell says "Bikeshed" in its `<head>` and nothing about the document, and a crawler runs no JavaScript, so a pasted link unfurled as the product. `/d/**` is therefore rewritten to `docShell` (§2), which serves the same shell to everyone and, only when the document is readable without an account, with the document's own head spliced in. The decision is `contentProxy`'s for an **anonymous** caller — no cookie, member or owner check — because the response may be cached at a public URL and whatever it carries is what a stranger may see. The owner of a private document gets the generic shell too; their tab title comes from the client ([ADR 0011](adr/0011-document-page-through-a-function.md)).
 
 | | Shell | `Cache-Control` | Robots |
 |---|---|---|---|
@@ -2558,59 +1100,27 @@ generic shell too; their tab title comes from the client
 | under an unlisted folder, its key in `k` | document | `public, max-age=min(300, seconds to the earlier end)` | `noindex`, both forms |
 | expired, at any level | generic | `private, no-store` | — |
 
-An absent document, a version that does not exist, and any failure between
-the decision and the finished page are generic as well.
+An absent document, a version that does not exist, and any failure between the decision and the finished page are generic as well.
 
-`/folder/**` goes to the same function (§2 `GET /folder/:folderId`). A
-folder's page names the folder, with the default card, when the folder's own
-public level or its key opens it, under the same cache and robots rules as a
-document's; it reads nothing inside the folder, so a cached page never goes on
-describing contents that have changed. Every other folder is the generic
-shell.
+**A crawler that runs no JavaScript reads the shell's text** ([ADR 0028](adr/0028-what-a-crawler-can-read.md)). `app/index.html` carries the landing page's sentences and links inside `#root`, between `<!--crawler-text-->` markers; the app's stylesheet hides them and the app replaces them on mount. A shell with no `noindex` and no pinned version swaps them for the document's title and words (`readBlocks`, as far as the shell scanned), each escaped, so a citation lands at `/d/{slug}`. Every other row above keeps the site's text.
 
-**The head comes from the entry's first 256 KiB** (`HEAD_SCAN_BYTES`), asked
-for as a byte range and capped again in the function, so a large document is
-never read to the end for the sake of its head. What lies past the cap is not
-described. From that prefix, with comments, `<script>`, `<style>`, `<svg>`,
-`<template>` and `<nav>` dropped first — an inline SVG's accessible `<title>`
-must not become the document's, nor a table of contents its description:
+`/folder/**` goes to the same function (§2 `GET /folder/:folderId`). A folder's page names the folder, with the default card, when the folder's own public level or its key opens it, under the same cache and robots rules as a document's; it reads nothing inside the folder, so a cached page never goes on describing contents that have changed. Every other folder is the generic shell.
+
+**The head comes from the entry's first 256 KiB** (`HEAD_SCAN_BYTES`), asked for as a byte range and capped again in the function, so a large document is never read to the end for the sake of its head. What lies past the cap is not described. From that prefix, with comments, `<script>`, `<style>`, `<svg>`, `<template>` and `<nav>` dropped first — an inline SVG's accessible `<title>` must not become the document's, nor a table of contents its description:
 
 - **Title**: `<title>`, else `og:title`, else the stored workspace title.
-- **Description**: `<meta name="description">`, else `og:description`, else
-  the first ~200 characters of body text after the first `</h1>` (after
-  `<body>` when there is no `<h1>`), cut back to a word with an ellipsis.
+- **Description**: `<meta name="description">`, else `og:description`, else the first ~200 characters of body text after the first `</h1>` (after `<body>` when there is no `<h1>`), cut back to a word with an ellipsis.
 - **Keywords**: `<meta name="keywords">`, when declared.
-- **Image**: the declared `og:image`, else `twitter:image`, else the first
-  raster `<img>` in the body (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`),
-  resolved against the entry's URL under `/content/{docId}/{versionId}/` as a
-  browser would. A same-origin result must stay inside that version's prefix
-  and name a file the version holds, and carries `k` for an unlisted
-  document; a cross-origin `http(s)` URL is the author's; anything else —
-  none, `data:`, `javascript:`, an escape from the prefix, a file the version
-  lacks — is `/brand/og-default.png`, 1200×630, served by Hosting.
-- **`og:url`**: the URL as shared — `/d/{docId}`, `/{versionId}` when the
-  request pinned one, and `?k=` for an unlisted document, never for a public
-  one whatever `k` the request happened to carry.
+- **Image**: the declared `og:image`, else `twitter:image`, else the first raster `<img>` in the body (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`), resolved against the entry's URL under `/content/{docId}/{versionId}/` as a browser would. A same-origin result must stay inside that version's prefix and name a file the version holds, and carries `k` for an unlisted document; a cross-origin `http(s)` URL is the author's; anything else — none, `data:`, `javascript:`, an escape from the prefix, a file the version lacks — is `/brand/og-default.png`, 1200×630, served by Hosting.
+- **`og:url`**: the URL as shared — `/d/{docId}`, `/{versionId}` when the request pinned one, and `?k=` for an unlisted document, never for a public one whatever `k` the request happened to carry.
 
-**Every refusal is one identical response** (§1.4b). `decideShell` returns
-the same frozen `GENERIC` object for every reason, so a generic answer carries
-no document-specific byte by construction; a generic response sets no header
-a document response does not; and the cache header is set only once the page
-is built, so a throw before then falls back to a generic shell that is still
-uncacheable — never a broken page pinned at a public URL for the window. Every
-injected value passes through `lib/html.ts` and is spliced by index, never by
-`String.replace` with a string, whose `$'` would paste the template into
-itself.
+**Every refusal is one identical response** (§1.4b). `decideShell` returns the same frozen `GENERIC` object for every reason, so a generic answer carries no document-specific byte by construction; a generic response sets no header a document response does not; and the cache header is set only once the page is built, so a throw before then falls back to a generic shell that is still uncacheable — never a broken page pinned at a public URL for the window. Every injected value passes through `lib/html.ts` and is spliced by index, never by `String.replace` with a string, whose `$'` would paste the template into itself.
 
-**The shell is cached like content.** A document's shell is subject to the
-same five-minute window as `/content/**`, and withdrawing a version does not
-purge a cached shell: its title and excerpt can be served for up to five
-minutes after the bytes are gone, exactly as the content can.
+**The shell is cached like content.** A document's shell is subject to the same five-minute window as `/content/**`, and withdrawing a version does not purge a cached shell: its title and excerpt can be served for up to five minutes after the bytes are gone, exactly as the content can.
 
 ### Actor provenance
 
-One shape, stamped on every read and write, so "was this a person or an agent"
-is never a guess:
+One shape, stamped on every read and write, so "was this a person or an agent" is never a guess:
 
 ```ts
 type Actor = {
@@ -2628,43 +1138,19 @@ type Actor = {
 
 **`via` is the credential in words**, written once when it acts and stored with the action, so revoking or renaming a token never rewrites who did what: `CLI on mbp` (what `bikeshed login` mints, named for the machine), `CLI token “deploy-bot”`, `personal token “laptop agent”`, `“Claude” (connected app)`, `an operator script`. Names are their owner's own, or an app's own claim, so they are quoted, and an app is always called one: an app that registered as "Web" reads `“Web” (connected app)`, never as the browser. Absent for `web`. A record written before `via` existed carries only its channel, and every reader, the UI and the agent tools alike, gives that the same plain words (`MCP`, `the command line`), held to one answer by `functions/test/fixtures/via-vectors.json`.
 
-On the direct-Firestore write path,
-`firestore.rules authoredBySelf()` pins `actor.channel == 'web'` for the same
-reason, and allows the actor no other field: a browser cannot put a `tokenId`,
-`client` or `agent` on its own feedback. `client` and `agent` come from `X-Bikeshed-Client` / `X-Bikeshed-Agent`,
-are stored verbatim, and are **rendered as self-reported** in the UI. A badge
-that implies verification it does not have is worse than no badge.
+On the direct-Firestore write path, `firestore.rules authoredBySelf()` pins `actor.channel == 'web'` for the same reason, and allows the actor no other field: a browser cannot put a `tokenId`, `client` or `agent` on its own feedback. `client` and `agent` come from `X-Bikeshed-Client` / `X-Bikeshed-Agent`, are stored verbatim, and are **rendered as self-reported** in the UI. A badge that implies verification it does not have is worse than no badge.
 
-Stamped on: version records (`publishedBy`), annotations and comments (`actor`,
-immutable after create), view sessions, and ACL changes. Not on drafts — see
-`editSessions` in §17.
+Stamped on: version records (`publishedBy`), annotations and comments (`actor`, immutable after create), view sessions, and ACL changes. Not on drafts — see `editSessions` in §17.
 
 `uid` is null in exactly one case: the operator scripts in `scripts/`, which authenticate with Admin credentials rather than as an account. They say so: `channel: "operator"`, `via: "an operator script"`, an `email` from the required `--account` flag, and no `tokenId`. A version withdrawn by `scripts/delete-version.mjs` is attributed the same way in the change log.
 
-**`tokenId` is the forensic primitive.** If a token leaks, "everything this token
-ever touched" is one query, and revocation is one click without disturbing the
-owner's other clients.
+**`tokenId` is the forensic primitive.** If a token leaks, "everything this token ever touched" is one query, and revocation is one click without disturbing the owner's other clients.
 
 ### Automated reads must not corrupt human metrics
 
-Automated reads record a view session with `ms: 0` and count into
-`stats.apiReads` — never `stats.views` or `stats.totalMs`. The stats panel shows
-both and filters to human-only or automation-only. Each automated session has a
-server `startedAt` retained across repeated reads and a refreshed `lastBeatAt`,
-so the Activity query includes it; session and aggregate counters update together.
-One automated fetch increments its read count once across native transaction
-retries. A human reading beat likewise applies its time cap once, even when the
-SDK retries after losing the first commit acknowledgement.
+Automated reads record a view session with `ms: 0` and count into `stats.apiReads` — never `stats.views` or `stats.totalMs`. The stats panel shows both and filters to human-only or automation-only. Each automated session has a server `startedAt` retained across repeated reads and a refreshed `lastBeatAt`, so the Activity query includes it; session and aggregate counters update together. One automated fetch increments its read count once across native transaction retries. A human reading beat likewise applies its time cap once, even when the SDK retries after losing the first commit acknowledgement.
 
-Where a mutable operation needs a receipt rather than an existing immutable
-result, it keeps `transactionReceipts` on its existing record. Each entry holds
-an opaque operation ID, a server time and the bounded non-secret result, never
-a document snapshot or credential. A new write attempt stops after five
-minutes; a later real write may prune entries older than ten minutes. A
-matching receipt still acknowledges the original committed result after that
-new-write deadline. Once the SDK resolves, best-effort cleanup removes only
-that operation's marker. This adds no collection or event stream.
-Comments and highlights created through anything but the browser carry a visible marker, a glyph and the word `agent`. What they came through, `CLI on mbp` from `via`, is in the marker's tooltip, and a tap or Enter shows it as a toast, because a touch screen has no hover. `agent` means a credential acted rather than the browser: the server knows the credential and not who held it, so a person typing `bikeshed publish` reads `agent`, and so does an operator script. Email, the CLI and the agent tools have no hover, and give `via` in full. A suggestion decided by an agent says so beside the approver's name.
+Where a mutable operation needs a receipt rather than an existing immutable result, it keeps `transactionReceipts` on its existing record. Each entry holds an opaque operation ID, a server time and the bounded non-secret result, never a document snapshot or credential. A new write attempt stops after five minutes; a later real write may prune entries older than ten minutes. A matching receipt still acknowledges the original committed result after that new-write deadline. Once the SDK resolves, best-effort cleanup removes only that operation's marker. This adds no collection or event stream. Comments and highlights created through anything but the browser carry a visible marker, a glyph and the word `agent`. What they came through, `CLI on mbp` from `via`, is in the marker's tooltip, and a tap or Enter shows it as a toast, because a touch screen has no hover. `agent` means a credential acted rather than the browser: the server knows the credential and not who held it, so a person typing `bikeshed publish` reads `agent`, and so does an operator script. Email, the CLI and the agent tools have no hover, and give `via` in full. A suggestion decided by an agent says so beside the approver's name.
 
 ### Version, edit and view provenance
 
@@ -2672,13 +1158,9 @@ Comments and highlights created through anything but the browser carry a visible
 - `origin` is how the content arrived, kept apart from who sent it: `upload` (bytes sent, from the upload dialog, `bikeshed publish` or `update`, or `publish_document` / `update_document`), `edit` (a draft committed, from the browser or by `commit_draft`, suggestions accepted into it included) or `fork`. A version written before `origin` existed has none; readers derive it from `publishedVia` (`fork` → fork, `editor` → edit, anything else → upload).
 - `publishedVia` is the older single field, still written, and derived from `origin` and the channel so it can no longer disagree with them: `fork` for a fork, the channel (`cli`, `mcp`, `api`, `app`, `operator`) for anything automated, else `upload` or `editor`. Before `origin`, the CLI's first publish read `upload` while its updates read `cli` or `mcp` depending on the file type. `"duplicate"` marks copies made before §21, which record no lineage.
 - `editSessions` on a version committed from a draft lists every credential that saved into that draft, in order: one entry per person and token, with the first and last save time, capped at 50. Two agents of one person on two tokens are two entries. It answers which people and agents wrote into a version, not which characters each wrote: per-character attribution is still deliberately not built ([ADR 0010](adr/0010-crdt-for-shared-document-state.md)). The draft's own `lastEditedByEmail` names only the last.
-- Views record `via: "app" | "unlisted" | "public"`. Anonymous sessions record
-  `uid: null`, count toward `stats.views` and `stats.totalMs`, and are **never**
-  rolled into `viewers/{uid}` — there is no identity to roll into. The owner sees
-  "142 views · 38 identified".
+- Views record `via: "app" | "unlisted" | "public"`. Anonymous sessions record `uid: null`, count toward `stats.views` and `stats.totalMs`, and are **never** rolled into `viewers/{uid}` — there is no identity to roll into. The owner sees "142 views · 38 identified".
 
-**No IP, no fingerprint, no unique-visitor estimation for anonymous traffic.**
-Sessions are counted; people are not. A deliberate privacy floor.
+**No IP, no fingerprint, no unique-visitor estimation for anonymous traffic.** Sessions are counted; people are not. A deliberate privacy floor.
 
 ### The activity panel
 
@@ -2692,30 +1174,20 @@ The People / Automation filter applies to every row, not only reads. Pages hold 
 
 ## 18. Teams
 
-Share a document or folder with a whole team, or with particular people — both,
-side by side.
+Share a document or folder with a whole team, or with particular people — both, side by side.
 
 ### Grants record intent; effective sets record reality
 
-Every grant list — `viewers[]`, `suggesters[]`, `editors[]`, `approvers[]` —
-takes entries of the form `team:{teamId}` alongside plain emails, and the server
-**expands them at write time** into the flat effective sets it already computes
-(§13):
+Every grant list — `viewers[]`, `suggesters[]`, `editors[]`, `approvers[]` — takes entries of the form `team:{teamId}` alongside plain emails, and the server **expands them at write time** into the flat effective sets it already computes (§13):
 
 ```
 viewers: ["ana@example.com", "team:design"]     ← the durable grant
 members: ["ana@…", "bo@…", "cy@…", "owner@…"]   ← the flat effective set
 ```
 
-Rules, the composite index and the single doc-list query are **completely
-unchanged**. That is the point: `members` is simultaneously the read gate and
-the query key, and the `list` rule is only valid because it is statically
-provable from an `array-contains` filter (§5).
+Rules, the composite index and the single doc-list query are **completely unchanged**. That is the point: `members` is simultaneously the read gate and the query key, and the `list` rule is only valid because it is statically provable from an `array-contains` filter (§5).
 
-*The alternative considered and rejected:* putting team ids directly in
-`members` and matching a custom claim. It works for `get`, but it breaks the
-provable `list` rule and trades a bounded write fan-out for a permanent
-complexity tax on the most security-critical rule in the file.
+*The alternative considered and rejected:* putting team ids directly in `members` and matching a custom claim. It works for `get`, but it breaks the provable `list` rule and trades a bounded write fan-out for a permanent complexity tax on the most security-critical rule in the file.
 
 ### Model
 
@@ -2723,123 +1195,53 @@ complexity tax on the most security-critical rule in the file.
 teams/{teamId}: { teamId, name, slug, ownerEmail, admins[], members[], createdAt, updatedAt }
 ```
 
-Emails lowercased. Readable by its own members; **write server-only**, matching
-how `docs` and `folders` already behave.
+Emails lowercased. Readable by its own members; **write server-only**, matching how `docs` and `folders` already behave.
 
-`POST /team` (create / rename / delete), `POST /team-members` (add / remove,
-admin-gated). `/access` and `/folder-access` accept `team:{id}` entries with no
-signature change, and add one only for a caller who is in that team (`403`
-otherwise, in the same words for a team that does not exist). Granting
-expands a team to its people, invites each and answers with the effective
-members, so until 0.32.0 a stranger who knew a team's id could read its roster
-and mail everyone in it. A team already granted on the record may still change
-role or be removed by the owner, in it or not: that reaches nobody new. Member and administrator deltas read, authorize and write the
-team in one transaction. Removing a member also removes their administrator
-grant; the owner remains a member and can always manage the team. A native retry
-acknowledges its already committed result, including an administrator removing
-their own membership, before applying authority checks for a new mutation.
-Its bounded receipt (§17) preserves the original invitation delta without
-repeating writes over a later membership change. The access cascade still
-recomputes from current grants, parents and teams.
+`POST /team` (create / rename / delete), `POST /team-members` (add / remove, admin-gated). `/access` and `/folder-access` accept `team:{id}` entries with no signature change, and add one only for a caller who is in that team (`403` otherwise, in the same words for a team that does not exist). Granting expands a team to its people, invites each and answers with the effective members, so until 0.32.0 a stranger who knew a team's id could read its roster and mail everyone in it. A team already granted on the record may still change role or be removed by the owner, in it or not: that reaches nobody new. Member and administrator deltas read, authorize and write the team in one transaction. Removing a member also removes their administrator grant; the owner remains a member and can always manage the team. A native retry acknowledges its already committed result, including an administrator removing their own membership, before applying authority checks for a new mutation. Its bounded receipt (§17) preserves the original invitation delta without repeating writes over a later membership change. The access cascade still recomputes from current grants, parents and teams.
 
 ### Fan-out is bounded and reuses the existing cascade
 
-Removing someone from a team must revoke access everywhere the team was granted:
-an `array-contains` query over `team:{teamId}` grants feeding the **same BFS
-recompute with per-node transactions** that folder-access changes already use.
-A 50-person team granted on 200 documents requires 200 document writes. For a small-team tool
-that is the right trade, and it is stated in `docs/architecture/overview.md` so nobody is
-surprised at 10,000 documents.
+Removing someone from a team must revoke access everywhere the team was granted: an `array-contains` query over `team:{teamId}` grants feeding the **same BFS recompute with per-node transactions** that folder-access changes already use. A 50-person team granted on 200 documents requires 200 document writes. For a small-team tool that is the right trade, and it is stated in `docs/architecture/overview.md` so nobody is surprised at 10,000 documents.
 
-Three things fall out free because expansion is server-side: the presence mirror
-(§16) is keyed by email and needs no change; a PAT's ACL (§19) picks up team
-access with no change; and the public projection (§17) carries no team names.
+Three things fall out free because expansion is server-side: the presence mirror (§16) is keyed by email and needs no change; a PAT's ACL (§19) picks up team access with no change; and the public projection (§17) carries no team names.
 
 ### Not built
 
-Nested teams · per-team roles beyond member/admin · team-owned documents (a
-document always has a person as owner; a team is an access grant, not a
-principal) · directory sync / SCIM.
+Nested teams · per-team roles beyond member/admin · team-owned documents (a document always has a person as owner; a team is an access grant, not a principal) · directory sync / SCIM.
 
 ---
 
 ## 19. Agent surface — tokens, MCP, CLI
 
-One credential, two clients, one set of server logic. The MCP server and the CLI
-are **thin shells over the same endpoints the web app already calls.**
+One credential, two clients, one set of server logic. The MCP server and the CLI are **thin shells over the same endpoints the web app already calls.**
 
 ### Personal access tokens
 
-Minted in account settings, `bsk_`-prefixed, **stored only as a SHA-256 hash**,
-shown once, named, revocable, with `lastUsedAt`. Sent as `Authorization: Bearer`.
+Minted in account settings, `bsk_`-prefixed, **stored only as a SHA-256 hash**, shown once, named, revocable, with `lastUsedAt`. Sent as `Authorization: Bearer`.
 
-A token carries the **same identity, and therefore the same ACL, as the person
-who minted it.** No service accounts, no impersonation, no second permission
-model.
+A token carries the **same identity, and therefore the same ACL, as the person who minted it.** No service accounts, no impersonation, no second permission model.
 
-Each use re-checks that the Auth user still exists, is enabled, has a verified
-email matching the token's identity, and still passes the identity gate. An
-Auth lookup failure refuses the credential. Disabling or deleting the user,
-changing their email or withdrawing verification therefore also cuts off
-personal tokens; a browser session is not the only credential revoked by
-those account changes.
+Each use re-checks that the Auth user still exists, is enabled, has a verified email matching the token's identity, and still passes the identity gate. An Auth lookup failure refuses the credential. Disabling or deleting the user, changing their email or withdrawing verification therefore also cuts off personal tokens; a browser session is not the only credential revoked by those account changes.
 
-*Why not OAuth 2.1, which the MCP spec prefers:* it needs an authorization
-server, a consent screen and token/refresh endpoints — a real subsystem, for a
-self-hosted tool whose users are largely the people who own the deployment. A
-PAT is roughly 120 lines, serves the CLI and MCP identically, and can be revoked
-by someone who has never heard of OAuth. Noted as the upgrade path if one-click
-client onboarding is ever wanted.
+*Why not OAuth 2.1, which the MCP spec prefers:* it needs an authorization server, a consent screen and token/refresh endpoints — a real subsystem, for a self-hosted tool whose users are largely the people who own the deployment. A PAT is roughly 120 lines, serves the CLI and MCP identically, and can be revoked by someone who has never heard of OAuth. Noted as the upgrade path if one-click client onboarding is ever wanted.
 
-*That upgrade has been taken* (ADR 0014): apps now connect by signing in, as
-§23 specifies. Personal tokens remain the credential for CI,
-scripts and anything that cannot open a browser.
+*That upgrade has been taken* (ADR 0014): apps now connect by signing in, as §23 specifies. Personal tokens remain the credential for CI, scripts and anything that cannot open a browser.
 
 ### Historical versions and immutability
 
-Published versions and their existing review threads form a read-only archive.
-Current document ACL and expiry apply to every historical read. The current
-version alone accepts comments, replies, comment edits/deletes, thread state
-changes and all suggestion actions, including claim/release and idempotent
-retries. The Firestore rules check the head for every annotation/comment write;
-Admin SDK operations check it inside the writing transaction. A request racing
-publication fails rather than writing to an archive or retargeting the new head.
-The UI offers no mutation controls on historical versions and links to latest.
+Published versions and their existing review threads form a read-only archive. Current document ACL and expiry apply to every historical read. The current version alone accepts comments, replies, comment edits/deletes, thread state changes and all suggestion actions, including claim/release and idempotent retries. The Firestore rules check the head for every annotation/comment write; Admin SDK operations check it inside the writing transaction. A request racing publication fails rather than writing to an archive or retargeting the new head. The UI offers no mutation controls on historical versions and links to latest.
 
-Each upload attempt writes create-only objects under a unique bundle prefix.
-`DocVersion.storagePrefix` selects its immutable bytes; old records retain the
-legacy version path. A draft save also owns a unique `draft.storagePrefix` and
-adopts it transactionally only while its base is current. Publishing verifies
-both the head and observed draft pointer; cleanup deletes only that draft.
+Each upload attempt writes create-only objects under a unique bundle prefix. `DocVersion.storagePrefix` selects its immutable bytes; old records retain the legacy version path. A draft save also owns a unique `draft.storagePrefix` and adopts it transactionally only while its base is current. Publishing verifies both the head and observed draft pointer; cleanup deletes only that draft.
 
 ### Previous versions and write guards
 
-Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link>
---all --json` to discover published history. Pages are newest first, default 20,
-maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL.
-History uses the document's current access rules and expiry. A missing or
-withdrawn version is an error, never a request for the latest version.
+Use `list_versions({id, limit:20, cursor})` or `bikeshed versions <id|link> --all --json` to discover published history. Pages are newest first, default 20, maximum 50; pass `nextCursor` as `cursor` until null. Each row has a pinned URL. History uses the document's current access rules and expiry. A missing or withdrawn version is an error, never a request for the latest version.
 
-Read a chosen version with `get_document({id, version:"v2"})` and
-`get_comments({id, version:"v2", includeResolved:true})`, or
-`bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`.
-Read results name `currentVersion` and `isCurrent`; historical write capabilities
-are false. Existing comments and suggestions remain readable as an archive.
-Older versions cannot be edited or receive, revise, delete, reply to, resolve,
-reopen, accept, reject, claim or withdraw feedback. Fork one to make a new,
-independent document with `fork_document({id, version:"v2"})`.
+Read a chosen version with `get_document({id, version:"v2"})` and `get_comments({id, version:"v2", includeResolved:true})`, or `bikeshed get <id> --version v2` and `bikeshed comments <id> --version v2 --all`. Read results name `currentVersion` and `isCurrent`; historical write capabilities are false. Existing comments and suggestions remain readable as an archive. Older versions cannot be edited or receive, revise, delete, reply to, resolve, reopen, accept, reject, claim or withdraw feedback. Fork one to make a new, independent document with `fork_document({id, version:"v2"})`.
 
-CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted
-`/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write
-guard. `--version` must agree with the URL; conflicts fail. Keys are retained.
-Document-wide sharing, folder and lineage operations still address the document.
+CLI `get`, `comments`, `fork`, and `open` preserve a version in a pasted `/d/<id>/<version>?k=...` URL. Feedback commands also preserve it as a write guard. `--version` must agree with the URL; conflicts fail. Keys are retained. Document-wide sharing, folder and lineage operations still address the document.
 
-Before changing feedback, read the latest version and its feedback, then pass
-that `version` to every feedback tool (`--version` in the CLI). Pass
-`baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed
-update` and `bikeshed commit`). A versioned URL supplies the CLI base too.
-If the head changes, the server refuses the write. Read the new head and
-reassess the request; never silently redirect a historical request to it.
+Before changing feedback, read the latest version and its feedback, then pass that `version` to every feedback tool (`--version` in the CLI). Pass `baseVersion` to `update_document` and `commit_draft` (`--base` on `bikeshed update` and `bikeshed commit`). A versioned URL supplies the CLI base too. If the head changes, the server refuses the write. Read the new head and reassess the request; never silently redirect a historical request to it.
 
 ### MCP — thirty-six tools
 
@@ -2884,45 +1286,20 @@ reassess the request; never silently redirect a historical request to it.
 | `resolve_thread` | close a thread on the current version that is not a suggestion, leaving a note that says so (§6) |
 | `reopen_thread` | open such a thread again, with a note |
 
-`list_versions`, `get_document`, `fork_document`, `get_lineage`, `update_document`,
-`suggest_edit`, `revise_suggestion`, `withdraw_suggestion`, `get_comments`,
-`get_changes`, `add_comment`, `reply_to_comment`, `resolve_thread` and
-`reopen_thread` take an optional `k`: an unlisted document's key, for a caller
-who is not a member and whose account holds no link grant. Without it such a
-document answers exactly as an id that does not exist (§17). The four that only
-read — `list_versions`, `get_document`, `fork_document` and `get_lineage` — also
-take a shared folder's key, which opens what is beneath the folder to read and
-nothing else; `get_document` then says `viaFolder: true` with every `can…` false,
-and every other tool refuses that key in words rather than as an absent id. The
-CLI accepts the link itself wherever it takes an id, because the link is the
-only place a person holds the key.
+`list_versions`, `get_document`, `fork_document`, `get_lineage`, `update_document`, `suggest_edit`, `revise_suggestion`, `withdraw_suggestion`, `get_comments`, `get_changes`, `add_comment`, `reply_to_comment`, `resolve_thread` and `reopen_thread` take an optional `k`: an unlisted document's key, for a caller who is not a member and whose account holds no link grant. Without it such a document answers exactly as an id that does not exist (§17). The four that only read — `list_versions`, `get_document`, `fork_document` and `get_lineage` — also take a shared folder's key, which opens what is beneath the folder to read and nothing else; `get_document` then says `viaFolder: true` with every `can…` false, and every other tool refuses that key in words rather than as an absent id. The CLI accepts the link itself wherever it takes an id, because the link is the only place a person holds the key.
 
-`fork_document` and `get_lineage` use the same optional key as their read proof
-(§21). `revise_suggestion` and `withdraw_suggestion` also take `k` to read the
-document; the suggestion must still be the caller's own, pending, and on the
-current version (§22). A key never substitutes for membership on
-`accept_suggestion`, `reject_suggestion`, `commit_draft`, `rename_document` or
-`move_document`.
+`fork_document` and `get_lineage` use the same optional key as their read proof (§21). `revise_suggestion` and `withdraw_suggestion` also take `k` to read the document; the suggestion must still be the caller's own, pending, and on the current version (§22). A key never substitutes for membership on `accept_suggestion`, `reject_suggestion`, `commit_draft`, `rename_document` or `move_document`.
 
 ### Watching a document: `get_changes`
 
-An agent that publishes a document watches it for what people say. `get_changes`
-reads the document's change log (§4, ADR 0016) after a cursor.
+An agent that publishes a document watches it for what people say. `get_changes` reads the document's change log (§4, ADR 0016) after a cursor.
 
-**`since` is required.** A poll that starts from an unknown point returns
-nothing, and nothing reads as nothing happened. So the server never picks the
-starting point. It is one of:
+**`since` is required.** A poll that starts from an unknown point returns nothing, and nothing reads as nothing happened. So the server never picks the starting point. It is one of:
 - a cursor from an earlier result: the events after it;
-- `"last"`: the cursor this credential was last given for this document, or the
-  log's start when it has none, said as `resumedFrom: "start"`;
+- `"last"`: the cursor this credential was last given for this document, or the log's start when it has none, said as `resumedFrom: "start"`;
 - `"all"`: the log from its start.
 
-A cursor is bound to its document. One from another document, a malformed one,
-or one of an unknown version is refused, never read as "start over" or "now".
-A positioned cursor requires all of seconds, nanoseconds and a nonempty event
-id that is one safe path segment, within Firestore timestamp bounds. A start
-cursor omits all three position fields.
-It grants nothing, so it is not signed.
+A cursor is bound to its document. One from another document, a malformed one, or one of an unknown version is refused, never read as "start over" or "now". A positioned cursor requires all of seconds, nanoseconds and a nonempty event id that is one safe path segment, within Firestore timestamp bounds. A start cursor omits all three position fields. It grants nothing, so it is not signed.
 
 **Where a cursor comes from, and only a poll moves one:**
 
@@ -2933,166 +1310,44 @@ It grants nothing, so it is not signed.
 | `get_document` | the head of the log, to start watching from | only if none is saved |
 | `update_document` and every other write | none | no |
 
-A write's cursor would sit at the head of the log, past events recorded since
-the caller's last poll that it has not seen. So an update hands none back.
+A write's cursor would sit at the head of the log, past events recorded since the caller's last poll that it has not seen. So an update hands none back.
 
-**Each response** carries `cursor` (the same value back on a quiet poll), `more`
-(call again now; pages are 100 events, cut on `(at, eventId)`) and `retryAfter`
-in seconds, because there is no rate limiter. It also carries:
+**Each response** carries `cursor` (the same value back on a quiet poll), `more` (call again now; pages are 100 events, cut on `(at, eventId)`) and `retryAfter` in seconds, because there is no rate limiter. It also carries:
 - `events`, in recorded order, each with its `id`, `type`, `at`, `channel`, `automated` and, for anything but a person in the browser, `via` (the credential in words, §17), and `by`, the email joined at read time. A comment carries its `body` and `quote` read from the source, and a deleted one drops out. A `version.published` carries its `origin`. A `fork.created` is dated to the day, never by whom (§21).
-- `needsReply`: the threads in this page a person is waiting on. That means the
-  current version, open, with the latest comment that is not a server note
-  written in the browser. Never an agent's comment, so two agents cannot keep
-  answering each other.
-- `state`: the document now. Its version, title, `filedIn`, readers,
-  visibility, expiry, trust, open threads and pending suggestions, whether a
-  draft exists (to editors only, as the app shows it), and what the caller may
-  do.
+- `needsReply`: the threads in this page a person is waiting on. That means the current version, open, with the latest comment that is not a server note written in the browser. Never an agent's comment, so two agents cannot keep answering each other.
+- `state`: the document now. Its version, title, `filedIn`, readers, visibility, expiry, trust, open threads and pending suggestions, whether a draft exists (to editors only, as the app shows it), and what the caller may do.
 
 **Filtering:**
-- **What the caller caused** is left out unless `includeMine`. That means an
-  agent channel and this token: the rules pin a browser write's channel to
-  `web`, so a browser comment signed with an agent's token is still reported.
-- **Audience** follows the gates that exist. Readers see reader events.
-  `isDocEditor` adds editor events: moves, visibility, trust and sharing, as the
-  activity panel and the `acl` log are gated. The owner adds `fork.created`.
+- **What the caller caused** is left out unless `includeMine`. That means an agent channel and this token: the rules pin a browser write's channel to `web`, so a browser comment signed with an agent's token is still reported.
+- **Audience** follows the gates that exist. Readers see reader events. `isDocEditor` adds editor events: moves, visibility, trust and sharing, as the activity panel and the `acl` log are gated. The owner adds `fork.created`.
 
-From a shell, `bikeshed changes <id> --since <cursor|last|all>` reads every page
-and prints the cursor to pass next. `--wait` keeps checking until something
-happens, at most every 30 seconds or `retryAfter`, and exits 3 with the cursor
-when `--timeout` runs out.
+From a shell, `bikeshed changes <id> --since <cursor|last|all>` reads every page and prints the cursor to pass next. `--wait` keeps checking until something happens, at most every 30 seconds or `retryAfter`, and exits 3 with the cursor when `--timeout` runs out.
 
-`get_comments` is what earns the whole surface. Because every annotation stores
-`exact`/`prefix`/`suffix`, a comment comes back **with the passage it is about**,
-so an agent knows what to change without fetching and diffing the document. That
-closes the loop this product exists for.
+`get_comments` is what earns the whole surface. Because every annotation stores `exact`/`prefix`/`suffix`, a comment comes back **with the passage it is about**, so an agent knows what to change without fetching and diffing the document. That closes the loop this product exists for.
 
-Efficiency rules, because agent context is the scarce resource: `get_comments`
-returns, per thread, its id, quote, section, whether it is resolved and whether
-a person awaits a reply, a suggestion's replacement, state and earlier
-revisions, and each comment's id, time, author, channel and body, and nothing
-else; `list_documents` is metadata-only; `get_document` returns **source, never
-rendered HTML with its embedded stylesheet**; responses are capped, and say so.
-`list_documents` pages with a cursor, `list_folders` says `truncated`, and
-`get_comments` returns the 50 oldest threads and says `truncated` when there
-were more; it orders by `createdAt`, the server's clock on every thread (§4),
-through a composite index on `(resolved, createdAt)` that the emulator does not
-demand and production does. A deploy ships the functions before that index
-finishes building, so until it is ready the query reads every thread in order
-and drops the resolved ones itself: the same answer, at more reads. `list_folders` counts each folder's readers and
-names none; `get_folder` names them for the one folder an agent is about to
-file into, because two hundred folders of email addresses would flood the
-context. The source cap
-is 200,000 characters, and `truncated` says when it applied. The CLI does not
-inherit it: its output lands in a file, not a context, so `bikeshed get` reads a
-cut source whole through `/content`, behind the same read checks.
+Efficiency rules, because agent context is the scarce resource: `get_comments` returns, per thread, its id, quote, section, whether it is resolved and whether a person awaits a reply, a suggestion's replacement, state and earlier revisions, and each comment's id, time, author, channel and body, and nothing else; `list_documents` is metadata-only; `get_document` returns **source, never rendered HTML with its embedded stylesheet**; responses are capped, and say so. `list_documents` pages with a cursor, `list_folders` says `truncated`, and `get_comments` returns the 50 oldest threads and says `truncated` when there were more; it orders by `createdAt`, the server's clock on every thread (§4), through a composite index on `(resolved, createdAt)` that the emulator does not demand and production does. A deploy ships the functions before that index finishes building, so until it is ready the query reads every thread in order and drops the resolved ones itself: the same answer, at more reads. `list_folders` counts each folder's readers and names none; `get_folder` names them for the one folder an agent is about to file into, because two hundred folders of email addresses would flood the context. The source cap is 200,000 characters, and `truncated` says when it applied. The CLI does not inherit it: its output lands in a file, not a context, so `bikeshed get` reads a cut source whole through `/content`, behind the same read checks.
 
-There is no anonymous MCP access. Publishing always attributes to a real account
-and stamps `publishedVia: "mcp"`.
+There is no anonymous MCP access. Publishing always attributes to a real account and stamps `publishedVia: "mcp"`.
 
-`list_documents` and `get_document` report `expiresAt`. Owner management tools
-may inspect and change access/settings on expired documents, including clearing
-or extending expiry; content writes remain refused until expiry no longer holds.
-`set_document_visibility` requires at least one of `visibility`, `publicEdit`
-and `expiresAt`; omission preserves a field and null clears expiry. The CLI
-accepts ISO-8601 timestamps with a timezone or `none`. Private disables open
-editing; remaining unlisted preserves the key. This shared operation uses a
-transaction for settings so omitted values come from the current record.
+`list_documents` and `get_document` report `expiresAt`. Owner management tools may inspect and change access/settings on expired documents, including clearing or extending expiry; content writes remain refused until expiry no longer holds. `set_document_visibility` requires at least one of `visibility`, `publicEdit` and `expiresAt`; omission preserves a field and null clears expiry. The CLI accepts ISO-8601 timestamps with a timezone or `none`. Private disables open editing; remaining unlisted preserves the key. This shared operation uses a transaction for settings so omitted values come from the current record.
 
-**The folder tools are an access surface, not a filing surface.** A document's
-effective members are its own grants unioned with its folder's (§13), so moving
-a document between folders changes who can read it. `move_document` therefore
-requires the real editor set (`isDocEditor`) on the document — not open
-editing, which would let any account file someone's document into its own
-folder and become a member — and `canEditFolder` on the destination, and
-goes through `persistDocMembership` so the presence mirror and the public
-projection move with it.
+**The folder tools are an access surface, not a filing surface.** A document's effective members are its own grants unioned with its folder's (§13), so moving a document between folders changes who can read it. `move_document` therefore requires the real editor set (`isDocEditor`) on the document — not open editing, which would let any account file someone's document into its own folder and become a member — and `canEditFolder` on the destination, and goes through `persistDocMembership` so the presence mirror and the public projection move with it.
 
-`list_folders` returns whole paths rather than a tree to walk. An ancestor the
-caller is not a member of renders as `…`: membership cascades downward only, so
-a grant on a child leaves its parent invisible, and neither its id nor its
-omission would be a true answer.
+`list_folders` returns whole paths rather than a tree to walk. An ancestor the caller is not a member of renders as `…`: membership cascades downward only, so a grant on a child leaves its parent invisible, and neither its id nor its omission would be a true answer.
 
-`rename_document` is the workspace list's rename through the same
-`renameDocument` (`lib/rename.ts`) that `POST /organize` calls: `canEdit` with
-no link key, at most 200 characters, `title` and `slug` and nothing else (§4),
-and the public projection follows. Unlike the list it refuses an expired
-document, as every write tool does. A document's own `<title>` is content and
-is not rewritten, so a link preview still shows it (§17).
+`rename_document` is the workspace list's rename through the same `renameDocument` (`lib/rename.ts`) that `POST /organize` calls: `canEdit` with no link key, at most 200 characters, `title` and `slug` and nothing else (§4), and the public projection follows. Unlike the list it refuses an expired document, as every write tool does. A document's own `<title>` is content and is not rewritten, so a link preview still shows it (§17).
 
-Management is available under the same identity and role checks as the web app
-(ADR 0017). The management tools take `id`; access writes take
-`add: [{principal, role}]` and/or `remove: [principal]`. Emails and existing
-`team:<id>` principals use the four existing roles. Access reads/writes return
-`{id, kind, owner, direct, inherited, effective}` plus document visibility,
-publicEdit, expiresAt and its usable URL. They are owner-only; inherited rows
-retain the existing hidden-path and team naming policy. Removing a direct grant
-does not override inheritance. Newly effective readers receive invitations;
-repeating a grant or changing only its role does not send another invitation.
+Management is available under the same identity and role checks as the web app (ADR 0017). The management tools take `id`; access writes take `add: [{principal, role}]` and/or `remove: [principal]`. Emails and existing `team:<id>` principals use the four existing roles. Access reads/writes return `{id, kind, owner, direct, inherited, effective}` plus document visibility, publicEdit, expiresAt and its usable URL. They are owner-only; inherited rows retain the existing hidden-path and team naming policy. Removing a direct grant does not override inheritance. Newly effective readers receive invitations; repeating a grant or changing only its role does not send another invitation.
 
-Renaming a folder requires edit rights on it. Moving a folder or a document requires being its owner, because moving changes who can read it, and edit rights on the destination.
-Deleting a folder is owner-only and moves it to the Trash with everything beneath it, returning `{id, batch, folders, documents}`: how many went. Folder moves and the Trash send no invitations. Nothing is deleted permanently through this surface, and team administration and script trust remain outside it. HTTP and MCP call the same implementation.
+Renaming a folder requires edit rights on it. Moving a folder or a document requires being its owner, because moving changes who can read it, and edit rights on the destination. Deleting a folder is owner-only and moves it to the Trash with everything beneath it, returning `{id, batch, folders, documents}`: how many went. Folder moves and the Trash send no invitations. Nothing is deleted permanently through this surface, and team administration and script trust remain outside it. HTTP and MCP call the same implementation.
 
-**An agent proposes, and decides with its person's role** (ADR 0015). `suggest_edit` takes the passage as a
-reader sees it — no markup — and finds it in the current version's RENDERED
-entry without a DOM (`lib/quote.ts`): exactly, inside one block, with a prefix
-or suffix to choose between repeats. It refuses a passage that is not there,
-that repeats with nothing to tell the copies apart, or that spans a block or a
-line break, each with what to do instead. The anchor it stores is the one the
-browser's strict resolver will find; a fixture of golden cases is asserted by
-both (§22). An agent whose person is the owner or an approver decides a
-suggestion on the current version. `reject_suggestion` is `changeSuggestion`
-exactly as the app's Reject, with the reason in the generated note and the
-caller's actor in `decidedBy`. `accept_suggestion` takes the app's four steps
-— claim, make the change in the draft, save it, record — with the change made
-in the source by `lib/apply.ts` rather than typed into a page (§22), and
-mints no version: `commit_draft` publishes the draft through `commitDraft`, the
-in-app commit's own code, gates and all. Both write to the draft only while
-nobody has the document open in the editor (§6b). The role is checked in the
-tool, because a token never reaches the endpoint's check: `claim`, `accept` and
-`reject` on `/suggestion` refuse a token. `functions/test/suggest-edit.test.js`
-pins the tools whose names close anything to exactly the ones this section
-lists, so a new one cannot arrive unexamined. What an
-agent proposed it may change (`revise_suggestion`) or take back
-(`withdraw_suggestion`) until it is decided — its person's own suggestions, on
-the current version, where every pending one is. Neither erases anything
-(§22). `get_comments` reports
-a suggestion's `replacement`, `state` and `revisions` (each with its `channel` and, when automated, its `via` words, never its token's id); `get_document` reports `canSuggest`;
-and `update_document` from a caller who may only suggest names `suggest_edit`.
+**An agent proposes, and decides with its person's role** (ADR 0015). `suggest_edit` takes the passage as a reader sees it — no markup — and finds it in the current version's RENDERED entry without a DOM (`lib/quote.ts`): exactly, inside one block, with a prefix or suffix to choose between repeats. It refuses a passage that is not there, that repeats with nothing to tell the copies apart, or that spans a block or a line break, each with what to do instead. The anchor it stores is the one the browser's strict resolver will find; a fixture of golden cases is asserted by both (§22). An agent whose person is the owner or an approver decides a suggestion on the current version. `reject_suggestion` is `changeSuggestion` exactly as the app's Reject, with the reason in the generated note and the caller's actor in `decidedBy`. `accept_suggestion` takes the app's four steps — claim, make the change in the draft, save it, record — with the change made in the source by `lib/apply.ts` rather than typed into a page (§22), and mints no version: `commit_draft` publishes the draft through `commitDraft`, the in-app commit's own code, gates and all. Both write to the draft only while nobody has the document open in the editor (§6b). The role is checked in the tool, because a token never reaches the endpoint's check: `claim`, `accept` and `reject` on `/suggestion` refuse a token. `functions/test/suggest-edit.test.js` pins the tools whose names close anything to exactly the ones this section lists, so a new one cannot arrive unexamined. What an agent proposed it may change (`revise_suggestion`) or take back (`withdraw_suggestion`) until it is decided — its person's own suggestions, on the current version, where every pending one is. Neither erases anything (§22). `get_comments` reports a suggestion's `replacement`, `state` and `revisions` (each with its `channel` and, when automated, its `via` words, never its token's id); `get_document` reports `canSuggest`; and `update_document` from a caller who may only suggest names `suggest_edit`.
 
-**An agent raises points as well as answering them.** `add_comment` finds its
-passage exactly as `suggest_edit` does, with the same refusals, and writes the
-annotation and its first comment in one transaction, stamped with the caller's
-actor. The transaction rechecks the current version, read authority and expiry
-after locating the passage. If publication wins, the call refuses the newer
-version rather than opening a thread on a replaced head. Anyone who can read
-a document may comment on it, as in the browser.
-The anchor is stored with `strict: true`, because its offsets mean nothing in
-the page (§6). Nothing caps how many threads an agent opens, as nothing caps a
-person. Like every thread it stays on its version, and it holds back a new
-version saved in the app, but not `update_document`: the comment gate is the
-in-app commit's alone (`lib/review.ts`).
+**An agent raises points as well as answering them.** `add_comment` finds its passage exactly as `suggest_edit` does, with the same refusals, and writes the annotation and its first comment in one transaction, stamped with the caller's actor. The transaction rechecks the current version, read authority and expiry after locating the passage. If publication wins, the call refuses the newer version rather than opening a thread on a replaced head. Anyone who can read a document may comment on it, as in the browser. The anchor is stored with `strict: true`, because its offsets mean nothing in the page (§6). Nothing caps how many threads an agent opens, as nothing caps a person. Like every thread it stays on its version, and it holds back a new version saved in the app, but not `update_document`: the comment gate is the in-app commit's alone (`lib/review.ts`).
 
-**An agent closes what it dealt with** (ADR 0015). `resolve_thread` and
-`reopen_thread` do what any reader does with the panel's button, under the
-same two rules the browser's write is held to: whoever may read the document
-may, and never on a suggestion, which is decided rather than resolved. They act
-on the current version only; an earlier version's threads are the record of
-its review. A token cannot write Firestore, so they go through `lib/threads.ts`
-in a transaction, and unlike the app each change leaves a generated note in the
-thread — "Resolved." or "Reopened." — stamped with the caller's actor. The
-generated note is also the operation's durable retry receipt: a lost transaction
-acknowledgement cannot repeat the decision or overwrite a later opposite
-decision. Resolving hides a point from the person who raised it; the note, and the comment notice
-it sends them (§14), are how they hear an agent closed it, and the panel lets
-them reopen it. A retry that changes nothing writes nothing.
+**An agent closes what it dealt with** (ADR 0015). `resolve_thread` and `reopen_thread` do what any reader does with the panel's button, under the same two rules the browser's write is held to: whoever may read the document may, and never on a suggestion, which is decided rather than resolved. They act on the current version only; an earlier version's threads are the record of its review. A token cannot write Firestore, so they go through `lib/threads.ts` in a transaction, and unlike the app each change leaves a generated note in the thread — "Resolved." or "Reopened." — stamped with the caller's actor. The generated note is also the operation's durable retry receipt: a lost transaction acknowledgement cannot repeat the decision or overwrite a later opposite decision. Resolving hides a point from the person who raised it; the note, and the comment notice it sends them (§14), are how they hear an agent closed it, and the panel lets them reopen it. A retry that changes nothing writes nothing.
 
-One resolver authorizes every "put this inside that folder" in the system —
-`resolveFolderTarget` in `functions/src/lib/folders.ts` — used by `createDoc`,
-`createFolder`, both halves of `organize`, three MCP tools (`publish_document`,
-`create_folder`, `move_document`), and `lib/fork.ts`, which `forkDoc` and
-`fork_document` share. It authorizes with `canEditFolder`, which is the
-question all seven are asking.
+One resolver authorizes every "put this inside that folder" in the system — `resolveFolderTarget` in `functions/src/lib/folders.ts` — used by `createDoc`, `createFolder`, both halves of `organize`, three MCP tools (`publish_document`, `create_folder`, `move_document`), and `lib/fork.ts`, which `forkDoc` and `fork_document` share. It authorizes with `canEditFolder`, which is the question all seven are asking.
 
 ### CLI — `bikeshed`
 
@@ -3105,125 +1360,45 @@ Deliberately distinct from `scripts/*.mjs`:
 | Talks to | Firestore and Storage directly | the deployment over HTTPS |
 | Purpose | provision, withdraw, tear down | publish and revise documents |
 
-Commands: `login`, `logout`, `publish <file>`, `update <slug> <file> [--base <v>]`, `fork <slug>`,
-`lineage <slug>`, `list`,
-`get <slug>`, `comments <slug>`, `changes <slug> --since <cursor|last|all> [--wait]`,
-`comment <slug> <text> --body <text>`, `reply`,
-`resolve <slug> <thread>`, `reopen <slug> <thread>`, `suggest <slug> <text> (--with <text>
-| --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `accept <slug> <thread>`, `reject <slug> <thread>
-[--reason <text>]`, `commit <slug>`, `open <slug>`,
-`folders`, `folder <id>`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`,
-`skills [install <dir>]`, plus `publish --watch`.
-Every command takes `--json`. Successful commands print one JSON result per
-operation; watch mode prints one per publication. Prompts and human notices go
-to stderr. `open --json` returns `{url}` including a supplied link key, while
-both login flows return `{origin, saved, via}` without the token (`via` is
-`browser` or `paste`). `--version` on its own prints the CLI's version,
-read from its own `package.json`, which is also the version its
-`X-Bikeshed-Client` header reports. `comments` prints a suggestion's replacement and
-state under its quote. `suggest` demands exactly one of `--with` and `--delete`:
-an empty `--with` is too easy to send by accident to be the way to ask for a
-deletion.
+Commands: `login`, `logout`, `publish <file>`, `update <slug> <file> [--base <v>]`, `fork <slug>`, `lineage <slug>`, `list`, `get <slug>`, `comments <slug>`, `changes <slug> --since <cursor|last|all> [--wait]`, `comment <slug> <text> --body <text>`, `reply`, `resolve <slug> <thread>`, `reopen <slug> <thread>`, `suggest <slug> <text> (--with <text> | --delete)`, `revise <slug> <thread>`, `withdraw <slug> <thread>`, `accept <slug> <thread>`, `reject <slug> <thread> [--reason <text>]`, `commit <slug>`, `open <slug>`, `folders`, `folder <id>`, `mkdir <name>`, `mv <slug> <folder|root>`, `rename <slug> <title>`, `skills [install <dir>]`, plus `publish --watch`. Every command takes `--json`. Successful commands print one JSON result per operation; watch mode prints one per publication. Prompts and human notices go to stderr. `open --json` returns `{url}` including a supplied link key, while both login flows return `{origin, saved, via}` without the token (`via` is `browser` or `paste`). `--version` on its own prints the CLI's version, read from its own `package.json`, which is also the version its `X-Bikeshed-Client` header reports. `comments` prints a suggestion's replacement and state under its quote. `suggest` demands exactly one of `--with` and `--delete`: an empty `--with` is too easy to send by accident to be the way to ask for a deletion.
 
-`update` sends one `.md` or `.html` through `update_document`, and a `.zip` —
-by name, or by the same magic-byte sniff the deployment uses — as raw bytes to
-`POST /publish?update=`. Read as text, an archive is corrupted on the way.
-`--base <v>` sends the version the file was revised from, as `baseVersion` by
-either path. Either refuses if another version is current, with a 409 that
-names it.
+`update` sends one `.md` or `.html` through `update_document`, and a `.zip` — by name, or by the same magic-byte sniff the deployment uses — as raw bytes to `POST /publish?update=`. Read as text, an archive is corrupted on the way. `--base <v>` sends the version the file was revised from, as `baseVersion` by either path. Either refuses if another version is current, with a 409 that names it.
 
-`publish` prints where it filed the document and who can read it there, from
-the `filedIn` and `access` that `POST /publish` returns. With `--json`, it also
-prints the `cursor` to watch from, as `fork --json` and `get --json` do.
-`folders` counts each folder's readers, and `folder <id>` names them, from
-`get_folder`.
+`publish` prints where it filed the document and who can read it there, from the `filedIn` and `access` that `POST /publish` returns. With `--json`, it also prints the `cursor` to watch from, as `fork --json` and `get --json` do. `folders` counts each folder's readers, and `folder <id>` names them, from `get_folder`.
 
-`changes` reads every page of `get_changes` before printing, and ends with
-`next: --since <cursor>`. `--since` is required. `--wait` checks again every
-`--interval` seconds (at least 30, and at least the server's `retryAfter`) until
-something happens, then exits 0. When `--timeout` runs out it exits 3, and still
-prints the cursor to resume from.
+`changes` reads every page of `get_changes` before printing, and ends with `next: --since <cursor>`. `--since` is required. `--wait` checks again every `--interval` seconds (at least 30, and at least the server's `retryAfter`) until something happens, then exits 0. When `--timeout` runs out it exits 3, and still prints the cursor to resume from.
 
-`publish --id <id>` asks for the docId. When the deployment answers with a
-different one, because the id was taken or because a deployment too old to know
-the parameter ignored it, the CLI says so on stderr, which keeps `--json` output
-parseable.
+`publish --id <id>` asks for the docId. When the deployment answers with a different one, because the id was taken or because a deployment too old to know the parameter ignored it, the CLI says so on stderr, which keeps `--json` output parseable.
 
-`mv` requires its destination and spells the root as the literal word `root`.
-The MCP tool encodes the root as an OMITTED `folder` — JSON-RPC has no empty
-string to send, since `missingArguments` rejects one — but a positional argument
-left off by accident would silently unfile a document and revoke the access its
-folder granted, so the CLI does not accept the omission.
+`mv` requires its destination and spells the root as the literal word `root`. The MCP tool encodes the root as an OMITTED `folder` — JSON-RPC has no empty string to send, since `missingArguments` rejects one — but a positional argument left off by accident would silently unfile a document and revoke the access its folder granted, so the CLI does not accept the omission.
 
 ### Universal agent instructions
 
-`docs/agents/agent-guide.md` is the source of truth. A build step copies it to
-`app/public/llms.txt` byte for byte and **CI asserts the two match**, so hosted
-instructions can never drift from the repo's.
+`docs/agents/agent-guide.md` is the source of truth. A build step copies it to `app/public/llms.txt` byte for byte and **CI asserts the two match**, so hosted instructions can never drift from the repo's.
 
-A second, build-only step stamps the copy in `app/dist`: the token
-`https://<deployment>` becomes the deployment's own origin, resolved
-`BIKESHED_PUBLIC_ORIGIN` → the `domain` in `config/deploy.json` → nothing, in
-which case the placeholder is served as written and the build says so on one
-line. **Only `app/dist` is ever stamped.** That is what keeps `check:agents` a
-byte comparison and keeps a deployment binding out of the tree, where
-`check-secrets.sh` — which matches by shape — could not see a custom domain. A
-`<deployment>` that survives a stamp fails the build, so a placeholder written
-any other way cannot ship unresolved. `/.well-known/mcp.json` advertises the
-endpoint; every URL in it is relative and nothing stamps it.
+A second, build-only step stamps the copy in `app/dist`: the token `https://<deployment>` becomes the deployment's own origin, resolved `BIKESHED_PUBLIC_ORIGIN` → the `domain` in `config/deploy.json` → nothing, in which case the placeholder is served as written and the build says so on one line. **Only `app/dist` is ever stamped.** That is what keeps `check:agents` a byte comparison and keeps a deployment binding out of the tree, where `check-secrets.sh` — which matches by shape — could not see a custom domain. A `<deployment>` that survives a stamp fails the build, so a placeholder written any other way cannot ship unresolved. `/.well-known/mcp.json` advertises the endpoint; every URL in it is relative and nothing stamps it.
 
 ### Management commands
 
-`bikeshed access document <id>` and `bikeshed access folder <id>` inspect access;
-`--add <comma-separated principals> --role <role>` and/or `--remove <principals>`
-change it. Adding requires an explicit role. `bikeshed visibility <id>` reads
-settings; optional `private|unlisted|public`, `--public-edit true|false`, and
-`--expires <ISO timestamp|none>` patch them. `bikeshed visibility folder <id|link>`
-maps to `get_folder_access` and `set_folder_visibility`, and refuses
-`--public-edit`; `visibility document <id>` names a document explicitly.
-`bikeshed folder <link>` passes a folder link's key to `get_folder`.
-`bikeshed rename-folder <id> <name>`,
-`bikeshed move-folder <id> <folder|root>` and `bikeshed delete-folder <id>` map to
-the three folder tools. `bikeshed trash <id|link>` maps to `trash_document`, `bikeshed trash folder <id|link>` to `delete_folder` (as `delete-folder` does), bare `bikeshed trash` to `list_trash`, and `bikeshed restore [folder] <id|link>` to `restore_from_trash` with its `kind`. All support human-readable and `--json` output.
+`bikeshed access document <id>` and `bikeshed access folder <id>` inspect access; `--add <comma-separated principals> --role <role>` and/or `--remove <principals>` change it. Adding requires an explicit role. `bikeshed visibility <id>` reads settings; optional `private|unlisted|public`, `--public-edit true|false`, and `--expires <ISO timestamp|none>` patch them. `bikeshed visibility folder <id|link>` maps to `get_folder_access` and `set_folder_visibility`, and refuses `--public-edit`; `visibility document <id>` names a document explicitly. `bikeshed folder <link>` passes a folder link's key to `get_folder`. `bikeshed rename-folder <id> <name>`, `bikeshed move-folder <id> <folder|root>` and `bikeshed delete-folder <id>` map to the three folder tools. `bikeshed trash <id|link>` maps to `trash_document`, `bikeshed trash folder <id|link>` to `delete_folder` (as `delete-folder` does), bare `bikeshed trash` to `list_trash`, and `bikeshed restore [folder] <id|link>` to `restore_from_trash` with its `kind`. All support human-readable and `--json` output.
 
 ### Skills
 
-`skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter
-carrying `name` and `description`, then Markdown. Four of them —
-`bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders`, `bikeshed-permissions` — one per job the
-surface exists for. `llms.txt` is the short form every agent reads; a skill is
-the long form, loaded for the task that needs it.
+`skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter carrying `name` and `description`, then Markdown. Four of them — `bikeshed-publishing`, `bikeshed-feedback`, `bikeshed-folders`, `bikeshed-permissions` — one per job the surface exists for. `llms.txt` is the short form every agent reads; a skill is the long form, loaded for the task that needs it.
 
-The same build step copies them to `app/public/skills/`, with a generated
-`index.json` built from the frontmatter, and the same stamp reaches the
-`app/dist` copies, so a deployment serves the skills that describe **what that
-deployment can do**, at the address it is actually reachable at. The list of
-files to stamp is derived from the `skills/` directory rather than enumerated,
-so a skill cannot be added or renamed and left unstamped. `bikeshed skills install <dir>` writes
-them wherever a harness reads skills from; it needs no token, because they are
-public files, and it validates each name against `^[a-z0-9][a-z0-9-]*$` before
-it uses it as a directory.
+The same build step copies them to `app/public/skills/`, with a generated `index.json` built from the frontmatter, and the same stamp reaches the `app/dist` copies, so a deployment serves the skills that describe **what that deployment can do**, at the address it is actually reachable at. The list of files to stamp is derived from the `skills/` directory rather than enumerated, so a skill cannot be added or renamed and left unstamped. `bikeshed skills install <dir>` writes them wherever a harness reads skills from; it needs no token, because they are public files, and it validates each name against `^[a-z0-9][a-z0-9-]*$` before it uses it as a directory.
 
-Kept true by `functions/test/skills.test.js` rather than by intention. Every
-`bikeshed …` command and every MCP tool name a skill or the guide mentions must
-exist, **and** every tool and command that exists must be named in the guide —
-the second direction being the one that catches a capability nobody is told
-about. A skill naming an absent command is worse than no skill: an agent
-believes it.
+Kept true by `functions/test/skills.test.js` rather than by intention. Every `bikeshed …` command and every MCP tool name a skill or the guide mentions must exist, **and** every tool and command that exists must be named in the guide — the second direction being the one that catches a capability nobody is told about. A skill naming an absent command is worse than no skill: an agent believes it.
 
 ### Not built
 
-Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these
-endpoints · SDKs in other languages · rate limiting beyond CDN caching · document
-deletion, team administration or script trust through the agent surface.
+Scopes on any credential (§23) · service accounts · webhooks · a REST API distinct from these endpoints · SDKs in other languages · rate limiting beyond CDN caching · document deletion, team administration or script trust through the agent surface.
 
 ---
 
 ## 20. Export marking
 
-Exports carry an optional marking, resolved at **publish/upload time**, not at
-export time — otherwise a reader exporting would apply *their* default, when the
-marking is the owner's policy.
+Exports carry an optional marking, resolved at **publish/upload time**, not at export time — otherwise a reader exporting would apply *their* default, when the marking is the owner's policy.
 
 ```ts
 type Marking = { enabled: boolean; label: string; footer: string };
@@ -3239,61 +1414,27 @@ type Marking = { enabled: boolean; label: string; footer: string };
 
 ### The mechanism
 
-Stamp styles are set **inline with `!important`**. An important inline
-declaration outranks any selector-based author `!important` rule, so hostile
-bundle CSS cannot suppress the locked properties. Hiding vectors are locked — box
-(`display`, `visibility`, `opacity`, `transform`, `scale`, `rotate`, `translate`,
-`offset-path`, `mask-image`, `mix-blend-mode`, `filter`, `clip`, `clip-path`,
-`content-visibility`, `max-height/width`, `overflow`, `zoom`) and text
-(`-webkit-text-fill-color`, `-webkit-text-stroke`, `text-indent`, `text-shadow`,
-`letter-spacing`, `word-spacing`, `white-space`, `text-transform`).
+Stamp styles are set **inline with `!important`**. An important inline declaration outranks any selector-based author `!important` rule, so hostile bundle CSS cannot suppress the locked properties. Hiding vectors are locked — box (`display`, `visibility`, `opacity`, `transform`, `scale`, `rotate`, `translate`, `offset-path`, `mask-image`, `mix-blend-mode`, `filter`, `clip`, `clip-path`, `content-visibility`, `max-height/width`, `overflow`, `zoom`) and text (`-webkit-text-fill-color`, `-webkit-text-stroke`, `text-indent`, `text-shadow`, `letter-spacing`, `word-spacing`, `white-space`, `text-transform`).
 
-Rendering happens in a print iframe sandboxed `allow-same-origin allow-modals`
-with deliberately **no** `allow-scripts`. Generated stamp nodes are manual
-popovers in the top layer: authored `html` or `body` transforms, filters and
-containment cannot move or clip them while leaving the document visible.
-Their `position: fixed` boxes repeat on every page without modifying authored
-ancestor styles. A browser without this placement API refuses a marked export
-with a visible error rather than printing a suppressible stamp. `{year}` is
-computed at export time.
+Rendering happens in a print iframe sandboxed `allow-same-origin allow-modals` with deliberately **no** `allow-scripts`. Generated stamp nodes are manual popovers in the top layer: authored `html` or `body` transforms, filters and containment cannot move or clip them while leaving the document visible. Their `position: fixed` boxes repeat on every page without modifying authored ancestor styles. A browser without this placement API refuses a marked export with a visible error rather than printing a suppressible stamp. `{year}` is computed at export time.
 
-**The export imposes no page geometry.** The document's own `@page` — or,
-absent one, the print dialog — decides size and margins; `@page` cascades by
-order, so a rule of ours would beat the document's and a fixed-size deck would
-spill every slide across two pages. The stamp nodes go **first** in `<body>`:
-anything after a document's final forced page break opens a page of its own,
-and a fixed box is positioned the same wherever it sits.
+**The export imposes no page geometry.** The document's own `@page` — or, absent one, the print dialog — decides size and margins; `@page` cascades by order, so a rule of ours would beat the document's and a fixed-size deck would spill every slide across two pages. The stamp nodes go **first** in `<body>`: anything after a document's final forced page break opens a page of its own, and a fixed box is positioned the same wherever it sits.
 
-**Image exports contain authored content, not the reader's decoration.** SVG
-serialization strips highlight wrappers, suggestion marks and peer overlays
-from a clone. PNG rendering uses an inert copy of the document at the reader's
-viewport, strips the same decoration before computing styles, and leaves the
-reading frame untouched. Ancestors and authored styles remain so the selected
-section or diagram keeps its layout. The owner's marking is then applied to
-the exported SVG or PNG, including for public and unlisted readers.
+**Image exports contain authored content, not the reader's decoration.** SVG serialization strips highlight wrappers, suggestion marks and peer overlays from a clone. PNG rendering uses an inert copy of the document at the reader's viewport, strips the same decoration before computing styles, and leaves the reading frame untouched. Ancestors and authored styles remain so the selected section or diagram keeps its layout. The owner's marking is then applied to the exported SVG or PNG, including for public and unlisted readers.
 
 **Where the export is reached.** The viewer toolbar's **Print** button, just before the More menu. On a phone (≤ 600 px), where the toolbar has no room for it, the More menu's **Print or save as PDF** instead — one or the other, never both, decided by the same width test.
 
 **The browser's print reaches this export.** Cmd+P / Ctrl+P on a document page is routed to it — heard on the frame's window as well as the app's, because the reader's focus is usually inside the document. File → Print fires no event that could be redirected, so the page prints acceptably by itself: the chrome presentation mode hides is hidden on paper, and the frame is opened to its content's full height on `beforeprint` so the document paginates rather than printing as one clipped box, then closed again with the reader's scroll position restored. That path carries **no stamp** and prints what is on screen, highlights included. Where the engine delivers no events from the frame (§6), Cmd+P with focus inside the document is this path too. It grants nothing the reader lacked: the content proxy serves `/content/{docId}/{versionId}/{entry}` inline to anyone who may read it, and "Download the HTML" hands them the file. The marking is a property of the export path, not an access control.
 
-Residual risk, accepted: a bundle could blank its own entire document, yielding
-an empty PDF — self-defeating, no content leaked. A cryptographically guaranteed
-stamp would require server-side rendering; client-side print is the chosen
-trade-off.
+Residual risk, accepted: a bundle could blank its own entire document, yielding an empty PDF — self-defeating, no content leaked. A cryptographically guaranteed stamp would require server-side rendering; client-side print is the chosen trade-off.
 
-Safety: values are written with `textContent`, never `innerHTML`; the footer is
-capped at 300 characters and the label at 40, and control characters are
-stripped. When marking is disabled the stamp nodes are simply absent; every
-other property (sandbox, `<script>` scrub, `on*` scrub, `javascript:` scrub)
-stays unconditional.
+Safety: values are written with `textContent`, never `innerHTML`; the footer is capped at 300 characters and the label at 40, and control characters are stripped. When marking is disabled the stamp nodes are simply absent; every other property (sandbox, `<script>` scrub, `on*` scrub, `javascript:` scrub) stays unconditional.
 
 ---
 
 ## 21. Forks
 
-A fork is a copy of one version of a document the caller can read, made into a
-new document they own, that remembers which document it came from. It replaces
-"duplicate", which made the copy and forgot the origin.
+A fork is a copy of one version of a document the caller can read, made into a new document they own, that remembers which document it came from. It replaces "duplicate", which made the copy and forgot the origin.
 
 ### What a fork is
 
@@ -3306,35 +1447,19 @@ new document they own, that remembers which document it came from. It replaces
 | Its marking | the caller's account default (§20). The source's marking is its owner's policy and does not follow the content |
 | `publishedVia` | `"fork"` on its `v1` |
 
-Everything is written in ONE batch: the fork's record, its `v1`, its
-`forks/{forkDocId}` record, and `stats.forks` incremented on the source. The
-count therefore never disagrees with the forks that exist, and because no
-document is ever deleted (§13) it stays exact.
+Everything is written in ONE batch: the fork's record, its `v1`, its `forks/{forkDocId}` record, and `stats.forks` incremented on the source. The count therefore never disagrees with the forks that exist, and because no document is ever deleted (§13) it stays exact.
 
 ### Where the pointer lives, and why not on the fork
 
-`forks/{forkDocId}` is `{ parentId, parentVersion, parentContentHash, forkedAt }`
-and NO client may read or write it. `docs/{forkDocId}` carries only
-`forked: true`, and the public projection and the `/unlock` answer carry the same
-boolean (§17).
+`forks/{forkDocId}` is `{ parentId, parentVersion, parentContentHash, forkedAt }` and NO client may read or write it. `docs/{forkDocId}` carries only `forked: true`, and the public projection and the `/unlock` answer carry the same boolean (§17).
 
-Every member of a fork reads `docs/{forkDocId}` directly, and a docId is the slug
-of the title its document was first published under. A pointer on the record
-would hand the original's address — and so, near enough, its first title — to
-everybody the fork is later shared with, including people who hold no link to an
-unlisted original. That is precisely what an unlisted link exists to prevent.
-**Reversal condition:** a reader who should see the parent and cannot be told
-any other way — and then the answer is a per-caller endpoint, as here, never a
-field.
+Every member of a fork reads `docs/{forkDocId}` directly, and a docId is the slug of the title its document was first published under. A pointer on the record would hand the original's address — and so, near enough, its first title — to everybody the fork is later shared with, including people who hold no link to an unlisted original. That is precisely what an unlisted link exists to prevent. **Reversal condition:** a reader who should see the parent and cannot be told any other way — and then the answer is a per-caller endpoint, as here, never a field.
 
-`parentContentHash` is recorded beside `parentVersion` because a withdrawn
-version's id is re-minted by the next commit (§4): the id alone can come to name
-different bytes.
+`parentContentHash` is recorded beside `parentVersion` because a withdrawn version's id is re-minted by the next commit (§4): the id alone can come to name different bytes.
 
 ### Lineage, one hop at a time
 
-`POST /fork { op: "lineage", docId, k? }` is gated like a read of `docId`, and
-answers:
+`POST /fork { op: "lineage", docId, k? }` is gated like a read of `docId`, and answers:
 
 ```ts
 { forked: boolean;
@@ -3344,27 +1469,11 @@ answers:
   forks?: { total; hidden; visible: { docId; title; visibility; forkedAt; ownerEmail? }[] } }
 ```
 
-- **The walk stops at the first parent the caller cannot open**, and says so in
-  `hiddenAncestor`. It does not skip past it: that would tell the reader where a
-  document they were never shown came from. Capped at twenty hops. A parent
-  deleted forever stops it too, and says so in `deletedAncestor` instead (§4
-  "Deleted forever"): a tombstone tells nothing but that, which whoever forked
-  it knew existed. `get_lineage` names the two `moreYouCannotOpen` and
-  `moreWasDeleted`. A fork deleted forever takes itself off its original's
-  count.
-- **A key opens only the document it was presented for.** Parents are readable
-  by membership, public visibility, or a link grant the caller already holds.
-- **`ownerEmail`** appears only where the caller is a member of that document,
-  and could read it off the record anyway. A public reader is not told who owns
-  a public original.
-- **`changed`**, on the nearest parent only: its current version's content hash
-  differs from `parentContentHash`. Absent when either hash is unknown, because
-  "unknown" is neither answer.
-- **`forks`** is the OWNER's only. Every fork is counted; the ones the owner can
-  open — `canRead` again, so an unlisted fork only with its grant, an expired
-  one not at all — are listed. The original's owner is never told who made a
-  fork they cannot open. Cost: one query and N reads on demand, no write.
-  Past a few hundred forks a paginated panel is the fix.
+- **The walk stops at the first parent the caller cannot open**, and says so in `hiddenAncestor`. It does not skip past it: that would tell the reader where a document they were never shown came from. Capped at twenty hops. A parent deleted forever stops it too, and says so in `deletedAncestor` instead (§4 "Deleted forever"): a tombstone tells nothing but that, which whoever forked it knew existed. `get_lineage` names the two `moreYouCannotOpen` and `moreWasDeleted`. A fork deleted forever takes itself off its original's count.
+- **A key opens only the document it was presented for.** Parents are readable by membership, public visibility, or a link grant the caller already holds.
+- **`ownerEmail`** appears only where the caller is a member of that document, and could read it off the record anyway. A public reader is not told who owns a public original.
+- **`changed`**, on the nearest parent only: its current version's content hash differs from `parentContentHash`. Absent when either hash is unknown, because "unknown" is neither answer.
+- **`forks`** is the OWNER's only. Every fork is counted; the ones the owner can open — `canRead` again, so an unlisted fork only with its grant, an expired one not at all — are listed. The original's owner is never told who made a fork they cannot open. Cost: one query and N reads on demand, no write. Past a few hundred forks a paginated panel is the fix.
 
 ### Where Fork is offered
 
@@ -3376,27 +1485,19 @@ answers:
 | Signed out | sign in, then the fork completes: the intent travels as `?fork=1` through `/signup?next=`, runs once the document has resolved as the account, and is removed before the request so a reload cannot fork twice. `next` is honoured only as a path on this origin |
 | MCP / CLI | `fork_document`; `bikeshed fork <id|link> [--version] [--folder] [--title]`. Lineage is `get_lineage` and `bikeshed lineage <id|link>`, the same answer as the panel; `list_documents` and `get_document` carry `forked`, and `list_documents` the fork count, off the record |
 
-The viewer shows a fork chip beside the version — "Fork", the owner's count, a
-dot when the original has changed — whose accessible name says all three in
-words. It asks for lineage on its own only for a fork; a document that is not
-one costs no request.
+The viewer shows a fork chip beside the version — "Fork", the owner's count, a dot when the original has changed — whose accessible name says all three in words. It asks for lineage on its own only for a fork; a document that is not one costs no request.
 
 ### What this does not do
 
-- **No sync, no merge, no "propose back".** Merging hand-authored HTML is a
-  subsystem of its own (ADR 0007), not a feature of forking.
-- **Not a guarantee of attribution.** Download and re-upload makes a copy with
-  no lineage. The trace covers the fork path, and says no more than that.
-- **No lineage for copies made before this section.** They keep
-  `publishedVia: "duplicate"` and are neither linked nor counted.
+- **No sync, no merge, no "propose back".** Merging hand-authored HTML is a subsystem of its own (ADR 0007), not a feature of forking.
+- **Not a guarantee of attribution.** Download and re-upload makes a copy with no lineage. The trace covers the fork path, and says no more than that.
+- **No lineage for copies made before this section.** They keep `publishedVia: "duplicate"` and are neither linked nor counted.
 
 ---
 
 ## 22. Suggestions
 
-Somebody who may not edit a document — or may, and would rather ask — proposes
-a change for somebody else to decide on. People and agents alike. The decision
-behind the shape, and what would reverse it, is ADR 0013.
+Somebody who may not edit a document — or may, and would rather ask — proposes a change for somebody else to decide on. People and agents alike. The decision behind the shape, and what would reverse it, is ADR 0013.
 
 ### Who may do what
 
@@ -3410,21 +1511,13 @@ behind the shape, and what would reverse it, is ADR 0013.
 | open editor (§17) | ✓ | ✓ | ✓ | |
 | an agent | its person's | its person's | its person's | its person's (§19) |
 
-Roles are granted and inherited as in §13. The author of a pending suggestion
-may change or withdraw it, in the app or through an agent acting for them;
-changing it needs the right to suggest still, withdrawing it does not.
+Roles are granted and inherited as in §13. The author of a pending suggestion may change or withdraw it, in the app or through an agent acting for them; changing it needs the right to suggest still, withdrawing it does not.
 
 ### What a suggestion is
 
-One **text** replacement inside one block: the quoted text, anchored as a
-comment is (§6), and what it should become. An empty replacement deletes the
-quote, and the one space beside it that would otherwise be left doubled. A
-replacement is one line of text — no line break, control character or
-bidirectional override — because anything else would insert structure when it
-is typed in. Formatting, images and structure cannot be suggested.
+One **text** replacement inside one block: the quoted text, anchored as a comment is (§6), and what it should become. An empty replacement deletes the quote, and the one space beside it that would otherwise be left doubled. A replacement is one line of text — no line break, control character or bidirectional override — because anything else would insert structure when it is typed in. Formatting, images and structure cannot be suggested.
 
-It is stored as an annotation with a `suggestion` field (§4), so it has a
-thread, a highlight, orphan detection and the comment email for free.
+It is stored as an annotation with a `suggestion` field (§4), so it has a thread, a highlight, orphan detection and the comment email for free.
 
 ### Lifecycle
 
@@ -3434,163 +1527,53 @@ pending ──accept──▶ accepted
    └──withdraw────▶ withdrawn
 ```
 
-A **claim** is held by the approver applying it, for two minutes, and keeps
-every other decision and the author's withdrawal off it meanwhile, so two
-approvers cannot insert the same change twice. A lapsed claim is ignored, and
-the approver lets go of theirs at once when nothing could be applied after
-all. A claim and an accept name the replacement being applied, and are
-refused if its author has changed it since: the text put into the draft and
-the text recorded as accepted are always the same.
+A **claim** is held by the approver applying it, for two minutes, and keeps every other decision and the author's withdrawal off it meanwhile, so two approvers cannot insert the same change twice. A lapsed claim is ignored, and the approver lets go of theirs at once when nothing could be applied after all. A claim and an accept name the replacement being applied, and are refused if its author has changed it since: the text put into the draft and the text recorded as accepted are always the same.
 
-**Withdrawing closes, it does not delete.** A withdrawn suggestion keeps its
-quote, its replacement and its whole thread, and is resolved as a decided one
-is, so it stops holding back a new version. What somebody proposed and took
-back is part of the document's record.
+**Withdrawing closes, it does not delete.** A withdrawn suggestion keeps its quote, its replacement and its whole thread, and is resolved as a decided one is, so it stops holding back a new version. What somebody proposed and took back is part of the document's record.
 
-**Accepting is an edit.** The approver's browser finds the quote in the DRAFT —
-exactly, never by fuzzy match — replays the replacement with `execCommand` in
-the approver's own editing session, waits for the draft to save, and only then
-records the decision. So it reaches every co-editor through the shared state
-(§16) like a keystroke, and lands in the draft; publishing it is still "Save as
-new version". A quote that no longer matches exactly is **stale**: shown as
-such, and only rejectable.
+**Accepting is an edit.** The approver's browser finds the quote in the DRAFT — exactly, never by fuzzy match — replays the replacement with `execCommand` in the approver's own editing session, waits for the draft to save, and only then records the decision. So it reaches every co-editor through the shared state (§16) like a keystroke, and lands in the draft; publishing it is still "Save as new version". A quote that no longer matches exactly is **stale**: shown as such, and only rejectable.
 
-**An agent's accept is the same edit, made in the source** (ADR 0015). With no
-page to type into, `lib/apply.ts` finds the quote in the working copy — the
-draft of the current version, else the version — by the browser's own rule,
-but only where BOTH sides of its context agree; replaces exactly the source
-bytes of that text, and only if they hold no markup, escaping the replacement
-as HTML or, for Markdown, as inline Markdown where that is what renders right;
-then reads the result back and keeps it only if its text is the old text with
-that one span replaced, as the browser checks after typing. A deletion takes
-the space it would leave doubled, by the browser's rule. A Markdown quote is
-looked for written out in the source, wrapped lines allowed, and the change is
-kept only if exactly one place renders as asked. Everything else is refused
-with what to do instead, never applied nearby, and a shared fixture
-(`functions/test/fixtures/apply-vectors.json`) is asserted by both sides: the
-server's answer, and where the browser stands on the same text. Because the
-live log wins over the draft when an editor opens (§6b), nothing is written
-while anybody has the editor open, and a log nobody is using is dropped with
-the write. A race remains: somebody opening the editor between that check and
-the write seeds from the older draft (ADR 0015).
+**An agent's accept is the same edit, made in the source** (ADR 0015). With no page to type into, `lib/apply.ts` finds the quote in the working copy — the draft of the current version, else the version — by the browser's own rule, but only where BOTH sides of its context agree; replaces exactly the source bytes of that text, and only if they hold no markup, escaping the replacement as HTML or, for Markdown, as inline Markdown where that is what renders right; then reads the result back and keeps it only if its text is the old text with that one span replaced, as the browser checks after typing. A deletion takes the space it would leave doubled, by the browser's rule. A Markdown quote is looked for written out in the source, wrapped lines allowed, and the change is kept only if exactly one place renders as asked. Everything else is refused with what to do instead, never applied nearby, and a shared fixture (`functions/test/fixtures/apply-vectors.json`) is asserted by both sides: the server's answer, and where the browser stands on the same text. Because the live log wins over the draft when an editor opens (§6b), nothing is written while anybody has the editor open, and a log nobody is using is dropped with the write. A race remains: somebody opening the editor between that check and the write seeds from the older draft (ADR 0015).
 
-**A pending suggestion holds back every new version** (§6a). Only an approver
-clears one, so somebody who can publish but not decide is told who can. The
-hold is asked again inside the transaction that makes a version current, and a
-suggestion is written in one that reads the current version, so one made while
-a version is uploading either holds it back or is refused for the newer one;
-it is never left behind on a version nobody reads.
+**A pending suggestion holds back every new version** (§6a). Only an approver clears one, so somebody who can publish but not decide is told who can. The hold is asked again inside the transaction that makes a version current, and a suggestion is written in one that reads the current version, so one made while a version is uploading either holds it back or is refused for the newer one; it is never left behind on a version nobody reads.
 
-The notes the server writes into a thread — the opener, "Accepted.",
-"Rejected: …", "Withdrawn." — are stamped with the person they speak for, and
-nobody may edit or delete them, that person included.
+The notes the server writes into a thread — the opener, "Accepted.", "Rejected: …", "Withdrawn." — are stamped with the person they speak for, and nobody may edit or delete them, that person included.
 
 Each author may have twenty pending suggestions on one version.
 
 ### Writing one
 
-Select text while reading; the selection toolbar offers **Suggest edit** beside
-Comment to anyone who may suggest, on the published head only, and not once the
-document has expired. An editor reading the draft is offered it too: whoever
-can edit chooses, each time, between proposing a change and making it, and the
-review pass judges a suggestion against that same draft (`offersSuggest`). A
-suggestion quoting text that exists only in the draft reads as stale to
-somebody reading the published version until it is accepted and published. A selection it cannot take — across two paragraphs,
-holding a line break, list, table or image, or inside a figure — is refused on
-press with the reason, not greyed out. The selection is trimmed of edge
-whitespace and anchored as a comment is.
+Select text while reading; the selection toolbar offers **Suggest edit** beside Comment to anyone who may suggest, on the published head only, and not once the document has expired. An editor reading the draft is offered it too: whoever can edit chooses, each time, between proposing a change and making it, and the review pass judges a suggestion against that same draft (`offersSuggest`). A suggestion quoting text that exists only in the draft reads as stale to somebody reading the published version until it is accepted and published. A selection it cannot take — across two paragraphs, holding a line break, list, table or image, or inside a figure — is refused on press with the reason, not greyed out. The selection is trimmed of edge whitespace and anchored as a comment is.
 
-The form floats over the frame, in the parent's DOM: the quote, a field
-prefilled with it (caret at the end), and an optional note. Enter submits;
-Escape cancels; a pasted line break becomes a space; empty suggests deleting
-the text. The thread opens on success. Its author may Edit it, in the panel,
-until it is decided — twenty times at most, after which it must be withdrawn
-and suggested afresh. An edit never overwrites: what it replaced is kept in
-`revisions` (§4), so a change of mind is on the record. A revision's optional
-server-generated `operationId` identifies that single committed change across
-native transaction retries. Lost commit acknowledgements return the original
-creation or revision result without creating another thread, consuming another
-revision slot, overwriting a later revision, or reopening a later decision.
-Legacy history entries without a receipt remain valid.
+The form floats over the frame, in the parent's DOM: the quote, a field prefilled with it (caret at the end), and an optional note. Enter submits; Escape cancels; a pasted line break becomes a space; empty suggests deleting the text. The thread opens on success. Its author may Edit it, in the panel, until it is decided — twenty times at most, after which it must be withdrawn and suggested afresh. An edit never overwrites: what it replaced is kept in `revisions` (§4), so a change of mind is on the record. A revision's optional server-generated `operationId` identifies that single committed change across native transaction retries. Lost commit acknowledgements return the original creation or revision result without creating another thread, consuming another revision slot, overwriting a later revision, or reopening a later decision. Legacy history entries without a receipt remain valid.
 
 ### The review pass
 
-An approver decides suggestions in the editor, because accepting is an edit
-there. **Review** on a thread, or **Review all**, opens the editor on it; a bar
-under the editing toolbar shows the change, who suggested it, and Accept,
-Reject (with an optional reason), Previous, Next and Done. Each suggestion is
-judged against the DRAFT on screen, the text an Accept would change, so one an
-editor has already rewritten shows as stale there. The target is brought into
-view once and marked with the CSS Custom Highlight API through an adopted
-stylesheet — no node and no attribute, so nothing reaches the serializer or the
-CRDT's observer — falling back to selecting it where the API is missing.
-Nothing is judged or marked until the editing session has bound: binding to a
-shared document somebody has already edited replaces the body, and a mark made
-in the nodes it removes collapses to nothing.
+An approver decides suggestions in the editor, because accepting is an edit there. **Review** on a thread, or **Review all**, opens the editor on it; a bar under the editing toolbar shows the change, who suggested it, and Accept, Reject (with an optional reason), Previous, Next and Done. Each suggestion is judged against the DRAFT on screen, the text an Accept would change, so one an editor has already rewritten shows as stale there. The target is brought into view once and marked with the CSS Custom Highlight API through an adopted stylesheet — no node and no attribute, so nothing reaches the serializer or the CRDT's observer — falling back to selecting it where the API is missing. Nothing is judged or marked until the editing session has bound: binding to a shared document somebody has already edited replaces the body, and a mark made in the nodes it removes collapses to nothing.
 
-Accept waits for the editing session to have joined the shared document (an
-edit applied before the bind is lost to it), then runs claim → apply → save
-the draft → record, and claims nothing it can already see is stale. The quote
-and the replacement are found by one rule, the same context either side; where
-one contains the other ("X" becomes "Y, X"), the longer is what stands there.
-The edit is checked by what the text must read afterwards, and one that came
-out otherwise is undone. A failure at any step says which and records nothing,
-and accepting again after an interruption finds the change already made and
-only records it. If the author revised the suggestion before recording,
-the previous edit stays in the draft but is not accepted. The UI identifies
-that saved edit and tells the approver to review or undo it before deciding
-the revised suggestion; it must not promise that retrying a stale suggestion
-will record the old replacement. The bar, and the comments panel in the editor, call stale
-exactly what Accept would refuse, judged again as the draft changes. In the
-editor, the same bar tells anyone who cannot decide that suggestions are
-waiting and who can clear them, which is also why "Save as new version" is
-greyed out.
+Accept waits for the editing session to have joined the shared document (an edit applied before the bind is lost to it), then runs claim → apply → save the draft → record, and claims nothing it can already see is stale. The quote and the replacement are found by one rule, the same context either side; where one contains the other ("X" becomes "Y, X"), the longer is what stands there. The edit is checked by what the text must read afterwards, and one that came out otherwise is undone. A failure at any step says which and records nothing, and accepting again after an interruption finds the change already made and only records it. If the author revised the suggestion before recording, the previous edit stays in the draft but is not accepted. The UI identifies that saved edit and tells the approver to review or undo it before deciding the revised suggestion; it must not promise that retrying a stale suggestion will record the old replacement. The bar, and the comments panel in the editor, call stale exactly what Accept would refuse, judged again as the draft changes. In the editor, the same bar tells anyone who cannot decide that suggestions are waiting and who can clear them, which is also why "Save as new version" is greyed out.
 
-`useSuggestionReview` is declared AFTER `useInlineEditor`, the one viewer hook
-that is: it edits rather than decorates.
+`useSuggestionReview` is declared AFTER `useInlineEditor`, the one viewer hook that is: it edits rather than decorates.
 
 ### Display
 
-A pending suggestion is drawn in the reading frame by the annotation layer, as
-a highlight whose text is struck through, followed by its replacement. The
-replacement is an ATTRIBUTE on the last wrapper (`data-bshd-ins`), shown by the
-injected stylesheet as generated content — never a text node, which would
-change the `textContent` every anchor is measured against, and would survive
-the strip that unwraps highlights into the bytes. Both attributes ride on
-`HL_SELECTOR` wrappers, so the four legs of §6a remove them with no new leg
-(`brand/dom.ts`).
+A pending suggestion is drawn in the reading frame by the annotation layer, as a highlight whose text is struck through, followed by its replacement. The replacement is an ATTRIBUTE on the last wrapper (`data-bshd-ins`), shown by the injected stylesheet as generated content — never a text node, which would change the `textContent` every anchor is measured against, and would survive the strip that unwraps highlights into the bytes. Both attributes ride on `HL_SELECTOR` wrappers, so the four legs of §6a remove them with no new leg (`brand/dom.ts`).
 
-It is drawn only where its quote resolves EXACTLY (`annotation/exact.ts`):
-whitespace normalised, context choosing between repeats, never fuzzy and
-never by position. One that does not is stale — listed, not drawn. A decided
-or withdrawn suggestion is resolved, and like a resolved comment is not drawn.
+It is drawn only where its quote resolves EXACTLY (`annotation/exact.ts`): whitespace normalised, context choosing between repeats, never fuzzy and never by position. One that does not is stale — listed, not drawn. A decided or withdrawn suggestion is resolved, and like a resolved comment is not drawn.
 
-In the panel a suggestion reads as its change — struck, then inserted, and in
-words for a screen reader — with its state, and, once its author has changed
-it, "Changed N times" opening onto what it said before. It has no Resolve
-button. An approver may Reject it, with a reason; its author may Withdraw it.
+In the panel a suggestion reads as its change — struck, then inserted, and in words for a screen reader — with its state, and, once its author has changed it, "Changed N times" opening onto what it said before. It has no Resolve button. An approver may Reject it, with a reason; its author may Withdraw it.
 
 ### Not built
 
-A suggesting mode inside the editor · structural or formatting suggestions ·
-accepting on the server across markup, or on one side of the context ·
-merging a stale suggestion into changed text · carrying a pending suggestion
-to the next version · bulk accept · a per-document "require review" switch.
+A suggesting mode inside the editor · structural or formatting suggestions · accepting on the server across markup, or on one side of the context · merging a stale suggestion into changed text · carrying a pending suggestion to the next version · bulk accept · a per-document "require review" switch.
 
 ---
 
 ## 23. Connecting an app by signing in
 
-Existing connections gain management tools under their existing identity and
-ACL, without reconnection or new scopes. Consent copy must describe sharing,
-invitation emails, visibility/expiry, and folder operations; it must not claim
-these are unavailable. See ADR 0017.
+Existing connections gain management tools under their existing identity and ACL, without reconnection or new scopes. Consent copy must describe sharing, invitation emails, visibility/expiry, and folder operations; it must not claim these are unavailable. See ADR 0017.
 
-An app that speaks MCP connects by its address, `https://<deployment>/mcp`: the
-person pastes it, signs in if they need to, and approves. This deployment is
-the authorization server (OAuth 2.1, the MCP authorization specification). It
-is hand-written in `functions/src/oauth/` with no dependency and no secret (ADR
-0014).
+An app that speaks MCP connects by its address, `https://<deployment>/mcp`: the person pastes it, signs in if they need to, and approves. This deployment is the authorization server (OAuth 2.1, the MCP authorization specification). It is hand-written in `functions/src/oauth/` with no dependency and no secret (ADR 0014).
 
 ### Discovery
 
@@ -3600,37 +1583,17 @@ is hand-written in `functions/src/oauth/` with no dependency and no secret (ADR
 | `/.well-known/oauth-authorization-server` | RFC 8414. The same on every host. `public, max-age=300` |
 | `/.well-known/openid-configuration` | a JSON 404. This is not OpenID Connect |
 
-- **The issuer** is `publicOrigin()`, a string with no trailing slash, compared
-  byte for byte. In the emulator it is the request's own origin.
-- **The host** comes from `X-Forwarded-Host` only when it is one of this
-  deployment's hosts: the configured domain, `<project>.web.app` or
-  `<project>.firebaseapp.com`, computed at runtime. Otherwise the configured
-  host is used. `Host` is never read.
+- **The issuer** is `publicOrigin()`, a string with no trailing slash, compared byte for byte. In the emulator it is the request's own origin.
+- **The host** comes from `X-Forwarded-Host` only when it is one of this deployment's hosts: the configured domain, `<project>.web.app` or `<project>.firebaseapp.com`, computed at runtime. Otherwise the configured host is used. `Host` is never read.
 - **The metadata advertises:**
   - S256 only, and token-endpoint auth `none`
-  - `client_id_metadata_document_supported` and
-    `authorization_response_iss_parameter_supported`
+  - `client_id_metadata_document_supported` and `authorization_response_iss_parameter_supported`
   - no `scopes_supported`
   - only where `BIKESHED_ID_JAG_ISSUERS` names an issuer and `BIKESHED_ID_JAG_DOMAINS` a domain: the jwt-bearer grant in `grant_types_supported`, and `authorization_grant_profiles_supported: ["urn:ietf:params:oauth:grant-profile:id-jag"]` (see "Connected by an organisation")
 
-A refused `/mcp` request answers `401` with
-`WWW-Authenticate: Bearer realm="bikeshed", resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp"`.
-`error="invalid_token"` is added when a credential was presented. Every `/mcp`
-response sets `Access-Control-Expose-Headers: WWW-Authenticate` and
-`private, no-store`.
+A refused `/mcp` request answers `401` with `WWW-Authenticate: Bearer realm="bikeshed", resource_metadata="<origin>/.well-known/oauth-protected-resource/mcp"`. `error="invalid_token"` is added when a credential was presented. Every `/mcp` response sets `Access-Control-Expose-Headers: WWW-Authenticate` and `private, no-store`.
 
-The Node HTTP request-start hook pins these two headers before the runtime's
-listener parses the body, including on the function's direct endpoint. The
-Hosting `/mcp` route retains matching headers as a fallback; Hosting alone does
-not attach them to real-cloud parser failures. The runtime parses `application/json`
-before invoking the function: malformed JSON can therefore produce an HTTP
-`400` with a runtime diagnostic rather than a JSON-RPC envelope, without
-executing a tool. Clients must accept this as a transport error. When a body
-reaches the MCP handler and its parser rejects it, the response is HTTP `400`
-with JSON-RPC error `-32700`, `invalid JSON`. This is a runtime boundary, not a
-second parser or a custom Functions runtime (ADR 0009). Local tests verify the
-emulator and the Hosting configuration; they do not establish production
-header behavior.
+The Node HTTP request-start hook pins these two headers before the runtime's listener parses the body, including on the function's direct endpoint. The Hosting `/mcp` route retains matching headers as a fallback; Hosting alone does not attach them to real-cloud parser failures. The runtime parses `application/json` before invoking the function: malformed JSON can therefore produce an HTTP `400` with a runtime diagnostic rather than a JSON-RPC envelope, without executing a tool. Clients must accept this as a transport error. When a body reaches the MCP handler and its parser rejects it, the response is HTTP `400` with JSON-RPC error `-32700`, `invalid JSON`. This is a runtime boundary, not a second parser or a custom Functions runtime (ADR 0009). Local tests verify the emulator and the Hosting configuration; they do not establish production header behavior.
 
 ### Who is asking
 
@@ -3640,41 +1603,24 @@ header behavior.
 | `bsdcr_…` | **stateless registration** from `POST /oauth/register`: the name and redirect URIs, encoded, unsigned, re-validated on every use | the redirect host first; the name is "chosen by the app, not checked" |
 | `bikeshed-cli` | **built in**; loopback redirects to `127.0.0.1` or `[::1]` only | "Bikeshed's command line", and the device it reports |
 
-- **The metadata fetch** is the one outbound request. It goes over https on
-  443 to a hostname, never an IP literal. The address the socket connects to
-  must be public, which is checked in its own `lookup`. No redirects are
-  followed, the timeout is 5 s, and the body is capped at 16 KB. It runs only
-  from `/oauth/consent`, behind sign-in.
-- **What is validated** is only what is used. A document that requires a
-  client secret is refused; anything else unused is ignored.
-- **Names** lose every control and format character (`\p{Cf}`) before they
-  are shown.
+- **The metadata fetch** is the one outbound request. It goes over https on 443 to a hostname, never an IP literal. The address the socket connects to must be public, which is checked in its own `lookup`. No redirects are followed, the timeout is 5 s, and the body is capped at 16 KB. It runs only from `/oauth/consent`, behind sign-in.
+- **What is validated** is only what is used. A document that requires a client secret is refused; anything else unused is ignored.
+- **Names** lose every control and format character (`\p{Cf}`) before they are shown.
 
-**Redirect URIs** are decided on the parsed scheme, after a printable-ASCII
-check on the raw string:
+**Redirect URIs** are decided on the parsed scheme, after a printable-ASCII check on the raw string:
 - **Allowed:** `https:`; `http:` on a loopback host; an app's own scheme.
-- **Refused:** `javascript`, `data`, `vbscript`, `blob`, `file`, `about` and
-  their kind; fragments; userinfo.
-- **Matching** is exact, except that a loopback redirect matches any port
-  (RFC 8252). `localhost` and `127.0.0.1` are not interchangeable.
+- **Refused:** `javascript`, `data`, `vbscript`, `blob`, `file`, `about` and their kind; fragments; userinfo.
+- **Matching** is exact, except that a loopback redirect matches any port (RFC 8252). `localhost` and `127.0.0.1` are not interchangeable.
 
 ### Consent
 
 `authorization_endpoint` is `/connect`, an app route.
 
-- **The query is captured once, during render,** above the sign-in gate. It is
-  kept in session storage for ten minutes and stripped from the address bar
-  before analytics can read `document.location`.
-- **`POST /oauth/consent {action, params}`** handles three actions:
-  `describe`, `approve` and `deny`.
-  - It authenticates with the signed-in account's **ID token**: never the
-    cookie, which can name a different account from the one on screen, and
-    never a personal token, the same rule as minting at `POST /tokens`.
+- **The query is captured once, during render,** above the sign-in gate. It is kept in session storage for ten minutes and stripped from the address bar before analytics can read `document.location`.
+- **`POST /oauth/consent {action, params}`** handles three actions: `describe`, `approve` and `deny`.
+  - It authenticates with the signed-in account's **ID token**: never the cookie, which can name a different account from the one on screen, and never a personal token, the same rule as minting at `POST /tokens`.
   - It requires a same-origin `Sec-Fetch-Site` or `Origin`, and a JSON body.
-- **Before the client and redirect URI are established**, a failure is shown to
-  the person and nothing is sent anywhere. **After that**, a failure carries a
-  `back` URL, which is followed only when the person presses the button. The
-  page never redirects by itself.
+- **Before the client and redirect URI are established**, a failure is shown to the person and nothing is sent anywhere. **After that**, a failure carries a `back` URL, which is followed only when the person presses the button. The page never redirects by itself.
 - **What the page shows:**
   - who is asking and where the person will be sent back to, as a hostname
   - a warning for a program on this computer
@@ -3682,52 +1628,29 @@ check on the raw string:
   - the account it will act as
 - **What the page refuses:**
   - it does not render inside a frame
-  - Approve stays disabled until the page has had focus for a second and a
-    pointer or key event
-- **Every app-shell entry path sends** `frame-ancestors 'none'` and
-  `X-Frame-Options: DENY`, including case variants, encoded aliases, trailing
-  slashes and unknown paths that the client redirects. An app-shell page can
-  navigate to signup and consent without another Hosting request, so protecting
-  only `/signup` and `/connect` is insufficient. The `/content/**`, `/draft/**`
-  and `/thumb/**` byte routes remain embeddable in the app's iframe (§2).
-- **Approve** writes `oauthCodes/{sha256(code)}`, valid for two minutes. Every
-  authorization response carries `iss` (RFC 9207).
+  - Approve stays disabled until the page has had focus for a second and a pointer or key event
+- **Every app-shell entry path sends** `frame-ancestors 'none'` and `X-Frame-Options: DENY`, including case variants, encoded aliases, trailing slashes and unknown paths that the client redirects. An app-shell page can navigate to signup and consent without another Hosting request, so protecting only `/signup` and `/connect` is insufficient. The `/content/**`, `/draft/**` and `/thumb/**` byte routes remain embeddable in the app's iframe (§2).
+- **Approve** writes `oauthCodes/{sha256(code)}`, valid for two minutes. Every authorization response carries `iss` (RFC 9207).
 
 ### Tokens
 
-A grant is a row in `tokens/` with `kind: "oauth"` and channel `mcp`, mirrored
-to `users/{uid}/tokens/` so the account screen lists it and Revoke ends it.
+A grant is a row in `tokens/` with `kind: "oauth"` and channel `mcp`, mirrored to `users/{uid}/tokens/` so the account screen lists it and Revoke ends it.
 
 | | Shape | Life |
 |---|---|---|
 | access | `bsa_<tokenId>.<secret>` | one hour; `/mcp` only, and only for the resource it was issued for |
 | refresh | `bsr_<tokenId>.<secret>` | rotates on every use; lapses after 90 days unused |
 
-A grant never has a `hash` field, so it cannot pass as a personal token, and
-`resolveCaller` does not know the `bsa_` prefix.
+A grant never has a `hash` field, so it cannot pass as a personal token, and `resolveCaller` does not know the `bsa_` prefix.
 
-`POST /oauth/token` reads the raw form body; a repeated parameter is
-`invalid_request`. JSON is accepted as well. `scope` and `client_assertion` are
-ignored.
+`POST /oauth/token` reads the raw form body; a repeated parameter is `invalid_request`. JSON is accepted as well. `scope` and `client_assertion` are ignored.
 
 - **Code exchange:**
-  - Every check runs before the code is spent: `client_id` and `redirect_uri`,
-    both required (RFC 6749 §4.1.3) and compared exactly, `resource` when
-    sent, and PKCE. A missing one is `invalid_request`. A wrong verifier costs
-    nothing. Until 0.32.0 the client and `redirect_uri` were compared only when
-    sent.
+  - Every check runs before the code is spent: `client_id` and `redirect_uri`, both required (RFC 6749 §4.1.3) and compared exactly, `resource` when sent, and PKCE. A missing one is `invalid_request`. A wrong verifier costs nothing. Until 0.32.0 the client and `redirect_uri` were compared only when sent.
   - The code is spent in the transaction that mints the grant.
-  - A native transaction retry of that same request is not an independent
-    code replay. It acknowledges its own unchanged grant even after the
-    independent replay grace window. If a later request has refreshed or
-    revoked that grant, it refuses the obsolete credentials without revoking
-    the newer grant. Independent code replay retains the revocation rule.
-- **Rotation:** the new secrets are `HMAC(spent secret, nonce‖label)`. A retry
-  of the same spend within 60 s receives the identical pair, so a timeout cannot
-  fork the chain. Outside that window, replaying the previous refresh token or
-  the code revokes the grant.
-- **Revocation requires possession.** A wrong secret for a known `tokenId`
-  changes nothing.
+  - A native transaction retry of that same request is not an independent code replay. It acknowledges its own unchanged grant even after the independent replay grace window. If a later request has refreshed or revoked that grant, it refuses the obsolete credentials without revoking the newer grant. Independent code replay retains the revocation rule.
+- **Rotation:** the new secrets are `HMAC(spent secret, nonce‖label)`. A retry of the same spend within 60 s receives the identical pair, so a timeout cannot fork the chain. Outside that window, replaying the previous refresh token or the code revokes the grant.
+- **Revocation requires possession.** A wrong secret for a known `tokenId` changes nothing.
 - **The gate is re-checked at every refresh:**
   - not disabled
   - `emailVerified`
@@ -3735,8 +1658,7 @@ ignored.
   - `isAllowedEmail`
   - `tokensValidAfterTime` not after the grant was created
 
-  A closed gate revokes the grant. A failed lookup is `500 server_error` and
-  revokes nothing, because a client told `invalid_grant` discards the connection.
+  A closed gate revokes the grant. A failed lookup is `500 server_error` and revokes nothing, because a client told `invalid_grant` discards the connection.
 - **The command line** goes through the same consent and receives an ordinary personal token (channel `cli`, named `CLI on <device>` from the device it reports), with no refresh token. It calls `/publish` and `/content` as well as `/mcp`, and parallel processes would trip reuse detection. Wherever it calls, its actions read as `cli` and `via: "CLI on <device>"` (§17, ADR 0023); an app that signed in reads as `app`, under its registered name.
 
 ### Connected by an organisation
@@ -3802,42 +1724,25 @@ The connection is one row in `tokens/` per (issuer, person, address, client), wi
 
 ### The command line
 
-`bikeshed login` never asks which deployment. It takes `--origin`, then
-`BIKESHED_ORIGIN`, then the saved one, then the default, and names it. Then it:
+`bikeshed login` never asks which deployment. It takes `--origin`, then `BIKESHED_ORIGIN`, then the saved one, then the default, and names it. Then it:
 1. Reads the authorization-server metadata.
 2. Listens on `127.0.0.1` on an ephemeral port.
 3. Opens `/connect` with PKCE, `state` and `device`.
 4. Accepts one `GET /callback` whose `state` and `iss` match.
 5. Exchanges the code and saves the token as before.
 
-`--paste` is the old flow. `CI` set without a flag fails at once. The saved
-config records which of the two produced the token.
+`--paste` is the old flow. `CI` set without a flag fails at once. The saved config records which of the two produced the token.
 
-`bikeshed logout` acts on the saved sign-in only, never `BIKESHED_TOKEN` or
-`--token`, which belong to a shell or a job:
-- A token from browser sign-in exists for this computer alone, so it is revoked
-  with `POST /tokens {op:"revoke"}` under its own bearer. The server revokes the
-  presenting token only: another `tokenId` is `403`, and `create` and `list`
-  stay session-only, because minting with a credential is how a leaked token
-  becomes permanent access, while revoking itself can only shrink it.
-- A pasted token, or one saved before the config recorded which it was, is only
-  deleted: CI may hold the same one. The command says where to revoke it.
-- A `401` from `/tokens` is either a token that already stopped working or a
-  deployment that predates self-revocation. One call to `/mcp` with the same
-  token tells them apart, because the advice differs.
-- The token is deleted whatever the outcome, an unreachable deployment
-  included, and the origin is kept for the next `login`.
+`bikeshed logout` acts on the saved sign-in only, never `BIKESHED_TOKEN` or `--token`, which belong to a shell or a job:
+- A token from browser sign-in exists for this computer alone, so it is revoked with `POST /tokens {op:"revoke"}` under its own bearer. The server revokes the presenting token only: another `tokenId` is `403`, and `create` and `list` stay session-only, because minting with a credential is how a leaked token becomes permanent access, while revoking itself can only shrink it.
+- A pasted token, or one saved before the config recorded which it was, is only deleted: CI may hold the same one. The command says where to revoke it.
+- A `401` from `/tokens` is either a token that already stopped working or a deployment that predates self-revocation. One call to `/mcp` with the same token tells them apart, because the advice differs.
+- The token is deleted whatever the outcome, an unreachable deployment included, and the origin is kept for the next `login`.
 
 ### Skills as downloads
 
-Each skill is also served as `/skills/<name>.zip`, holding `<name>/SKILL.md`.
-This is the shape Claude's skill upload takes. The zip is packed from the
-**stamped** file after the build, stored rather than compressed, and verified
-byte for byte by the predeploy check.
+Each skill is also served as `/skills/<name>.zip`, holding `<name>/SKILL.md`. This is the shape Claude's skill upload takes. The zip is packed from the **stamped** file after the build, stored rather than compressed, and verified byte for byte by the predeploy check.
 
 ### Not built
 
-Scopes · consent remembered across requests · token introspection or
-revocation endpoints (Revoke is the account screen) · `private_key_jwt` client
-authentication · OpenID Connect · a stored client registry · an assertion that
-creates an account or signs in to the web app · tenants · DPoP-bound assertions.
+Scopes · consent remembered across requests · token introspection or revocation endpoints (Revoke is the account screen) · `private_key_jwt` client authentication · OpenID Connect · a stored client registry · an assertion that creates an account or signs in to the web app · tenants · DPoP-bound assertions.

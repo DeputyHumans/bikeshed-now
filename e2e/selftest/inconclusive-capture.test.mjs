@@ -210,5 +210,5 @@ test("README states the INCONCLUSIVE capture and captureUsers", () => {
   for (const s of ["An INCONCLUSIVE keeps every page, as a FAIL does", "`INCONCLUSIVE_CAPTURE_MS` (20 s)", "`CAPTURE_RESERVE_MS` (15 s)", "`captureUsers(ev, users,"]) {
     assert.ok(readme.includes(s), `README lacks ${s}`);
   }
-  assert.ok(!readme.includes("an INCONCLUSIVE case's pages\nare not captured"), "the old sentence is gone");
+  assert.ok(!readme.includes("an INCONCLUSIVE case's pages are not captured"), "the old sentence is gone");
 });

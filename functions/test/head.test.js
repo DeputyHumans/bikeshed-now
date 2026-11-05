@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-const { HEAD_SCAN_BYTES, readHead, titleFromHtml } = require("../lib/lib/head.js");
+const { HEAD_SCAN_BYTES, readBlocks, readHead, titleFromHtml } = require("../lib/lib/head.js");
 
 const CONTENT = join(__dirname, "..", "..", "content");
 
@@ -346,4 +346,50 @@ test("65,536 openers before a whitespace run and a quoted > scan in linear time"
   assert.equal(html.length, HEAD_SCAN_BYTES);
   const ms = timed(() => readHead(html));
   assert.ok(ms < TIME_BUDGET_MS, `took ${ms.toFixed(0)} ms`);
+});
+
+/* ------------------------------------------------------------------------ */
+/* readBlocks: a document's words, for a crawler that runs no JavaScript     */
+
+test("a document's words come block by block, without what a browser never shows as text", () => {
+  const html = doc(
+    "<title>Not body text</title><style>p { color: red }</style>",
+    '<h1>Heading</h1><p>First <em>para</em>graph.</p><nav><a href="/x">Contents</a></nav>' +
+      "<p>Second.<br>Line two.</p><script>alert(1)</script><svg><title>Icon</title></svg><!-- hidden --><template><p>Later</p></template>",
+  );
+  assert.deepEqual(readBlocks(html), ["Heading", "First paragraph.", "Second.", "Line two."]);
+});
+
+test("a block's text is read, not its markup: entities decoded, source lines joined", () => {
+  // Decoded here, and escaped where it lands: the shell is the only place that
+  // writes this out, and it escapes everything it writes.
+  assert.deepEqual(readBlocks(doc("", "<p>a &amp; b &lt;c&gt;</p><p>wrapped\n   across\tlines</p>")), ["a & b <c>", "wrapped across lines"]);
+});
+
+test("a document with no <body> tag still gives its words, and not its title", () => {
+  assert.deepEqual(readBlocks("<!doctype html><title>T</title><p>Words.</p>"), ["Words."]);
+});
+
+test("a document with nothing to read gives nothing", () => {
+  assert.deepEqual(readBlocks(doc("", "<script>build()</script><div></div>  ")), []);
+  assert.deepEqual(readBlocks(""), []);
+});
+
+test("only the part of a document the shell scans is read", () => {
+  const blocks = readBlocks(doc("", `<p>${"a".repeat(HEAD_SCAN_BYTES)}</p><p>Past the end.</p>`));
+  assert.equal(blocks.includes("Past the end."), false);
+  assert.ok(blocks.join("").length <= HEAD_SCAN_BYTES);
+});
+
+test("reading a document's words stays linear on input built to slow it", () => {
+  for (const hostile of ["<a ".repeat(80_000), `<p x="`.repeat(40_000), "<!--".repeat(60_000)]) {
+    assert.ok(timed(() => readBlocks(hostile)) < 1500, "a quadratic walk would take far longer");
+  }
+});
+
+test("the published guide reads as its words", () => {
+  const blocks = readBlocks(readFileSync(join(CONTENT, "docs", "bundle", "index.html"), "utf8"));
+  assert.equal(blocks[2], "How Bikeshed works.");
+  assert.ok(blocks.includes("Anything written for other people to read carefully: a plan, a spec, a report, a deck."));
+  assert.equal(blocks.some((b) => b.includes("font-family") || b.includes("SPDX")), false, "no stylesheet or comment");
 });

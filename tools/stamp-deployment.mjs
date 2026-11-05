@@ -163,6 +163,9 @@ function skillNames(root) {
 export function servedDocuments(root = ROOT) {
   return [
     "llms.txt",
+    // Hand-written, not generated, but it names the deployment: a Sitemap line
+    // has to be absolute, and a crawler reads no other kind.
+    "robots.txt",
     // Generated from the frontmatter, and served. No description carries an
     // address today; one that gained a placeholder would otherwise ship raw.
     "skills/index.json",

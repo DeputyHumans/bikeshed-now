@@ -3,7 +3,11 @@
 #
 # Every push to main or develop runs ci.yml first, as a called workflow, so ci.yml
 # keeps its promise that no CI job holds a credential. Only a push to main goes
-# on to deploy. develop gets CI alone until a staging project exists; the
+# on to deploy, and only when something production serves has changed since the
+# last deploy (tools/deploy-needed.mjs says which paths those are, and why it
+# compares with that and not the previous push). A push of documents gets CI
+# alone, because the secret scan and the guards that read the spec cover them.
+# develop gets CI alone until a staging project exists; the
 # PRODUCTION_ prefix on every secret leaves room for a STAGING_ job beside this
 # one.
 #
@@ -50,10 +54,33 @@ jobs:
     permissions:
       contents: read
 
+  # No credential: the token reads this repository's past runs and nothing else.
+  changes:
+    name: decide whether this push deploys
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      deploy: ${{ steps.decide.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - id: decide
+        name: Compare with the last commit that deployed
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/deploy-needed.mjs
+
   production:
     name: deploy production
-    needs: ci
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true'
+    needs: [ci, changes]
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true' && needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -207,8 +234,10 @@ jobs:
 
   report:
     name: report production outcome
-    needs: [ci, production]
-    if: always() && github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true'
+    needs: [ci, changes, production]
+    # Not on a push that deploys nothing: ops.mjs logs a skipped result as
+    # deployment_failed, and that event raises an alert.
+    if: always() && github.ref == 'refs/heads/main' && vars.DEPLOY_PAUSED != 'true' && needs.changes.outputs.deploy != 'false'
     runs-on: ubuntu-26.04
     permissions:
       contents: read

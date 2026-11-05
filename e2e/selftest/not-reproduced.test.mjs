@@ -372,7 +372,7 @@ test("README states ctx.notReproduced, the outcome, the rates and the exports", 
     "`rateLine(rate)` →",
     "`formatNotReproduced(defect, reason)`",
     "`parseNotReproduced(text)`",
-    "- **A natural race that held but never reached the defect's window is NOT\n  REPRODUCED**",
+    "- **A natural race that held but never reached the defect's window is NOT REPRODUCED**",
     "and NOT REPRODUCED trials, included), 1 when a case failed",
   ]) assert.ok(readme.includes(s), `README lacks ${s}`);
 });

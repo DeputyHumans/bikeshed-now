@@ -156,7 +156,8 @@ test("every skill in the tree is a document that gets stamped", async () => {
     );
   }
   assert.ok(served.includes("skills/index.json"));
-  assert.equal(served.length, readSkills().length + 2);
+  assert.ok(served.includes("robots.txt"));
+  assert.equal(served.length, readSkills().length + 3);
 });
 
 test("every generated file under app/public is one the stamp knows about", () => {
@@ -164,7 +165,7 @@ test("every generated file under app/public is one the stamp knows about", () =>
   // what `build-agents.mjs` actually wrote, so a NEW kind of served document —
   // not just a new skill — cannot appear and go unstamped.
   const publicDir = join(ROOT, "app", "public");
-  const generated = ["llms.txt"];
+  const generated = ["llms.txt", "robots.txt"];
   const walk = (rel) => {
     for (const entry of readdirSync(join(publicDir, rel), { withFileTypes: true })) {
       const next = `${rel}/${entry.name}`;

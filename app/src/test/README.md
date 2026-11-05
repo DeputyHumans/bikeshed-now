@@ -2,8 +2,7 @@
 
 ## What jsdom does not do, and what to do instead
 
-These cost a day each if you find them by debugging. They are listed here so
-nobody has to.
+These cost a day each if you find them by debugging. They are listed here so nobody has to.
 
 | Missing | Consequence | What to do instead |
 |---|---|---|
@@ -15,12 +14,6 @@ nobody has to.
 
 ## What is actually worth testing here
 
-Coverage is enforced on `annotation/`, `export/`, `workspace/`, `brand/` and
-`stats.ts` — the modules where a regression is silent. A bug in a dialog is
-visible the first time somebody opens it; a bug in `serializeCleanHtml`
-publishes corrupted bytes and nobody notices until the document is wrong.
+Coverage is enforced on `annotation/`, `export/`, `workspace/`, `brand/` and `stats.ts` — the modules where a regression is silent. A bug in a dialog is visible the first time somebody opens it; a bug in `serializeCleanHtml` publishes corrupted bytes and nobody notices until the document is wrong.
 
-`viewer/invariant.test.tsx` is the one to read first. It drives the
-reading-to-editing transition on the hard path — where the iframe does NOT
-remount — and asserts that nothing this app injected survives into the bytes
-that would be published.
+`viewer/invariant.test.tsx` is the one to read first. It drives the reading-to-editing transition on the hard path — where the iframe does NOT remount — and asserts that nothing this app injected survives into the bytes that would be published.

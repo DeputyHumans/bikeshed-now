@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Only a signed-out visitor gets the landing page, and only at / (SPEC §7).
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -348,5 +351,33 @@ describe("the landing entry points", () => {
     auth.gate = "signed_out";
     renderAt("/");
     expect(screen.getByText(`Self-hosted. Apache-2.0. v${appPackage.version}.`)).toBeDefined();
+  });
+});
+
+describe("what a crawler reads in place of this page", () => {
+  /** No spaces at all: the heading's second line is a span of its own, with none between. */
+  const squeezed = (text: string | null) => (text ?? "").replace(/\s/g, "");
+  const template = new DOMParser().parseFromString(readFileSync(join(__dirname, "..", "..", "index.html"), "utf8"), "text/html");
+  const block = template.querySelector(".crawler-text");
+
+  it("is inside the element the app replaces", () => {
+    expect(block?.closest("#root")).not.toBeNull();
+  });
+
+  it("says only what the landing page says, so the two cannot drift", () => {
+    auth.gate = "signed_out";
+    const { container } = renderAt("/");
+    const page = squeezed(container.textContent);
+    const sentences = Array.from(block?.querySelectorAll("h1, h2, p") ?? [])
+      .map((el) => el.textContent ?? "")
+      // The landing page's name is its wordmark, an image of it in the header.
+      .filter((text) => text !== "Bikeshed");
+    expect(sentences.length).toBeGreaterThan(5);
+    for (const sentence of sentences) expect(page).toContain(squeezed(sentence));
+  });
+
+  it("links to what a crawler that stops here should read next", () => {
+    const links = Array.from(block?.querySelectorAll("a") ?? []).map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["/docs", "/docs/developers", "/llms.txt", "/terms", "/privacy"]);
   });
 });

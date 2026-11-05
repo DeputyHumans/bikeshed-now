@@ -1,31 +1,18 @@
 # Publishing the terminal client
 
-`cli/` is published to npm as **`bikeshed-now`**, which provides the `bikeshed`
-command. It is the only part of this repository that is published anywhere, and
-it is separate from deploying: a deployment serves documents, the package is how
-somebody reaches one from a terminal — or how an agent installs the skills, since
-`https://<deployment>/llms.txt` tells it to run `npx -y bikeshed-now`.
+`cli/` is published to npm as **`bikeshed-now`**, which provides the `bikeshed` command. It is the only part of this repository that is published anywhere, and it is separate from deploying: a deployment serves documents, the package is how somebody reaches one from a terminal — or how an agent installs the skills, since `https://<deployment>/llms.txt` tells it to run `npx -y bikeshed-now`.
 
-That instruction is served to agents, so the package existing is not optional
-once it has been named.
+That instruction is served to agents, so the package existing is not optional once it has been named.
 
 ## Before you publish
 
-An npm account with 2FA, added to the package as an owner. `npm whoami` should
-answer. Node 24, as everywhere here. Read the file list before running it: a
-published version cannot be taken back (see [Never](#never)).
+An npm account with 2FA, added to the package as an owner. `npm whoami` should answer. Node 24, as everywhere here. Read the file list before running it: a published version cannot be taken back (see [Never](#never)).
 
 ## What ships
 
-Four source files and no dependencies. `files` in `cli/package.json` is an
-allowlist, not an ignore list — nothing is published because somebody forgot to
-exclude it. `prepack` copies `LICENSE` and `NOTICE` in (both gitignored, so the
-tree keeps one copy of each) and `postpack` removes them again.
+Four source files and no dependencies. `files` in `cli/package.json` is an allowlist, not an ignore list — nothing is published because somebody forgot to exclude it. `prepack` copies `LICENSE` and `NOTICE` in (both gitignored, so the tree keeps one copy of each) and `postpack` removes them again.
 
-`cli/test/cli.test.mjs` asserts the package is not private, has no runtime
-dependencies, and still has a README. A dependency is the expensive regression:
-`npx -y bikeshed-now` is in an instruction an agent follows, and one dependency
-turns a one-second bootstrap into a tree resolution.
+`cli/test/cli.test.mjs` asserts the package is not private, has no runtime dependencies, and still has a README. A dependency is the expensive regression: `npx -y bikeshed-now` is in an instruction an agent follows, and one dependency turns a one-second bootstrap into a tree resolution.
 
 ## The recipe
 
@@ -45,35 +32,22 @@ Then, from an empty directory on a machine that has never installed it:
 npx -y bikeshed-now --help
 ```
 
-The package name and the command differ, and npx resolves the sole binary
-regardless — only a published package proves the registry path.
+The package name and the command differ, and npx resolves the sole binary regardless — only a published package proves the registry path.
 
 ## Never
 
-**Never publish from the root.** It is `private` deliberately. A root publish
-would ship the app, the functions, and whatever untracked local files are not
-excluded — including the ones holding the deployment's real configuration.
+**Never publish from the root.** It is `private` deliberately. A root publish would ship the app, the functions, and whatever untracked local files are not excluded — including the ones holding the deployment's real configuration.
 
-**Never unpublish.** npm's removal window exists, but taking a version back
-breaks everyone who already installed it. Publish a patch, and
-`npm deprecate bikeshed-now@<version> "<why, and what to use instead>"`.
+**Never unpublish.** npm's removal window exists, but taking a version back breaks everyone who already installed it. Publish a patch, and `npm deprecate bikeshed-now@<version> "<why, and what to use instead>"`.
 
 ## Versions
 
-Semver, and a `CHANGELOG.md` entry in the same commit. The published version and
-the deployment are independent: an older client talking to a newer deployment is
-the normal case, which is why `bikeshed skills install` fetches the skills from
-the deployment rather than bundling them.
+Semver, and a `CHANGELOG.md` entry in the same commit. The published version and the deployment are independent: an older client talking to a newer deployment is the normal case, which is why `bikeshed skills install` fetches the skills from the deployment rather than bundling them.
 
 `CLIENT_NAME` in `cli/src/client.mjs`, the `X-Bikeshed-Client` value stamped on every request and shown in activity feeds, reads the version from `package.json`, so a bump changes it with nothing else to edit.
 
-`docs/agents/agent-guide.md` names the package, and `functions/test/skills.test.js`
-asserts it matches `cli/package.json`, so a rename fails the build until the guide
-is regenerated with `npm run build:agents`.
+`docs/agents/agent-guide.md` names the package, and `functions/test/skills.test.js` asserts it matches `cli/package.json`, so a rename fails the build until the guide is regenerated with `npm run build:agents`.
 
 ## One thing to know
 
-`cli/src/config.mjs` defaults the origin to the public deployment. Somebody who
-installs the package and runs a command without configuring anything talks to
-that host — deliberate, since it is the deployment the package is named after,
-but worth knowing.
+`cli/src/config.mjs` defaults the origin to the public deployment. Somebody who installs the package and runs a command without configuring anything talks to that host — deliberate, since it is the deployment the package is named after, but worth knowing.

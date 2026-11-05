@@ -1,17 +1,12 @@
 # Contributing
 
-Thanks for looking. This is a small, opinionated codebase that gets most of its
-value from staying small, so the most useful thing you can read before writing
-code is `docs/architecture/overview.md` — in particular the **"What this is not"** list.
+Thanks for looking. This is a small, opinionated codebase that gets most of its value from staying small, so the most useful thing you can read before writing code is `docs/architecture/overview.md` — in particular the **"What this is not"** list.
 
 ## Getting it running
 
-Nothing here requires a Firebase account or a credit card. Everything runs
-against the emulators.
+Nothing here requires a Firebase account or a credit card. Everything runs against the emulators.
 
-You need Node 24 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a
-JRE. The emulators are a Java process rather than a Node one, which is the one
-prerequisite `npm install` cannot hand you.
+You need Node 24 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a JRE. The emulators are a Java process rather than a Node one, which is the one prerequisite `npm install` cannot hand you.
 
 ```bash
 npm run install:all          # root + app + functions + cli
@@ -21,17 +16,13 @@ npm run emulators            # in one terminal — project id is demo-bikeshed
 npm --prefix app run dev     # in another — http://localhost:5173
 ```
 
-`demo-` prefixed project ids are emulator-only: Firebase refuses to point them at
-a real backend, so the quickstart cannot accidentally write to production.
+`demo-` prefixed project ids are emulator-only: Firebase refuses to point them at a real backend, so the quickstart cannot accidentally write to production.
 
 The app connects to the emulators when `VITE_USE_EMULATORS=1` is set, which is what that copied file does.
 
 ## The verification table
 
-A change is done when every row passes **with output shown**. `npm run verify`
-runs every row except 5, which needs the emulators — use
-`npm run test:rules:emulated`, which starts them — 6, which you run by hand,
-and 14, the opt-in end-to-end suite, which neither `verify` nor CI runs.
+A change is done when every row passes **with output shown**. `npm run verify` runs every row except 5, which needs the emulators — use `npm run test:rules:emulated`, which starts them — 6, which you run by hand, and 14, the opt-in end-to-end suite, which neither `verify` nor CI runs.
 
 | # | Command | Pass condition |
 |---|---|---|
@@ -50,68 +41,31 @@ and 14, the opt-in end-to-end suite, which neither `verify` nor CI runs.
 | 13 | `npm --prefix cli test` | 0 failing |
 | 14 | `npm run test:e2e -- --self-test`, then `npm run test:e2e -- run --suite smoke` | opt-in, for a change the walkthrough below covers: 0 failing, then exit 0 |
 
-**Every command in every document in this repository is copy-pasteable and is
-expected to work.** A document is wrong if a command in it fails; that is a bug
-worth reporting on its own.
+**Every command in every document in this repository is copy-pasteable and is expected to work.** A document is wrong if a command in it fails; that is a bug worth reporting on its own.
 
-The table above proves the code is self-consistent. It does not prove the
-product works — the properties that matter most here are integration ones. For
-those, walk `docs/development/verification.md` against the emulators. It is nineteen
-observations, it needs no cloud account, and it is where four real defects were
-found that no unit test could have caught.
+The table above proves the code is self-consistent. It does not prove the product works — the properties that matter most here are integration ones. For those, walk `docs/development/verification.md` against the emulators. It is nineteen observations, it needs no cloud account, and it is where four real defects were found that no unit test could have caught.
 
-Most of that walkthrough also runs by itself, as row 14. `npm run test:e2e`
-builds a copy of the product from the tree, starts it on its own ports with
-its own emulators and mail catcher, and drives it with real browsers, MCP and
-the CLI. It is opt-in because a run takes minutes and gigabytes, and needs
-Java, Mailpit and system Chrome. Run it when a change touches what the
-walkthrough covers: the editor and live editing, sharing, publishing and
-versions, MCP, the CLI, OAuth or email. Then run the specs for that area
-against a kept stack. The verification doc's **Automated** section maps each
-walkthrough step to its specs, and [`e2e/README.md`](e2e/README.md) is the
-guide, including what the suite does not yet prove.
+Most of that walkthrough also runs by itself, as row 14. `npm run test:e2e` builds a copy of the product from the tree, starts it on its own ports with its own emulators and mail catcher, and drives it with real browsers, MCP and the CLI. It is opt-in because a run takes minutes and gigabytes, and needs Java, Mailpit and system Chrome. Run it when a change touches what the walkthrough covers: the editor and live editing, sharing, publishing and versions, MCP, the CLI, OAuth or email. Then run the specs for that area against a kept stack. The verification doc's **Automated** section maps each walkthrough step to its specs, and [`e2e/README.md`](e2e/README.md) is the guide, including what the suite does not yet prove.
 
 ## House rules
 
 These are the ones that actually get enforced in review.
 
-1. **`docs/architecture/spec.md` is normative.** It supersedes prose anywhere else, including
-   the README. If your change contradicts it, change the spec in the same pull
-   request and say why. Section numbers are a public API: append, never renumber.
-2. **One owner per concern.** Every shared identifier, token and constant has
-   exactly one defining module — `app/src/brand/dom.ts`,
-   `app/src/brand/tokens.ts`, `config/access-policy.json`,
-   `scripts/lib/endpoints.mjs`, `functions/src/config.ts`. A literal living in
-   two files is how this kind of codebase rots.
-3. **No abstraction before the second call site.** Extract a helper when two
-   places need it, not when one place might.
-4. **Duplication across runtimes is allowed, and is then tested into agreement.**
-   The ESM/CommonJS twins (`hash`, `membership`, `policy`, `transaction-receipts`) are duplicated on
-   purpose and pinned by parity tests. That is cheaper and safer than a shared
-   build artifact.
-5. **New concepts must justify themselves against an existing one.** Markdown
-   reuses the trust model; email verification reuses Firebase's `emailVerified`;
-   the email cooldown reuses the user record. Three chances to invent a
-   subsystem, three declined.
-6. **Failure of a non-essential subsystem never fails the request.** Presence,
-   email and stats are try/catch-and-continue. Access control never is.
-7. **Dependencies have a budget**: 8 runtime deps in `app/`, which is at 8, and 10 in
-   `functions/`, plus the four lazily imported inside the email path only.
-   `functions/` currently sits at nine, one under. Anything beyond the budget
-   needs a written justification in the pull request, not a line in
-   `package.json`. `npm run check:licenses` separately hard-fails on anything
-   outside the permissive allowlist.
-8. **Every non-obvious constant carries its reason inline.** `OPEN_DELAY_MS`
-   exists both to ignore mis-clicks *and* to survive StrictMode's double mount —
-   that sentence is worth more than the name.
+1. **`docs/architecture/spec.md` is normative.** It supersedes prose anywhere else, including the README. If your change contradicts it, change the spec in the same pull request and say why. Section numbers are a public API: append, never renumber.
+2. **One owner per concern.** Every shared identifier, token and constant has exactly one defining module — `app/src/brand/dom.ts`, `app/src/brand/tokens.ts`, `config/access-policy.json`, `scripts/lib/endpoints.mjs`, `functions/src/config.ts`. A literal living in two files is how this kind of codebase rots.
+3. **No abstraction before the second call site.** Extract a helper when two places need it, not when one place might.
+4. **Duplication across runtimes is allowed, and is then tested into agreement.** The ESM/CommonJS twins (`hash`, `membership`, `policy`, `transaction-receipts`) are duplicated on purpose and pinned by parity tests. That is cheaper and safer than a shared build artifact.
+5. **New concepts must justify themselves against an existing one.** Markdown reuses the trust model; email verification reuses Firebase's `emailVerified`; the email cooldown reuses the user record. Three chances to invent a subsystem, three declined.
+6. **Failure of a non-essential subsystem never fails the request.** Presence, email and stats are try/catch-and-continue. Access control never is.
+7. **Dependencies have a budget**: 8 runtime deps in `app/`, which is at 8, and 10 in `functions/`, plus the four lazily imported inside the email path only. `functions/` currently sits at nine, one under. Anything beyond the budget needs a written justification in the pull request, not a line in `package.json`. `npm run check:licenses` separately hard-fails on anything outside the permissive allowlist.
+8. **Every non-obvious constant carries its reason inline.** `OPEN_DELAY_MS` exists both to ignore mis-clicks *and* to survive StrictMode's double mount — that sentence is worth more than the name.
+9. **Prose is not hard-wrapped.** In Markdown, a paragraph or a list item is one line, and only a blank line separates paragraphs. The same goes for commit bodies, release notes and pull request text. Code blocks and tables keep their own lines. `docs/acf/` follows its upstream, and `functions/test/fixtures/markdown/` and `content/markdown-reference/` stay wrapped on purpose, because they exercise the join.
 
 ## Commits
 
-Conventional commits: `type(scope): imperative subject`, lower case, no trailing
-period, 50 characters or fewer.
+Conventional commits: `type(scope): imperative subject`, lower case, no trailing period, 50 characters or fewer.
 
-Stage explicit paths. `git add -A` and `git add .` are not used here — they are
-how a stray local file or a credential ends up in history.
+Stage explicit paths. `git add -A` and `git add .` are not used here — they are how a stray local file or a credential ends up in history.
 
 Keep commits atomic: one change, and the project builds after each one.
 
@@ -123,29 +77,19 @@ Keep commits atomic: one change, and the project builds after each one.
 
 ## Security rules
 
-`firestore.rules` and `database.rules.json` are **generated** from
-`config/access-policy.json`. Never hand-edit them; edit the source or the
-template in `config/templates/` and run `npm run build:policy`. CI byte-compares.
+`firestore.rules` and `database.rules.json` are **generated** from `config/access-policy.json`. Never hand-edit them; edit the source or the template in `config/templates/` and run `npm run build:policy`. CI byte-compares.
 
-Every positive rules assertion needs an explicit negative beside it. A rules
-suite where every test passes because the rule never fires is worse than no
-suite, because it looks like coverage.
+Every positive rules assertion needs an explicit negative beside it. A rules suite where every test passes because the rule never fires is worse than no suite, because it looks like coverage.
 
-What a browser writes is listed field by field (`isExactly`) and dated by the
-server (`request.time`). A field added to an annotation or comment in
-`app/src/firestore.ts` must be added to that list in the same change.
-`app/src/firestore.test.ts` fails until it is, because the app's own tests mock
-Firestore and would otherwise pass while production refused every comment.
+What a browser writes is listed field by field (`isExactly`) and dated by the server (`request.time`). A field added to an annotation or comment in `app/src/firestore.ts` must be added to that list in the same change. `app/src/firestore.test.ts` fails until it is, because the app's own tests mock Firestore and would otherwise pass while production refused every comment.
 
 ## Reporting a vulnerability
 
-See `SECURITY.md`. Please do not open a public issue for anything that lets
-someone read a document they should not.
+See `SECURITY.md`. Please do not open a public issue for anything that lets someone read a document they should not.
 
 ## Licensing
 
-By contributing you agree your contribution is licensed under Apache-2.0, the
-same terms as the project. Add an SPDX header to every new source file:
+By contributing you agree your contribution is licensed under Apache-2.0, the same terms as the project. Add an SPDX header to every new source file:
 
 ```
 // SPDX-License-Identifier: Apache-2.0

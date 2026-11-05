@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+# What crawlers are asked to read, for every bot alike (SPEC §2).
+#
+# Everything public is open to every crawler, AI search and AI training
+# alike. This file is a request, not a lock: the server decides who can read a
+# document, and a private one is never served to a crawler.
+#
+# One group on purpose. A bot with a group of its own ignores this one, so
+# naming a bot here would silently drop every rule below for it.
+#
+# Agents: https://<deployment>/llms.txt
+
+User-agent: *
+
+# Signed-in pages, and sign-up links that differ only in where they lead back to.
+Disallow: /account
+Disallow: /connect
+Disallow: /everything
+Disallow: /shared
+Disallow: /signup
+Disallow: /trash
+
+# Earlier versions, so an answer does not quote what has since been revised.
+Disallow: /d/*/
+# A keyed link stays open: a crawler has to fetch it to see its noindex.
+Allow: /d/*/*?k=
+
+# A function call each, with nothing to read.
+Disallow: /download/
+Disallow: /thumb/
+
+# Reader activity, which a crawler that renders the page would otherwise add to.
+Disallow: /activity
+Disallow: /view
+
+# One-time links from email.
+Disallow: /verify/
+
+Sitemap: https://<deployment>/sitemap.xml

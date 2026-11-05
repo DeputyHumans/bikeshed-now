@@ -41,11 +41,8 @@ const PAIRS = [
     source: "CLAUDE.md",
     target: "AGENTS.md",
     banner:
-      "<!-- GENERATED from CLAUDE.md by tools/build-agents.mjs — DO NOT EDIT.\n" +
-      "     Edit CLAUDE.md and run `npm run build:agents`.\n\n" +
-      "     This file exists because AGENTS.md is the cross-tool convention, and\n" +
-      "     an agent that reads it should get exactly what Claude Code reads,\n" +
-      "     not a paraphrase that fell behind. -->\n\n",
+      "<!-- GENERATED from CLAUDE.md by tools/build-agents.mjs — DO NOT EDIT. Edit CLAUDE.md and run `npm run build:agents`.\n\n" +
+      "     This file exists because AGENTS.md is the cross-tool convention, and an agent that reads it should get exactly what Claude Code reads, not a paraphrase that fell behind. -->\n\n",
   },
   {
     source: "docs/agents/agent-guide.md",

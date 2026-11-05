@@ -1,13 +1,8 @@
 # Architecture decision records
 
-Twenty-six decisions that a newcomer would otherwise re-argue in a pull request, each
-about thirty lines: what was decided, what it costs, and what would make it
-wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Twenty-seven decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
-They are **historical records, not documentation**. `docs/architecture/spec.md` is normative
-and wins over anything here. When a decision is reversed, the ADR is marked
-superseded rather than edited — the point is to preserve the reasoning that was
-actually available at the time.
+They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
 Number 0022 is unused: it was set aside for a decision that has not been made.
 
@@ -39,12 +34,10 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0025](0025-the-trash-empties-on-one-daily-job.md) | The Trash empties on one daily job, or sooner with an emailed code | Accepted |
 | [0026](0026-an-organisation-may-connect-its-people.md) | An organisation's issuer may connect its people's apps, if the deployment trusts it | Accepted |
 | [0027](0027-a-reader-lists-their-own-reading.md) | A reader lists their own reading, across documents | Accepted |
+| [0028](0028-what-a-crawler-can-read.md) | What a crawler can read | Accepted |
 
 ## Format
 
-**Context** — what forced a choice. **Decision** — what was chosen, stated so it
-can be checked against the code. **Consequences** — including the bad ones.
-**What would change this** — the observation that should make somebody reopen it.
+**Context** — what forced a choice. **Decision** — what was chosen, stated so it can be checked against the code. **Consequences** — including the bad ones. **What would change this** — the observation that should make somebody reopen it.
 
-That last section is the one that matters. A decision with no stated reversal
-condition is a decision nobody can ever revisit honestly.
+That last section is the one that matters. A decision with no stated reversal condition is a decision nobody can ever revisit honestly.
