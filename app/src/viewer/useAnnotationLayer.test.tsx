@@ -79,7 +79,8 @@ function scrolledTo(): Element | undefined {
 interface Props {
   selectedId: string | null;
   annotations: Annotation[];
-}
+    frameShown?: boolean;
+  }
 
 function mount(doc: Document) {
   const annotations = [
@@ -96,6 +97,7 @@ function mount(doc: Document) {
         epoch: 1,
         annotations: props.annotations,
         selectedId: props.selectedId,
+        frameShown: props.frameShown,
         onSelect,
       }),
     { initialProps },
@@ -141,6 +143,20 @@ describe("selecting a thread", () => {
       annotations: [...annotations, annotation("a3", "s2", "further down")],
     });
     expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a3");
+  });
+
+  it("waits for a hidden frame to come back, rather than using the jump up on nothing", () => {
+    // In one column the comments pane hides the frame, whose box then measures zero,
+    // so every passage looks in view. The reader tapped a thread and then Document,
+    // and landed nowhere near it.
+    const doc = makeDoc();
+    const { rerender, annotations } = mount(doc);
+    rerender({ selectedId: "a2", annotations, frameShown: false });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    rerender({ selectedId: "a2", annotations, frameShown: true });
+    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a2");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
   it("does not move a passage that is already in view", () => {

@@ -131,6 +131,31 @@ describe("the two rows on a phone", () => {
   });
 });
 
+/**
+ * The docked selection bar and the suggestion sheet are what the reader is using at
+ * that moment, so nothing may lie over them; and iOS draws its keyboard over the page
+ * without moving anything, so a form anchored to the bottom would open behind it.
+ */
+describe("selecting on a touch screen", () => {
+  const stripped = VIEWER_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+  const zOf = (css: string, selector: string) =>
+    Number(css.match(new RegExp(`${selector.replace(".", "\\.")}\\s*\\{[^}]*z-index:\\s*(\\d+)`))?.[1]);
+  const CONSENT_CSS = readFileSync(join(__dirname, "consent.css"), "utf8");
+
+  it("draws the dock and the sheet above the consent card", () => {
+    const consent = zOf(CONSENT_CSS, ".consent");
+    expect(consent).toBeGreaterThan(0);
+    expect(zOf(stripped, ".selection-dock")).toBeGreaterThan(consent);
+    expect(zOf(stripped, ".suggest-sheet")).toBeGreaterThan(consent);
+  });
+
+  it("opens the suggestion sheet at the top, clear of the keyboard", () => {
+    const sheet = stripped.match(/\.suggest-sheet\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(sheet).toMatch(/top:/);
+    expect(sheet).not.toMatch(/bottom:/);
+  });
+});
+
 describe("printing the page", () => {
   const printBlock = mediaBlock("print");
 

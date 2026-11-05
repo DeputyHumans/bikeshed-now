@@ -462,6 +462,7 @@ export function Sidebar({
   onSelect,
   onComposing,
   onSignIn,
+  selectionKept = false,
   onClose,
   onReview,
 }: {
@@ -483,6 +484,8 @@ export function Sidebar({
   onSelect: (annId: string | null) => void;
   onComposing: (threadId: string | null) => void;
   onSignIn: () => void;
+  /** A passage is waiting on the sign-in, so the prompt can promise to keep it. */
+  selectionKept?: boolean;
   onClose: () => void;
   /** Open the approver's review pass, on one suggestion or from the first. */
   onReview?: (annId?: string) => void;
@@ -509,7 +512,7 @@ export function Sidebar({
         >
           {showResolved ? "Hide resolved" : "Show resolved"}
         </button>
-        <button type="button" className="icon-btn" aria-label="Close comments" onClick={onClose}>
+        <button type="button" className="icon-btn comments-close" aria-label="Close comments" onClick={onClose}>
           <Icon name="close" />
         </button>
       </div>
@@ -561,10 +564,11 @@ export function Sidebar({
 
       {!readOnly && !signedIn ? (
         <div className="signin-to-comment">
-          {/* The selection is preserved across this prompt, and the comment
-              posts afterwards. A "sign in to comment" that loses what you
-              highlighted is where the feature dies (SPEC §17). */}
-          <strong>Sign in to comment.</strong> Your selection is kept.
+          {/* The passage is kept across signing in, and the comment posts
+              afterwards. A "sign in to comment" that loses what you highlighted
+              is where the feature dies (SPEC §3, §17). */}
+          <strong>Sign in to comment.</strong>
+          {selectionKept ? " Your selection is kept." : null}
           <div style={{ marginTop: "var(--s-2)" }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={onSignIn}>
               Sign in

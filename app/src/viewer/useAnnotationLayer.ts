@@ -39,9 +39,11 @@ export function useAnnotationLayer(options: {
   epoch: number;
   annotations: Annotation[];
   selectedId: string | null;
+  /** False while something hides the frame, as the comments pane does in one column. */
+  frameShown?: boolean;
   onSelect: (annId: string) => void;
 }): { orphaned: string[]; stale: string[] } {
-  const { mode, doc, epoch, annotations, selectedId, onSelect } = options;
+  const { mode, doc, epoch, annotations, selectedId, frameShown = true, onSelect } = options;
   const enabled = mode.kind === "reading";
   const [orphaned, setOrphaned] = useState<string[]>([]);
   const [stale, setStale] = useState<string[]>([]);
@@ -129,7 +131,9 @@ export function useAnnotationLayer(options: {
       scrolledTo.current = null;
       return;
     }
-    if (!enabled || !doc || scrolledTo.current === selectedId) return;
+    // Not while the frame is hidden. Its box measures zero, so every passage looks
+    // in view and the jump would be used up; this waits for the frame to come back.
+    if (!enabled || !doc || !frameShown || scrolledTo.current === selectedId) return;
     const wrapper = Array.from(doc.querySelectorAll(HL_SELECTOR)).find(
       (el) => el.getAttribute(ANN_ATTR) === selectedId,
     );
@@ -137,7 +141,7 @@ export function useAnnotationLayer(options: {
     scrolledTo.current = selectedId;
     if (inView(wrapper)) return;
     wrapper.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
-  }, [enabled, doc, epoch, selectedId, annotations, reduceMotion]);
+  }, [enabled, doc, frameShown, epoch, selectedId, annotations, reduceMotion]);
 
   return { orphaned, stale };
 }

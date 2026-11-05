@@ -53,9 +53,8 @@
 
 .consent {
   position: fixed;
-  /* env() is inert until app/index.html gains `viewport-fit=cover`, and it is
-     NOT what was cropping the card. It is here so that adding viewport-fit
-     later cannot drop these buttons under an iPhone home indicator. */
+  /* Zero in portrait, where Safari's own toolbar sits below the page, and the home
+     indicator's height on its side. It is NOT what was cropping the card. */
   inset-block-end: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
   inset-inline-end: var(--s-3);
   z-index: 42;

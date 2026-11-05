@@ -518,7 +518,7 @@ const phoneWalk = sharedMeasurement("A24.1 at 400×800 on a touch phone, 11 scre
     await phone.done();
 
     await openDoc(ctx, phone, deckId);
-    await visit(phone, "deck", { ready: css(phone, ".slide-rail", "the slide rail"), primary: [btn(phone, "Slides"), paneToggle(phone, "Comments"), btn(phone, "Present")] });
+    await visit(phone, "deck", { ready: btn(phone, "Slides"), primary: [btn(phone, "Slides"), paneToggle(phone, "Comments"), btn(phone, "Present")] });
   } catch (err) {
     stopped = err;
     ctx.step(`the walk stopped after ${surfaces.at(-1)?.name ?? "no surface"}: ${String(err?.message ?? err).split("\n")[0]}`);

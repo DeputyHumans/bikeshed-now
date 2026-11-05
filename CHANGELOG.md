@@ -41,6 +41,28 @@ save mints a new version. `docs/operations/overview.md` says how to plan one.
 - **A link no longer loses letters with no sign of it on a touch screen**: "Everything" read "Everythi". Cut links now end in an ellipsis, and a breadcrumb's first folder stays whole.
 - **A long ⋮ menu stays on the screen and scrolls inside itself**, a tap on the document closes it, and a menu in the header no longer opens lower by however far the page has scrolled.
 
+## Unreleased
+
+### Added
+
+- **A comment started signed out now survives signing in.** The panel always said "Your selection is kept", and it never was: signing in left the page and landed on the workspace. The passage is kept in the tab, never the URL, and you come back to the document with your thread on it.
+
+### Changed
+
+- **On a phone the header is the wordmark and one menu**, which holds your address, Account, Docs and Sign out, or Docs and Sign in. It only shrank at 400 px, and an iPhone Pro is 402.
+- **A deck opens on its slide on a phone.** The slide list used to start open, covering it. Picking a slide or tapping beside the list closes it, and so does going to a folder from the folder list.
+- **The suggestion form opens at the top on a touch screen**, because the iOS keyboard opens over the bottom of the page without moving it. The form and the docked selection buttons also lie above the consent card now.
+- **Details says when a document expires**, because a phone's toolbar has no room for the chip.
+
+### Fixed
+
+- **The wordmark no longer lies over the links beside it, and the logo no longer disappears.** A row short of room took its width out of icons first, down to nothing, and on touch screens the link's underline reached the wordmark. Icons keep their size in a row everywhere now.
+- **iOS no longer zooms the page when you tap a text field.** Fields were under the 16 px where it does; on touch screens they are 16 px now, and pinch zoom still works.
+- **A link no longer loses letters with no sign of it on a touch screen**: "Everything" read "Everythi". Cut links now end in an ellipsis, and a breadcrumb's first folder stays whole.
+- **Closing the comments panel on a phone no longer leaves a blank screen.** The close button is gone in one column, where the Document half of the toggle already does it.
+- **A long ⋮ menu stays on the screen and scrolls inside itself**, a tap on the document closes it, and a menu in the header no longer opens lower by however far the page has scrolled.
+- **Tapping a thread and then Document lands on its passage.** The jump was being used up while the frame was hidden.
+
 ## 0.33.1 — 2026-11-04
 
 ### Security

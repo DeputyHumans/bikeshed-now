@@ -20,6 +20,7 @@ import { useCoarsePointer, useIsCondensed, useIsSingleColumn } from "../hooks/us
 import { useDocument } from "../viewer/useDocument";
 import { useDocumentTitle } from "../viewer/useDocumentTitle";
 import { useDocFrame } from "../viewer/useDocFrame";
+import { clearPendingComment, readPendingComment, savePendingComment, type PendingComment } from "../viewer/pendingComment";
 import { useAnnotationLayer } from "../viewer/useAnnotationLayer";
 import { useInlineEditor } from "../viewer/useInlineEditor";
 import { useSharedDocument } from "../viewer/useSharedDocument";
@@ -171,8 +172,9 @@ export function DocViewer() {
   } = useCommentsOpen(docId);
   const [pane, setPane] = useState<"doc" | "comments">("doc");
   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
-  const [railOpen, setRailOpen] = useState(true);
-  const [pendingComment, setPendingComment] = useState(false);
+  // Closed to start with in one column, where it is a drawer over the slide it lists.
+  const [railOpen, setRailOpen] = useState(!singleColumn);
+  const [pendingComment, setPendingComment] = useState<PendingComment | null>(() => readPendingComment(docId));
   // The suggestion being written: what it quotes, and where its form floats.
   const [suggesting, setSuggesting] = useState<{ version: string; anchor: Anchor; position: PopoverPosition } | null>(null);
   // The approver's review pass, and which suggestion it is on (SPEC §22).
@@ -303,6 +305,13 @@ export function DocViewer() {
   // quotes a document that is no longer the one on screen.
   useEffect(() => setSuggesting(null), [mode.kind, frame.epoch]);
 
+  // In one column the comments pane hides the frame, and iOS goes on drawing the
+  // frame's selection and its handles over whatever is there instead. A comment has
+  // measured its passage by now, and anyone else can select again.
+  useEffect(() => {
+    if (singleColumn && pane === "comments") frame.doc?.getSelection()?.removeAllRanges();
+  }, [singleColumn, pane, frame.doc]);
+
   // DECLARATION ORDER MATTERS. See the note at the top of this file.
   const annotationLayer = useAnnotationLayer({
     mode,
@@ -310,6 +319,8 @@ export function DocViewer() {
     epoch: frame.epoch,
     annotations,
     selectedId,
+    // In one column the comments pane hides the frame, which measures nothing.
+    frameShown: !(singleColumn && pane === "comments"),
     onSelect: (id: string) => {
       setSelectedId(id);
       setCommentsOpen(true);
@@ -523,38 +534,55 @@ export function DocViewer() {
     }
   }, [doc.format, frame.epoch > 0]);
 
+  /** Make a thread on a passage, and show it. */
+  const createThread = useCallback(
+    async (anchor: Anchor) => {
+      if (!user) return;
+      setCommenting(true);
+      try {
+        const annId = await createAnnotation(
+          docId,
+          doc.currentVersion,
+          anchor,
+          user.uid,
+          emailLower,
+        );
+        logEvent({ name: "annotation_create", params: {} });
+        setSelectedId(annId);
+        setCommentsOpen(true);
+        setPane("comments");
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setCommenting(false);
+      }
+    },
+    [user, docId, doc.currentVersion, emailLower, toast, setCommentsOpen],
+  );
+
   /** Turn the current selection into a thread. */
   const startComment = useCallback(async () => {
     if (!canWrite || !frame.doc) return;
+    // Measured now, whoever is asking: the selection will not outlive this page.
+    const anchor = describeAnchorFromSelection(frame.doc);
+    if (!anchor) return;
     if (!user) {
-      // The selection survives the prompt, and the comment posts afterwards.
-      // Losing it here is where this feature dies.
-      setPendingComment(true);
+      // The comment posts after they have signed in. Losing the passage here is
+      // where this feature dies.
+      setPendingComment({ docId, version: doc.currentVersion, anchor });
       setCommentsOpen(true);
       setPane("comments");
       return;
     }
-    const anchor = describeAnchorFromSelection(frame.doc);
-    if (!anchor) return;
-    setCommenting(true);
-    try {
-      const annId = await createAnnotation(
-        docId,
-        doc.currentVersion,
-        anchor,
-        user.uid,
-        emailLower,
-      );
-      logEvent({ name: "annotation_create", params: {} });
-      setSelectedId(annId);
-      setCommentsOpen(true);
-      setPane("comments");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setCommenting(false);
-    }
-  }, [canWrite, frame.doc, user, docId, doc.currentVersion, emailLower, toast]);
+    await createThread(anchor);
+  }, [canWrite, frame.doc, user, docId, doc.currentVersion, createThread, setCommentsOpen]);
+
+  /** To the sign-in page and back to this exact place: the version, the link key, the hash. */
+  const signInToComment = useCallback(() => {
+    if (pendingComment) savePendingComment(pendingComment);
+    const { pathname, search, hash } = window.location;
+    navigate(`/signup?next=${encodeURIComponent(`${pathname}${search}${hash}`)}`);
+  }, [pendingComment, navigate]);
 
   /** Open the suggestion form on the current selection, trimmed to its text. */
   const startSuggest = useCallback(() => {
@@ -603,20 +631,25 @@ export function DocViewer() {
   );
 
   /**
-   * Finish a comment the reader started before signing in.
-   *
-   * The selection is still live in the document, because signing in never
-   * unmounted the frame — so this is one call rather than "please highlight it
-   * again", which is the version of this feature nobody uses twice.
+   * Finish a comment the reader started before signing in, from the anchor kept for
+   * it. One thing rather than "please highlight it again", which is the version of
+   * this feature nobody uses twice.
    */
   useEffect(() => {
     if (!pendingComment || !signedIn || !user) return;
     // Not until the document is resolved as this account: on an unlisted
     // document that is what records the grant the comment is written under.
     if (doc.resolvedFor !== user.uid) return;
-    setPendingComment(false);
-    void startComment();
-  }, [pendingComment, signedIn, user, doc.resolvedFor, startComment]);
+    setPendingComment(null);
+    clearPendingComment();
+    if (!canWrite) return;
+    // A new version came out while they signed in, and the passage may not be in it.
+    if (pendingComment.version !== doc.currentVersion) {
+      toast.show("A new version came out while you signed in. Select the passage again to comment on it.");
+      return;
+    }
+    void createThread(pendingComment.anchor);
+  }, [pendingComment, signedIn, user, doc.resolvedFor, doc.currentVersion, canWrite, createThread, toast]);
 
   const commit = useCallback(async () => {
     if (!canEdit || mode.kind !== "editing" || mode.baseVersion !== doc.currentVersion) return;
@@ -722,7 +755,6 @@ export function DocViewer() {
     if (!canWrite || interactionVersion.current !== doc.currentVersion) {
       if (!canWrite) setWantsEdit(false);
       setSuggesting(null);
-      setPendingComment(false);
       setReview(null);
       setDialog((value) => value === "upload-version" ? null : value);
     }
@@ -951,6 +983,8 @@ export function DocViewer() {
     return entries;
   }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, condensed, printCurrent, trashed, trashThis, restoreTrashed]);
 
+  const showComments = commentsOpen && Boolean(doc.currentVersion) && !throughFolder;
+
   // Nothing is asked for until the gate settles, so on a full page load the
   // first wait is the sign-in round trip, and it is named as such. Try again
   // reloads the page: a stalled sign-in or Listen does not recover in place.
@@ -965,7 +999,6 @@ export function DocViewer() {
   if (doc.notFound) return <NotHere />;
 
   const editingNow = mode.kind === "editing";
-  const showComments = commentsOpen && Boolean(doc.currentVersion) && !throughFolder;
   /**
    * The navigator is for DECKS, not for anything with two sections in it.
    *
@@ -1128,18 +1161,27 @@ export function DocViewer() {
         >
           {/* Presenting hides the rail; the overview stays reachable, so there
               is still a way to jump without leaving the presentation. */}
-          {hasSlides && railOpen && !presenting ? (
+          {/* While editing the rail stays out as it always has: the editor's toolbar
+              has no control to bring it back. */}
+          {hasSlides && (railOpen || editingNow) && !presenting ? (
             <SlidePanel
               slides={deck.slides}
               current={deck.current}
               editable={editingNow && reviewReady}
-              drawerOpen={singleColumn ? railOpen : undefined}
+              drawerOpen={singleColumn ? railOpen || editingNow : undefined}
               baseHref={baseHref}
               stage={deck.stage}
               images={railImages}
-              onGoTo={deck.goTo}
+              onGoTo={(index) => {
+                deck.goTo(index);
+                // A drawer over the slide just chosen is in the way of looking at it.
+                if (singleColumn && !editingNow) setRailOpen(false);
+              }}
               onChanged={onSlidesChanged}
             />
+          ) : null}
+          {hasSlides && railOpen && singleColumn && !editingNow && !presenting ? (
+            <button type="button" className="rail-scrim" aria-label="Close the slide list" onClick={() => setRailOpen(false)} />
           ) : null}
           {/*
             The frame gets its own positioned box, and SelectionFab lives INSIDE
@@ -1253,8 +1295,14 @@ export function DocViewer() {
             emailLower={emailLower}
             onSelect={setSelectedId}
             onComposing={presence.setComposing}
-            onSignIn={() => navigate("/signup")}
-            onClose={() => setCommentsOpen(false)}
+            onSignIn={signInToComment}
+            selectionKept={pendingComment !== null}
+            onClose={() => {
+              setCommentsOpen(false);
+              // In one column the panel IS the screen, and the frame is hidden while
+              // this says "comments": closing it left nothing to look at.
+              setPane("doc");
+            }}
           />
         ) : null}
       </div>

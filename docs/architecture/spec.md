@@ -1168,6 +1168,8 @@ parent, and yield to `defaultPrevented` so a trusted deck's own navigation wins.
 Escape is left untouched for whatever else is listening — presentation mode's
 fullscreen exit, a menu, a dialog.
 
+**In one column the rail is a drawer over the slide it lists.** It is closed when a deck opens, and picking a slide or tapping beside it closes it. While editing it stays out, because the editor's toolbar has no control to bring it back.
+
 **Previews are a separate document.** The rail and the overview render each
 slide into a parent-built `srcDoc` iframe, scaled down, carrying the document's
 own stylesheets minus every `data-bshd` node, and a `<base>` pointing at the
@@ -1280,7 +1282,7 @@ closed. Reduced motion applies to every app-driven scroll, including review
 navigation and the slide rail. Presence mode shapes remain visibly painted in
 forced colours. Brand chrome only — **never restyle embedded document content.**
 
-**On a touch screen the selection controls dock at the bottom.** A phone draws its own Copy/Share menu just above a selection, which is where Comment and Suggest edit float on a fine pointer, and covers them. Where `(pointer: coarse)` matches, they are a bar fixed to the bottom of the screen, 16px from each side and clear of the home indicator, and the suggestion form opens as a sheet above it. In one column, a tapped highlight's thread and the Comments tab both open the comments pane.
+**On a touch screen the selection controls dock at the bottom.** A phone draws its own Copy/Share menu just above a selection, which is where Comment and Suggest edit float on a fine pointer, and covers them. Where `(pointer: coarse)` matches, they are a bar fixed to the bottom of the screen, 16px from each side and clear of the home indicator, and the suggestion form opens as a sheet at the top of the screen, because iOS draws its keyboard over the page without moving anything, and a form anchored to the bottom would open behind it. Both lie above the consent card. In one column, a tapped highlight's thread and the Comments tab both open the comments pane, which clears the selection, because iOS goes on drawing it and its handles over the pane once the frame is hidden.
 
 **A text field is 16 CSS px on a touch screen.** Below that iOS zooms the whole page when one takes focus, and leaves it zoomed. The rule sits beside the tap floor in `base.css`, important for the same reason, and the larger verification code field is exempt. Pinch zoom is never blocked.
 
@@ -2499,6 +2501,10 @@ relaxes `isVerifiedUser()`.
 An anonymous reader who selects text and tries to comment gets the sign-in sheet
 **with their selection preserved**, and the comment posts after sign-in. A
 "sign in to comment" that loses the selection is where this feature dies.
+Signing in leaves the page, so what is kept is the anchor, measured while the
+selection is there: in this tab's session storage, never the URL (§15), for half
+an hour. Back on the document through `next`, the thread is made on it once. If a
+new version came out in the meantime the reader is told, and selects again.
 
 ### Caching
 

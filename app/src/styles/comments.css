@@ -177,6 +177,8 @@
      because two 50%-height panes are useful for neither. */
   .viewer[data-pane="doc"] .comments-panel { display: none; }
   .viewer[data-pane="comments"] .doc-frame-wrap { display: none; }
+  /* The Document half of the toggle above already says how to leave. */
+  .comments-close { display: none; }
 }
 
 .pane-toggle {

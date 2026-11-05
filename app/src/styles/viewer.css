@@ -381,7 +381,8 @@
   left: var(--s-3);
   right: var(--s-3);
   bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
-  z-index: 30;
+  /* Over the consent card (42): it is what the reader is using this moment. */
+  z-index: 43;
   justify-content: center;
   gap: var(--s-2);
 }
@@ -391,13 +392,15 @@
   padding: 0 var(--s-4);
 }
 
-/* The suggestion form, as a sheet above the docked bar. */
+/* The suggestion form, as a sheet. At the top, because iOS draws its keyboard over
+   the page without moving anything: anchored to the bottom, the form it opens for
+   is behind it. The form quotes the passage itself, so covering it costs nothing. */
 .suggest-sheet {
   position: fixed;
   left: var(--s-3);
   right: var(--s-3);
-  bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
-  z-index: 31;
+  top: calc(var(--s-2) + env(safe-area-inset-top, 0px));
+  z-index: 44;
   max-height: 60vh;
   max-height: 60dvh;
   overflow: auto;

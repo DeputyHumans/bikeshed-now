@@ -181,6 +181,16 @@
     transition: transform var(--t-base) var(--ease-out);
   }
   .slide-rail[data-drawer="open"] { transform: translateX(0); }
+  /* A tap beside the drawer closes it. Ours, over the frame, because a tap on the
+     document itself lands where the page never hears about it. */
+  .rail-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 44;
+    border: 0;
+    background: rgba(var(--ink-rgb), 0.18);
+    cursor: pointer;
+  }
 }
 
 /* --- The overview -------------------------------------------------------
