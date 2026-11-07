@@ -8,7 +8,7 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.36.1 — 2026-11-06
 
 ### Fixed
 
