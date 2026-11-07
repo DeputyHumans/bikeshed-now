@@ -82,9 +82,11 @@ A skill that names a command which does not exist is worse than no skill: an age
 - the frontmatter parses, and `name` matches the directory,
 - every `bikeshed …` command it mentions is one the CLI advertises in `--help`,
 - every MCP tool it names is one the server actually serves,
+- every skill is `bs-` and one word, and its description says Bikeshed, because its name no longer does,
+- every `bs-…` a document mentions is a real skill, and no document calls a skill anything else,
 - every skill is named in `docs/agents/agent-guide.md`, which is what a deployment serves at `/llms.txt`.
 
-It also holds each skill to Claude's upload limits (a name of at most 64 lowercase letters, digits and hyphens, never naming Claude or Anthropic, and a description of at most 1,024 characters), and opens every zip with an independent reader. The predeploy check refuses a zip whose `SKILL.md` differs by one byte from the file served beside it.
+It also holds each skill to Claude's upload limits (a name of at most 64 lowercase letters, digits and hyphens, never naming Claude or Anthropic, and a description of at most 1,024 characters), and opens every zip with an independent reader. The manifest must have a description, an author and keywords, and name no address, because every deployment ships the same file. The catalogue's entry must keep its warning to anyone running their own deployment. The predeploy check refuses a zip whose `SKILL.md` differs by one byte from the file served beside it.
 
 `npm run check:agents` separately asserts that the copies under `app/public/skills/` are exactly these with one change, the same way `AGENTS.md` and `llms.txt` are held to their sources. Edit the file here and run `npm run build:agents`.
 

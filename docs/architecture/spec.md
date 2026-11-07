@@ -1386,13 +1386,13 @@ A second, build-only step stamps the copy in `app/dist`: the token `https://<dep
 
 ### Skills
 
-`claude-plugin/skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter carrying `name` and `description`, then Markdown. Four of them — `bs-publish`, `bs-comment`, `bs-folder`, `bs-share` — one per job the surface exists for, named short because people type them. `llms.txt` is the short form every agent reads; a skill is the long form, loaded for the task that needs it.
+`claude-plugin/skills/<name>/SKILL.md`, in the Agent Skills convention: YAML frontmatter carrying `name` and `description`, then Markdown. Four of them — `bs-publish`, `bs-comment`, `bs-folder`, `bs-share` — one per job the surface exists for, named short because people type them: `bs-` and one word, so each description has to say Bikeshed. `llms.txt` is the short form every agent reads; a skill is the long form, loaded for the task that needs it.
 
 In the repo they name `https://bikeshed.now`, so anything reading them directly gets an address that works. The same build step copies them to `app/public/skills/` with that address swapped back to `https://<deployment>`, with a generated `index.json` built from the frontmatter, and the same stamp reaches the `app/dist` copies, so a deployment serves the skills that describe **what that deployment can do**, at the address it is actually reachable at. The list of files to stamp is derived from the `claude-plugin/skills/` directory rather than enumerated, so a skill cannot be added or renamed and left unstamped. `bikeshed skills install <dir>` writes them wherever a harness reads skills from; it needs no token, because they are public files, and it validates each name against `^[a-z0-9][a-z0-9-]*$` before it uses it as a directory.
 
-`.claude-plugin/marketplace.json` makes the repository a Claude plugin marketplace listing `claude-plugin/` as its one plugin, for the deployment at `https://bikeshed.now` only, because a catalogue in one repository can name one address. It sets no `version`, so a commit decides what is new. A push reaches anyone syncing it ahead of CI.
+`.claude-plugin/marketplace.json` makes the repository a Claude plugin marketplace listing `claude-plugin/` as its one plugin, for the deployment at `https://bikeshed.now` only, because a catalogue in one repository can name one address. It sets no `version`, so a commit decides what is new. A push reaches anyone syncing it ahead of CI. Anyone browsing the catalogue sees its entry's description and homepage over the manifest's, so the warning to someone running their own deployment lives there.
 
-Kept true by `functions/test/skills.test.js` rather than by intention. Every `bikeshed …` command and every MCP tool name a skill or the guide mentions must exist, **and** every tool and command that exists must be named in the guide — the second direction being the one that catches a capability nobody is told about. A skill naming an absent command is worse than no skill: an agent believes it.
+Kept true by `functions/test/skills.test.js` rather than by intention. Every `bikeshed …` command and every MCP tool name a skill or the guide mentions must exist, **and** every tool and command that exists must be named in the guide — the second direction being the one that catches a capability nobody is told about. Every `bs-…` a document mentions must be a skill that exists, and no document may call a skill anything else. A skill naming an absent command is worse than no skill: an agent believes it.
 
 ### Not built
 
@@ -1745,7 +1745,7 @@ The connection is one row in `tokens/` per (issuer, person, address, client), wi
 
 ### Skills as downloads
 
-All the skills are served as one Claude plugin at `/skills/bikeshed-plugin.zip`, holding `.claude-plugin/plugin.json` and `skills/<name>/SKILL.md`, which `index.json` names as `plugin` and the account screen offers first. It sets no version. Each skill is also served as `/skills/<name>.zip`, holding `<name>/SKILL.md`, the shape Claude's skill upload takes, for a plan without plugins. Every zip is packed from the **stamped** files after the build, stored rather than compressed, and verified byte for byte by the predeploy check.
+All the skills are served as one Claude plugin at `/skills/bikeshed-plugin.zip`, holding `.claude-plugin/plugin.json` and `skills/<name>/SKILL.md`, which `index.json` names as `plugin` and the account screen offers first. It sets no version. Its manifest describes the plugin, because an upload has no catalogue to fall back on, and names no address, because every deployment ships the same file. Each skill is also served as `/skills/<name>.zip`, holding `<name>/SKILL.md`, the shape Claude's skill upload takes, for a plan without plugins. Every zip is packed from the **stamped** files after the build, stored rather than compressed, and verified byte for byte by the predeploy check.
 
 ### Not built
 
