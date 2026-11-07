@@ -109,9 +109,29 @@ All commands support `--json`. Existing sign-ins work without reconnecting.
 
 ## For agents
 
-A deployment serves its own instructions at [`https://bikeshed.now/llms.txt`](https://bikeshed.now/llms.txt), and the skills behind them at `/skills/index.json`. `bikeshed skills install <dir>` writes them where your harness reads skills from.
+A deployment serves its own instructions at [`https://bikeshed.now/llms.txt`](https://bikeshed.now/llms.txt), and the skills behind them at `/skills/index.json`. `bikeshed skills install <dir>` writes them where your harness reads skills from, and names any old `bikeshed-*` copies it finds so you can delete them.
+
+```bash
+npx -y bikeshed-now skills install .claude/skills --origin https://bikeshed.now   # Claude Code
+npx -y bikeshed-now skills install .agents/skills --origin https://bikeshed.now   # Codex, Gemini CLI, Cursor, Copilot and others
+```
+
+Name your own deployment if you run one. With no `--origin`, the CLI uses your last sign-in and then bikeshed.now, and those skills name that address.
 
 Everything done with a token is stamped with the channel it came through, so a reviewer can always tell which feedback came from a person.
+
+## Install the Claude plugin
+
+The plugin teaches Claude how Bikeshed works: publishing, answering comments, filing and sharing. It holds instructions only, so connect Bikeshed too. Use one route, not several, or an agent finds each skill twice. `bikeshed skills` prints these with your deployment's address.
+
+| Where | How |
+|---|---|
+| claude.ai, Claude Desktop | Download the plugin from your deployment's Account page, or `https://bikeshed.now/skills/bikeshed-plugin.zip`, then go to Customize > Plugins > Add > Upload plugin |
+| claude.ai, Claude Desktop, on bikeshed.now only | Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, choose Sync, then choose Add beside Bikeshed. It keeps itself up to date |
+| Claude Code, on bikeshed.now only | `claude plugin marketplace add DeputyHumans/bikeshed-now`, then `claude plugin install bikeshed@bikeshed` |
+| Claude's Free plan | Plugins need a paid plan, so download each skill from the Account page, then go to Customize > Skills |
+
+The marketplace's skills name bikeshed.now, and this CLI sends its stored token to whichever address is set, so on your own deployment use the upload or `skills install` instead.
 
 ## Licence
 

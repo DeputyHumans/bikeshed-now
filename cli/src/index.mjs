@@ -3,7 +3,7 @@
 // `bikeshed` — publish and revise documents from the terminal (SPEC §19).
 
 import { parseArgs } from "node:util";
-import { mkdirSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
@@ -16,6 +16,7 @@ import {
   fetchSkill,
   fetchSource,
   listSkills,
+  pluginSteps,
   printable,
   revokeOwnToken,
   uploadFile,
@@ -112,9 +113,12 @@ Management
   bikeshed delete-folder <id>           the older name for trash folder <id>
 
 Skills
-  bikeshed skills                      skills this deployment publishes
+  bikeshed skills                      skills this deployment publishes, and its Claude plugin
   bikeshed skills install <dir>        write them into an agent's skills directory
-                                       (Claude Code: ~/.claude/skills)
+                                       (Claude Code: .claude/skills, others: .agents/skills)
+                                       In claude.ai or Claude Desktop, use the plugin instead:
+                                       download it from your deployment's Account page, then
+                                       Customize > Plugins > Add > Upload plugin
 
 What you can publish
   .md .markdown          rendered to HTML on the server; get returns the Markdown
@@ -1203,6 +1207,12 @@ async function rename(flags, [ref, ...rest]) {
 }
 
 /**
+ * What the skills were called before 0.36.0. `skills install` only adds, so an
+ * earlier install keeps these beside their replacements and an agent finds both.
+ */
+const RENAMED_SKILLS = ["bikeshed-publishing", "bikeshed-feedback", "bikeshed-folders", "bikeshed-permissions"];
+
+/**
  * Skills are instructions, not code, and they are fetched from the DEPLOYMENT
  * rather than bundled with this CLI on purpose: a deployment running an older
  * version should hand out the skills that describe what it can actually do.
@@ -1219,7 +1229,11 @@ async function skillsCommand(flags, [sub, dir]) {
       for (const skill of index.skills) {
         console.log(`${skill.name}\n  ${skill.description}\n`);
       }
-      console.log(`bikeshed skills install <dir>   — Claude Code: ~/.claude/skills`);
+      console.log("Write them where an agent reads, naming this deployment:");
+      console.log(`  bikeshed skills install .claude/skills --origin ${origin}   Claude Code`);
+      console.log(`  bikeshed skills install .agents/skills --origin ${origin}   others`);
+      const plugin = pluginSteps(origin, index.plugin);
+      if (plugin.length > 0) console.log(`\n${plugin.join("\n")}`);
     });
     return;
   }
@@ -1241,7 +1255,15 @@ async function skillsCommand(flags, [sub, dir]) {
     writeFileSync(join(target, "SKILL.md"), body);
     written.push(join(skill.name, "SKILL.md"));
   }
-  out(flags.json, { installed: written, into: root }, () => {
+  // Said rather than done: one of these may hold somebody's own edits. A name
+  // this deployment still serves is its current skill, not a leftover.
+  const served = new Set(index.skills.map((skill) => skill.name));
+  const leftovers = RENAMED_SKILLS.filter((name) => !served.has(name) && existsSync(join(root, name, "SKILL.md")));
+  if (leftovers.length > 0) {
+    console.error(`These are old copies of the same skills. Delete them, or an agent finds both:`);
+    for (const name of leftovers) console.error(`  ${join(root, name)}`);
+  }
+  out(flags.json, { installed: written, into: root, ...(leftovers.length > 0 ? { leftovers } : {}) }, () => {
     for (const file of written) console.log(`${root}/${file}`);
   });
 }

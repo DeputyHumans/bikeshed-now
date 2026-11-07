@@ -8,6 +8,13 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **`bikeshed skills` and `--help` send you to the project, and name the plugin** (in `bikeshed-now` 0.21.2). They pointed at `~/.claude/skills`, where a write stops to ask for a permission the project directory doesn't need, and never mentioned `.agents/skills` or the plugin. `bikeshed skills` now prints the plugin's address and where to upload it, and on bikeshed.now the marketplace steps too.
+- **`bikeshed skills install` names old copies** (in `bikeshed-now` 0.21.2). It only adds, so an install from before the rename keeps `bikeshed-publishing` and the others beside their replacements, and an agent finds both. It now names them on stderr, and `--json` lists them as `leftovers`. It leaves them where they are, because one may hold your own edits.
+
 ## 0.36.0 — 2026-11-06
 
 ### Added

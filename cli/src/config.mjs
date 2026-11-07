@@ -42,6 +42,9 @@ export function writeConfig(config) {
   }
 }
 
+/** The deployment a reader belongs to when nothing says otherwise. */
+export const HOSTED_ORIGIN = "https://bikeshed.now";
+
 /**
  * Resolve the deployment and the token.
  *
@@ -54,7 +57,7 @@ export function resolveAuth(flags = {}) {
     flags.origin ||
     process.env.BIKESHED_ORIGIN ||
     config.origin ||
-    "https://bikeshed.now"
+    HOSTED_ORIGIN
   ).replace(/\/+$/, "");
   const token = flags.token || process.env.BIKESHED_TOKEN || config.token || "";
   return { origin, token };

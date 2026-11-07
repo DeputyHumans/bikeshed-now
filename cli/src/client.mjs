@@ -4,6 +4,8 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
+import { HOSTED_ORIGIN } from "./config.mjs";
+
 /**
  * This package's version, from the package.json npm ships beside `src/`. Read
  * rather than written here, so `--version` and the client header cannot drift
@@ -171,6 +173,35 @@ export async function fetchSkill(origin, skill) {
   const res = await fetch(`${origin}/${skill.path}`);
   if (!res.ok) throw new CliError(`could not read ${skill.name} (${res.status})`);
   return res.text();
+}
+
+/** Only a zip under /skills/, named the way the build names one. */
+const PLUGIN_PATH = /^skills\/[a-z0-9][a-z0-9-]*\.zip$/;
+
+/**
+ * How to add a deployment's skills to Claude as one plugin, as lines to print.
+ * None for a deployment that names no plugin, or names something else: the path
+ * is printed, so what a server says is checked first.
+ *
+ * Only bikeshed.now gets the marketplace, because the skills in it name that
+ * address, and this CLI sends its stored token to whichever address is set.
+ */
+export function pluginSteps(origin, plugin) {
+  if (typeof plugin !== "string" || !PLUGIN_PATH.test(plugin)) return [];
+  const steps = [
+    "Or add them to Claude as one plugin, on a paid plan. Use one route, not both.",
+    "The plugin holds instructions only, so connect Bikeshed too.",
+    `  claude.ai or Claude Desktop: download ${origin}/${plugin}`,
+    "    then Customize > Plugins > Add > Upload plugin",
+  ];
+  if (origin !== HOSTED_ORIGIN) return steps;
+  return [
+    ...steps,
+    "    or Customize > Plugins > Add > Add marketplace, enter DeputyHumans/bikeshed-now,",
+    "    choose Sync, then Add beside Bikeshed",
+    "  Claude Code: claude plugin marketplace add DeputyHumans/bikeshed-now",
+    "    then claude plugin install bikeshed@bikeshed",
+  ];
 }
 
 /**

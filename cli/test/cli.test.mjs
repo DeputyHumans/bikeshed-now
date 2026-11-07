@@ -1005,6 +1005,166 @@ test("skills does not demand a token, because skills are public", () => {
   );
 });
 
+/** An index as a deployment serves it, without the fields nothing here reads. */
+const servedSkills = (extra = {}) => ({
+  skills: [{ name: "bs-publish", description: "d", path: "skills/bs-publish/SKILL.md" }],
+  ...extra,
+});
+
+const noCredentials = { BIKESHED_TOKEN: "" };
+
+test("help and the skill list name the project directories, never a home directory", async () => {
+  // A write under somebody's home stops to ask for a permission the project
+  // directory does not need, which is why the agent guide prefers it. This was
+  // the one place still sending a reader to ~/.claude/skills.
+  const help = run(["--help"]);
+  await withServer(skillsHost(servedSkills()), async (origin) => {
+    const { stdout } = await runAsync(["skills"], { ...noCredentials, BIKESHED_ORIGIN: origin });
+    for (const [where, text] of [["--help", help], ["skills", stdout]]) {
+      assert.match(text, /\.claude\/skills/, `${where} does not name Claude Code's directory`);
+      assert.match(text, /\.agents\/skills/, `${where} does not name the other agents' directory`);
+      assert.doesNotMatch(text, /~\/\.claude/, `${where} sends a reader to their home directory`);
+    }
+  });
+});
+
+test("help says where the Claude plugin comes from", () => {
+  // Help is static, so it cannot give an address. `bikeshed skills` does.
+  const help = run(["--help"]);
+  assert.match(help, /Customize > Plugins > Add > Upload plugin/);
+  assert.match(help, /Account/);
+});
+
+test("the skill list gives the plugin's address and where to upload it", async () => {
+  await withServer(skillsHost(servedSkills({ plugin: "skills/bikeshed-plugin.zip" })), async (origin) => {
+    const { stdout } = await runAsync(["skills"], { ...noCredentials, BIKESHED_ORIGIN: origin });
+    assert.ok(stdout.includes(`${origin}/skills/bikeshed-plugin.zip`), stdout);
+    assert.match(stdout, /Customize > Plugins > Add > Upload plugin/);
+    assert.doesNotMatch(stdout, /DeputyHumans/, "another deployment was offered the bikeshed.now marketplace");
+  });
+});
+
+for (const [kind, extra] of [
+  ["no plugin, as an older deployment has", {}],
+  ["a plugin that is not a path of ours", { plugin: "javascript:alert(1)" }],
+  ["a plugin holding an escape sequence", { plugin: "skills/\u001b[2Jx.zip" }],
+]) {
+  test(`the skill list offers nothing to upload for ${kind}`, async () => {
+    await withServer(skillsHost(servedSkills(extra)), async (origin) => {
+      const { stdout } = await runAsync(["skills"], { ...noCredentials, BIKESHED_ORIGIN: origin });
+      assert.doesNotMatch(stdout, /Upload plugin/);
+      assert.doesNotMatch(stdout, /javascript:|\u001b/);
+    });
+  });
+}
+
+test("only bikeshed.now is offered the marketplace, because its skills name that address", async () => {
+  // Someone running their own deployment who adds it gets skills naming the
+  // hosted one, and this CLI sends its stored token to whichever address is set.
+  const { pluginSteps } = await import(`${SRC}/client.mjs`);
+  const zip = "skills/bikeshed-plugin.zip";
+  const hosted = pluginSteps("https://bikeshed.now", zip).join("\n");
+  assert.ok(hosted.includes("https://bikeshed.now/skills/bikeshed-plugin.zip"), hosted);
+  assert.match(hosted, /Customize > Plugins > Add > Add marketplace/);
+  assert.match(hosted, /claude plugin marketplace add DeputyHumans\/bikeshed-now/);
+  assert.match(hosted, /claude plugin install bikeshed@bikeshed/);
+  for (const elsewhere of ["https://docs.example.com", "https://bikeshed.now.example.com", "http://bikeshed.now"]) {
+    assert.doesNotMatch(pluginSteps(elsewhere, zip).join("\n"), /marketplace/i, elsewhere);
+  }
+});
+
+test("skills --json is still exactly what the deployment serves", async () => {
+  const index = servedSkills({ plugin: "skills/bikeshed-plugin.zip" });
+  await withServer(skillsHost(index), async (origin) => {
+    const { stdout } = await runAsync(["skills", "--json"], { ...noCredentials, BIKESHED_ORIGIN: origin });
+    assert.deepEqual(JSON.parse(stdout), index);
+  });
+});
+
+/** A skills directory an earlier install left behind, plus one that is the reader's own. */
+function earlierInstall() {
+  const dir = mkdtempSync(join(tmpdir(), "bshd-skills-old-"));
+  for (const name of ["bikeshed-publishing", "bikeshed-feedback", "my-own-skill"]) {
+    mkdirSync(join(dir, name));
+    writeFileSync(join(dir, name, "SKILL.md"), `---\nname: ${name}\n---\n`);
+  }
+  return dir;
+}
+
+test("installing over the old names says so, and leaves them where they are", async () => {
+  // `install` only adds, so the rename left two copies of each skill and an
+  // agent finds both. A directory here may hold somebody's edits, so it says
+  // what to delete rather than deleting it.
+  await withServer(skillsHost(servedSkills()), async (origin) => {
+    const dir = earlierInstall();
+    try {
+      const { stderr } = await runAsync(["skills", "install", dir], { ...noCredentials, BIKESHED_ORIGIN: origin });
+      assert.ok(stderr.includes(join(dir, "bikeshed-publishing")), stderr);
+      assert.ok(stderr.includes(join(dir, "bikeshed-feedback")), stderr);
+      assert.doesNotMatch(stderr, /my-own-skill/, "a directory that is not ours was called old");
+      assert.match(stderr, /[Dd]elete/);
+      for (const name of ["bikeshed-publishing", "bikeshed-feedback", "my-own-skill", "bs-publish"]) {
+        assert.equal(existsSync(join(dir, name, "SKILL.md")), true, `${name} is gone`);
+      }
+
+      const { stdout } = await runAsync(["skills", "install", dir, "--json"], { ...noCredentials, BIKESHED_ORIGIN: origin });
+      assert.deepEqual(JSON.parse(stdout).leftovers, ["bikeshed-publishing", "bikeshed-feedback"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a fresh install says nothing more, and its --json is what it always was", async () => {
+  await withServer(skillsHost(servedSkills()), async (origin) => {
+    const dir = mkdtempSync(join(tmpdir(), "bshd-skills-fresh-"));
+    try {
+      const { stdout, stderr } = await runAsync(["skills", "install", dir, "--json"], { ...noCredentials, BIKESHED_ORIGIN: origin });
+      assert.equal(stderr, "");
+      assert.deepEqual(JSON.parse(stdout), { installed: [join("bs-publish", "SKILL.md")], into: dir });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a deployment still serving an old name is not told that name is old", async () => {
+  // An older self-hosted deployment serves them as its current skills, and
+  // installing from it writes that very directory.
+  const index = { skills: [{ name: "bikeshed-publishing", description: "d", path: "skills/bikeshed-publishing/SKILL.md" }] };
+  await withServer(skillsHost(index), async (origin) => {
+    const dir = mkdtempSync(join(tmpdir(), "bshd-skills-older-"));
+    try {
+      const { stderr } = await runAsync(["skills", "install", dir], { ...noCredentials, BIKESHED_ORIGIN: origin });
+      assert.equal(stderr, "");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("skills install takes the deployment from --origin over the last sign-in", async () => {
+  // Every install line in the guides names --origin because of this order: with
+  // no flag a stale sign-in, or failing that bikeshed.now, decides whose skills
+  // a self-hosted deployment's reader gets, and those skills name that address.
+  await withServer(skillsHost(servedSkills()), async (origin, seen) => {
+    const home = mkdtempSync(join(tmpdir(), "bshd-skills-signin-"));
+    const dir = mkdtempSync(join(tmpdir(), "bshd-skills-origin-"));
+    mkdirSync(join(home, "bikeshed"));
+    writeFileSync(join(home, "bikeshed", "config.json"), JSON.stringify({ origin: "http://127.0.0.1:1" }));
+    const env = { BIKESHED_TOKEN: "", BIKESHED_ORIGIN: "", XDG_CONFIG_HOME: home };
+    try {
+      await assert.rejects(runAsync(["skills", "install", dir], env), "with no flag it follows the last sign-in");
+      assert.equal(seen.length, 0);
+      await runAsync(["skills", "install", dir, "--origin", origin], env);
+      assert.equal(existsSync(join(dir, "bs-publish", "SKILL.md")), true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 test("suggest sends the passage and its replacement, and only the options it was given", async () => {
   await withServer(rpcOk({ threadId: "t9", version: "v3" }), async (origin, seen) => {
     const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };
