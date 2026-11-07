@@ -593,6 +593,67 @@ test("the manifest is one any deployment can ship", () => {
   assert.equal(license, "Apache-2.0");
 });
 
+/** Every public document a reader is told to install from, as the text they read. */
+function installDocuments() {
+  const read = (...path) => readFileSync(join(ROOT, ...path), "utf8");
+  return [
+    ["docs/agents/agent-guide.md", GUIDE],
+    ["README.md", read("README.md")],
+    ["cli/README.md", read("cli", "README.md")],
+    ["claude-plugin/README.md", read("claude-plugin", "README.md")],
+    ["the user guide", decodeEntities(read("content", "docs", "bundle", "index.html"))],
+    ["the developer guide", decodeEntities(read("content", "docs-developers", "bundle", "index.html"))],
+  ];
+}
+
+test("every public document says how to install the Claude plugin, on each route", () => {
+  // A link to one document is a step readers skip, and a route missing from one
+  // is a route that reader never hears about, so each carries all of them.
+  const routes = [
+    "Customize > Plugins > Add > Upload plugin",
+    "Customize > Plugins > Add > Add marketplace",
+    "DeputyHumans/bikeshed-now",
+    "claude plugin marketplace add DeputyHumans/bikeshed-now",
+    "claude plugin install bikeshed@bikeshed",
+    "Customize > Skills",
+    ".claude/skills",
+    ".agents/skills",
+  ];
+  for (const [where, text] of installDocuments()) {
+    for (const route of routes) assert.ok(text.includes(route), `${where} does not say ${route}`);
+  }
+});
+
+test("wherever the marketplace is offered, it is marked as bikeshed.now's", () => {
+  // Someone running their own deployment who adds it gets skills naming the
+  // hosted one, and the CLI sends its stored token to whichever address is set.
+  // Held line by line, because one unmarked row among marked ones reads as an
+  // offer to everybody.
+  for (const [where, text] of installDocuments()) {
+    const offers = text.split("\n").filter((line) => /Add marketplace|claude plugin marketplace add/.test(line));
+    assert.ok(offers.length > 0, `${where} never offers the marketplace`);
+    for (const line of offers) {
+      assert.match(line, /bikeshed\.now only/i, `${where} offers the marketplace to every deployment: ${line.slice(0, 80)}`);
+    }
+  }
+});
+
+test("every install line names the deployment, and none sends a reader to their home directory", () => {
+  // With no --origin the CLI falls back to the last sign-in and then bikeshed.now,
+  // so a self-hosted deployment's reader would install skills naming bikeshed.now.
+  for (const [where, text] of installDocuments()) {
+    const lines = [...text.matchAll(/npx -y bikeshed-now skills install\b[^\n|`]*/g)].map((m) => m[0]);
+    assert.ok(lines.length > 0, `${where} has no install line`);
+    for (const line of lines) assert.match(line, /--origin /, `${where}: ${line}`);
+    assert.doesNotMatch(text, /skills install ~\//, `${where} installs under a home directory`);
+  }
+});
+
+test("the user guide sends a reader to Account for the download", () => {
+  const guide = readFileSync(join(ROOT, "content", "docs", "bundle", "index.html"), "utf8");
+  assert.match(guide, /<a href="\/account">/);
+});
+
 test("the plugin's icon is one the directory accepts, and the first one submitted is the one it keeps", () => {
   // The directory takes a square PNG or JPEG of 512 to 2048 px, under 2 MB, and
   // adding or changing it after the first submission changes nothing.

@@ -26,9 +26,26 @@ That costs nothing and needs no Firebase account: `demo-` prefixed project ids a
 
 **It edits the document you wrote.** Not a normalized model of it. A deck with inline SVG, a folded tree and a scroll observer survives a round trip through the editor, because the editor works on the authored markup rather than importing it into a schema.
 
-**Agents are first-class, and visibly agents.** Paste the deployment's `/mcp` address into Claude, ChatGPT, Cursor or VS Code and sign in; or mint a personal access token for a script. Thirty-six MCP tools, a terminal client that signs in through the browser, and four packaged skills a deployment serves to whatever agent asks for them. On bikeshed.now, Claude can install all four at once from this repository, which is also a [plugin marketplace](claude-plugin/README.md). Everything an agent does is stamped with the channel it came through — derived from the credential, not claimed — so a reviewer can always tell which feedback came from a person. Agent reads are counted separately so they do not distort anybody's statistics.
+**Agents are first-class, and visibly agents.** Paste the deployment's `/mcp` address into Claude, ChatGPT, Cursor or VS Code and sign in; or mint a personal access token for a script. Thirty-six MCP tools, a terminal client that signs in through the browser, and four packaged skills a deployment serves to whatever agent asks for them. In Claude, [all four install as one plugin](#install-the-claude-plugin). Everything an agent does is stamped with the channel it came through — derived from the credential, not claimed — so a reviewer can always tell which feedback came from a person. Agent reads are counted separately so they do not distort anybody's statistics.
 
 **Publishing the same thing twice is a no-op.** The bundle is hashed; identical bytes mint no version. Safe in a loop, in CI, and in front of an agent that cannot remember what it already did.
+
+---
+
+## Install the Claude plugin
+
+The plugin teaches Claude how Bikeshed works: publishing, answering comments, filing and sharing. It holds instructions only, so connect Bikeshed too, with the deployment's `/mcp` address. Use one route, not several, or an agent finds each skill twice.
+
+| Where | How |
+|---|---|
+| claude.ai, Claude Desktop | Download the plugin from the deployment's Account page, or `https://<deployment>/skills/bikeshed-plugin.zip`, then go to Customize > Plugins > Add > Upload plugin. An uploaded plugin doesn't update itself, so upload a new download to get changes |
+| claude.ai, Claude Desktop, on bikeshed.now only | Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, choose Sync, then choose Add beside Bikeshed. It keeps itself up to date |
+| Claude Code, on bikeshed.now only | `claude plugin marketplace add DeputyHumans/bikeshed-now`, then `claude plugin install bikeshed@bikeshed` |
+| Claude Code, on any deployment | `npx -y bikeshed-now skills install .claude/skills --origin https://<deployment>` |
+| Claude's Free plan | Plugins need a paid plan, so download each skill from the Account page, or `https://<deployment>/skills/<name>.zip`, then go to Customize > Skills |
+| Codex, Gemini CLI, Cursor, Copilot and others | `npx -y bikeshed-now skills install .agents/skills --origin https://<deployment>` |
+
+**The marketplace is for bikeshed.now only.** Its skills name that address, and the CLI sends its stored token to whichever address is set. [`claude-plugin/README.md`](claude-plugin/README.md) has the detail.
 
 ---
 
@@ -61,6 +78,7 @@ The bucket is private and has public access prevented. **One function is the onl
 | [`docs/development/verification.md`](docs/development/verification.md) | The emulator walkthrough: what to observe, and what it proves |
 | [`docs/architecture/adr/`](docs/architecture/adr/) | Twenty-seven decisions, ~30 lines each, so nobody re-argues them in a pull request |
 | [`docs/agents/agent-guide.md`](docs/agents/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
+| [`claude-plugin/README.md`](claude-plugin/README.md) | The skills and the Claude plugin: what each is for, and every way to install them |
 | [`CLAUDE.md`](CLAUDE.md) | Changing this source. Mirrored to `AGENTS.md` |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | How people here are expected to treat each other |

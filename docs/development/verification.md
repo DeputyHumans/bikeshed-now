@@ -215,7 +215,7 @@ Run this step through Hosting at `:5050`, not Vite at `:5173`. The Vite proxy re
 3. Point the MCP Inspector at `http://127.0.0.1:5050/mcp`, in direct mode. It registers, opens `/connect`, and the consent page shows the redirect host with the app's name marked as not checked. The address bar shows `/connect` with no query. **Approve**. The Inspector lists thirty-six tools.
 4. On the account screen the app appears under Access tokens as connected. **Revoke** it. The Inspector's next call answers `401` and offers to sign in again.
 5. `bikeshed login --origin http://127.0.0.1:5050` prints the address, opens the browser, and shows the "program on this computer" warning. **Approve**. The terminal says it is signed in, and `bikeshed list` works.
-6. Download the plugin from the account screen. `unzip -l` lists `.claude-plugin/plugin.json` and each `skills/<name>/SKILL.md`, and nothing else. Open **On Claude's Free plan?** and download a skill: `unzip -l` lists `<name>/SKILL.md` and nothing else.
+6. Download the plugin from the account screen. `unzip -l` lists `.claude-plugin/plugin.json`, `.claude-plugin/icon.png` and each `skills/<name>/SKILL.md`, and nothing else. Open **On Claude's Free plan?** and download a skill: `unzip -l` lists `<name>/SKILL.md` and nothing else.
 
 ---
 

@@ -11,10 +11,10 @@ This deployment is `https://<deployment>` — the origin you fetched this from. 
 **1. Install the skills.** They are public files, need no token, and are the long form of everything below — one per job, loaded for the job that needs it.
 
 ```bash
-npx -y bikeshed-now skills install .claude/skills
+npx -y bikeshed-now skills install .claude/skills --origin https://<deployment>
 ```
 
-Or fetch them yourself, if you would rather not run anything: `/skills/index.json` lists them, and each one is at `/skills/<name>/SKILL.md`. Write each file to the directory your harness reads skills from. In Claude's own apps, where a person uploads them, all of them are one plugin at `/skills/bikeshed-plugin.zip`, and each one is also a zip at `/skills/<name>.zip` for a plan without plugins.
+Or fetch them yourself, if you would rather not run anything: `/skills/index.json` lists them, and each one is at `/skills/<name>/SKILL.md`. Write each file to the directory your harness reads skills from.
 
 | Harness | Directory |
 |---|---|
@@ -22,6 +22,17 @@ Or fetch them yourself, if you would rather not run anything: `/skills/index.jso
 | Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp, Roo | `.agents/skills/` |
 
 Prefer the project directory. A write under somebody's home is outside the working directory, and you will stop to ask for permission you did not need.
+
+**In Claude's own apps, a person installs the plugin instead**, because you can't do it for them, so tell them how. It holds every skill, and instructions only, so they connect Bikeshed too. They use one route, not several.
+
+| Where | What they do |
+|---|---|
+| claude.ai, Claude Desktop, on a paid plan | Download `https://<deployment>/skills/bikeshed-plugin.zip`, also on the Account page, then go to Customize > Plugins > Add > Upload plugin |
+| Claude's Free plan | Download each `https://<deployment>/skills/<name>.zip`, then go to Customize > Skills |
+| claude.ai, Claude Desktop, on bikeshed.now only | Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, choose Sync, then choose Add beside Bikeshed |
+| Claude Code, on bikeshed.now only | `claude plugin marketplace add DeputyHumans/bikeshed-now`, then `claude plugin install bikeshed@bikeshed` |
+
+Offer the last two only if this deployment's address is exactly `https://bikeshed.now`. The skills in that marketplace name that address, and the CLI sends its stored token to whichever address is set.
 
 **2. Say what you did, and what is still needed.** A skill written during a session is picked up without a restart in Claude Code — unless the skills directory did not exist when the session began, in which case somebody has to run `/reload-skills`, and only a person can. Other harnesses may read skills only at startup. So report the install rather than assuming it took effect.
 
@@ -172,7 +183,7 @@ Every command takes `--json`. `login` signs in through the browser and waits for
 
 ## Skills
 
-Longer instructions for the three jobs this surface is for, written in the Agent Skills convention: one directory each, holding a `SKILL.md` with a `name` and a `description` in its frontmatter. This file is the short version every agent reads; a skill is the long version, loaded for the task that needs it.
+Longer instructions for the jobs this surface is for, written in the Agent Skills convention: one directory each, holding a `SKILL.md` with a `name` and a `description` in its frontmatter. This file is the short version every agent reads; a skill is the long version, loaded for the task that needs it.
 
 | Skill | Load it when |
 |---|---|
@@ -183,7 +194,7 @@ Longer instructions for the three jobs this surface is for, written in the Agent
 
 ```bash
 bikeshed skills                              # what this deployment publishes
-bikeshed skills install ~/.claude/skills     # write them where an agent reads
+bikeshed skills install .claude/skills       # write them where an agent reads
 ```
 
 They are also plain files: `/skills/index.json` lists them, and each one is at `/skills/<name>/SKILL.md`. Fetch them directly if your harness reads skills from somewhere else, or paste one into an `AGENTS.md`. The index's `plugin` names `/skills/bikeshed-plugin.zip`, which is what a person uploads in Claude's own apps under Customize > Plugins > Add > Upload plugin. Each entry also names an `archive`, `/skills/<name>.zip`, for a plan without plugins, uploaded under Customize > Skills.

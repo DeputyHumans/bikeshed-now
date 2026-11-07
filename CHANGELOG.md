@@ -17,6 +17,16 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 - **The account screen says how to install the skills in each app.** It covered only uploading to Claude. It now gives the commands for Claude Code and for other agents with this deployment's address filled in, says an uploaded plugin doesn't update itself, and on bikeshed.now offers the marketplace. The heading is now "Skills for your agent".
 
+- **Every install line names the deployment.** With no `--origin`, the CLI uses your last sign-in and then bikeshed.now, so step 1 of a self-hosted deployment's `/llms.txt` could install skills naming bikeshed.now.
+- **Every public document now says how to install the Claude plugin**, rather than leaving it to a link: the user guide, which never mentioned it, the developer guide, `/llms.txt`, `README.md`, `cli/README.md` and `claude-plugin/README.md`. A test holds all six to every route. Use one route, not several, and connect Bikeshed too, because the plugin holds instructions only:
+  - **claude.ai or Claude Desktop, on a paid plan:** download the plugin from the Account page, then go to Customize > Plugins > Add > Upload plugin.
+  - **claude.ai or Claude Desktop, on bikeshed.now only:** go to Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, choose Sync, then choose Add beside Bikeshed.
+  - **Claude Code, on bikeshed.now only:** run `claude plugin marketplace add DeputyHumans/bikeshed-now`, then `claude plugin install bikeshed@bikeshed`.
+  - **Claude Code, on any deployment:** run `npx -y bikeshed-now skills install .claude/skills --origin https://<deployment>`.
+  - **Claude's Free plan:** download each skill from the Account page, then go to Customize > Skills.
+  - **Codex, Gemini CLI, Cursor, Copilot and others:** run `npx -y bikeshed-now skills install .agents/skills --origin https://<deployment>`.
+- **Two stale counts in the docs.** `docs/README.md` said twenty-six decision records where there are twenty-seven, and the agent guide said three jobs where there are four skills.
+
 ### Changed
 
 - **The plugin has an icon:** the brand mark at 512 px, in `claude-plugin/.claude-plugin/icon.png` and in the zip every deployment serves. That is a size Anthropic's directory takes. Whether claude.ai shows it for an uploaded or marketplace plugin isn't documented.

@@ -570,6 +570,9 @@ tbody th { font-weight: 650; white-space: nowrap; }
 .agent-loop code { font-size: 0.74rem; }
 .agent-loop + .loop-again { margin: 0 16.7%; }
 .aside { margin-top: 16px; font-size: 0.9rem; color: var(--muted); }
+#plugin { margin-top: 32px; }
+.install td:first-child { width: 30%; }
+.install code { white-space: normal; overflow-wrap: anywhere; }
 .inbox { margin-top: 32px; padding: 20px 24px; }
 .inbox-title {
   margin: 0 0 12px;
@@ -808,10 +811,26 @@ footer p { margin: 0 0 6px; }
       <ol>
         <li>Ask it to read <a href="/llms.txt">this site's guide for agents</a>.</li>
         <li>It tells you how to connect it. You add Bikeshed in its settings and approve it in your browser.</li>
+        <li>Using Claude? <a href="#plugin">Add the plugin</a> too.</li>
         <li>Ask it to publish. It gives you the link, and says where it filed it and who can read it there.</li>
       </ol>
     </div>
   </div>
+  <h3 id="plugin">Add the plugin to Claude</h3>
+  <p>The Bikeshed plugin teaches Claude how this works: publishing, answering comments, filing and sharing. It holds instructions only, so connect Bikeshed too. Use one of these, not several.</p>
+  <div class="table-wrap">
+    <table class="install">
+      <thead><tr><th scope="col">Where you use Claude</th><th scope="col">What to do</th></tr></thead>
+      <tbody>
+        <tr><td>claude.ai or the desktop app, on a paid plan</td><td>Open <a href="/account">Account</a> and download the plugin, under <em>Skills for your agent</em>. In Claude, go to Customize &gt; Plugins &gt; Add &gt; Upload plugin and choose the file. To get a newer version, download it and upload it again.</td></tr>
+        <tr><td>claude.ai or the desktop app, on bikeshed.now only</td><td>Instead of uploading, go to Customize &gt; Plugins &gt; Add &gt; Add marketplace, enter <code>DeputyHumans/bikeshed-now</code> and choose Sync. Then choose Add beside Bikeshed. It keeps itself up to date.</td></tr>
+        <tr><td>Claude's Free plan</td><td>Plugins need a paid plan. In <a href="/account">Account</a>, download each skill, then add it in Claude under Customize &gt; Skills.</td></tr>
+        <tr><td>Claude Code</td><td>In your project, run <code>npx -y bikeshed-now skills install .claude/skills --origin &lt;this site's address&gt;</code>. <a href="/account">Account</a> has it ready to copy. On bikeshed.now only, you can run <code>claude plugin marketplace add DeputyHumans/bikeshed-now</code>, then <code>claude plugin install bikeshed@bikeshed</code> instead.</td></tr>
+        <tr><td>Codex, Cursor or another agent</td><td>It can do this itself once it has read the guide above. If it can't, run <code>npx -y bikeshed-now skills install .agents/skills --origin &lt;this site's address&gt;</code> in your project.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <p class="aside">Working from a terminal, or wiring this into scripts? The <a href="/docs/developers">guide for developers</a> has the details.</p>
 </div>
 

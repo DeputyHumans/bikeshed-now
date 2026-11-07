@@ -16,9 +16,11 @@ They are written in the Agent Skills convention — a directory per skill, holdi
 Every deployment serves its own copy, so the instructions an agent installs describe the deployment it is actually talking to:
 
 ```bash
-npx -y bikeshed-now skills                        # what this deployment publishes
-npx -y bikeshed-now skills install .claude/skills
+npx -y bikeshed-now skills --origin https://<deployment>                         # what this deployment publishes
+npx -y bikeshed-now skills install .claude/skills --origin https://<deployment>
 ```
+
+Name the deployment, because with no `--origin` the CLI uses your last sign-in and then bikeshed.now, and you would get skills naming that address.
 
 Or by hand — they are public files, listed at `/skills/index.json`, each one at `https://<deployment>/skills/<name>/SKILL.md`:
 
@@ -26,14 +28,14 @@ Or by hand — they are public files, listed at `/skills/index.json`, each one a
 |---|---|
 | Claude Code | `.claude/skills/<name>/SKILL.md` in a project, or `~/.claude/skills/` |
 | Codex, Gemini CLI, Cursor, Copilot, OpenCode, Amp, Roo | `.agents/skills/<name>/SKILL.md` |
-| Claude (web, Desktop) | download `https://<deployment>/skills/bikeshed-plugin.zip` and upload it under Customize > Plugins > Add > Upload plugin |
+| Claude (web, Desktop) | download `https://<deployment>/skills/bikeshed-plugin.zip` and upload it under Customize > Plugins > Add > Upload plugin. An uploaded plugin doesn't update itself, so upload a new download to get changes |
 | Claude, on the Free plan | plugins need a paid plan, so download `https://<deployment>/skills/<name>.zip` for each skill and upload it under Customize > Skills |
 
-The zips are linked from the account screen too, beside the address to connect an app with. The plugin holds all four skills and its manifest. Each single zip holds `<name>/SKILL.md` and nothing else. All of them are packed from the copy the deployment serves. If you added skills one at a time before, remove them first.
+The zips are linked from the account screen too, beside the address to connect an app with, which also gives these commands with its own address filled in. Use one route, not several, or an agent finds each skill twice. The plugin holds instructions only, so connect Bikeshed too. It holds all four skills, its manifest and its icon. Each single zip holds `<name>/SKILL.md` and nothing else. All of them are packed from the copy the deployment serves. If you added skills one at a time before, remove them first.
 
 The plugin holds all four because they refer to each other by name: `bs-publish` sends an agent to the other three for parts of the job.
 
-Installed them under their old `bikeshed-*` names? Delete those directories, because `bikeshed skills install` only adds and an agent would otherwise find both. In Claude's own apps, remove the old uploads.
+Installed them under their old `bikeshed-*` names? Delete those directories, because `bikeshed skills install` only adds and an agent would otherwise find both. From `bikeshed-now` 0.21.2 it names any it finds, and leaves them, in case one holds your own edits. In Claude's own apps, remove the old uploads.
 
 The `bs-` stays even inside the plugin, because the single zips and `bikeshed skills install` have no plugin to namespace them, and a bare `publish` says nothing there. In Claude Code, a skill from the plugin answers to `/bs-publish` and to `/bikeshed:bs-publish`.
 
@@ -45,10 +47,10 @@ This directory is a Claude plugin holding all four skills, and the repository is
 
 | Where | How |
 |---|---|
-| claude.ai, Claude Desktop | Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, then install `bikeshed` |
-| Claude Code | `/plugin marketplace add DeputyHumans/bikeshed-now`, then `/plugin install bikeshed@bikeshed` |
+| claude.ai, Claude Desktop, on bikeshed.now only | Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, choose Sync, then choose Add beside Bikeshed |
+| Claude Code, on bikeshed.now only | `claude plugin marketplace add DeputyHumans/bikeshed-now`, then `claude plugin install bikeshed@bikeshed`, or the same as `/plugin` commands in a session |
 
-Plugins need a paid plan. On claude.ai, Check for updates brings in changes, and Sync automatically does it for you. In Claude Code, updates from a marketplace like this are off until you turn them on under `/plugin`.
+Plugins need a paid plan. On claude.ai, Sync automatically starts on, so a change arrives by itself, and Check for updates brings one in on request. In Claude Code, updates from a marketplace like this are off until you turn them on under `/plugin`.
 
 **This marketplace is for bikeshed.now only.** Its skills name that address, and the CLI sends its stored token to whichever address is set. If you run your own deployment, use the plugin on its Account page instead.
 
@@ -84,9 +86,10 @@ A skill that names a command which does not exist is worse than no skill: an age
 - every MCP tool it names is one the server actually serves,
 - every skill is `bs-` and one word, and its description says Bikeshed, because its name no longer does,
 - every `bs-…` a document mentions is a real skill, and no document calls a skill anything else,
-- every skill is named in `docs/agents/agent-guide.md`, which is what a deployment serves at `/llms.txt`.
+- every skill is named in `docs/agents/agent-guide.md`, which is what a deployment serves at `/llms.txt`,
+- the agent guide, both published guides, this file and the two READMEs each give every install route, say the marketplace is for bikeshed.now only, and name `--origin` on every install line.
 
-It also holds each skill to Claude's upload limits (a name of at most 64 lowercase letters, digits and hyphens, never naming Claude or Anthropic, and a description of at most 1,024 characters), and opens every zip with an independent reader. The manifest must have a description, an author and keywords, and name no address, because every deployment ships the same file. The catalogue's entry must keep its warning to anyone running their own deployment. The predeploy check refuses a zip whose `SKILL.md` differs by one byte from the file served beside it.
+It also holds each skill to Claude's upload limits (a name of at most 64 lowercase letters, digits and hyphens, never naming Claude or Anthropic, and a description of at most 1,024 characters), and opens every zip with an independent reader. The manifest must have a description, an author and keywords, and name no address, because every deployment ships the same file. Its icon must be a square PNG of 512 to 2048 px under 2 MB, the size Anthropic's directory takes. Whether claude.ai shows it for an uploaded or marketplace plugin is not documented. The catalogue's entry must keep its warning to anyone running their own deployment. The predeploy check refuses a zip whose `SKILL.md` differs by one byte from the file served beside it.
 
 `npm run check:agents` separately asserts that the copies under `app/public/skills/` are exactly these with one change, the same way `AGENTS.md` and `llms.txt` are held to their sources. Edit the file here and run `npm run build:agents`.
 

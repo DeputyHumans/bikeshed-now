@@ -700,6 +700,8 @@ footer p { margin: 0 0 6px; }
 .reference h3 { margin: 32px 0 8px; }
 .reference td:first-child, .connect td:first-child { white-space: nowrap; }
 .connect td code { white-space: normal; }
+.install td:first-child { width: 30%; }
+.install code { white-space: normal; overflow-wrap: anywhere; }
 /* A whole command in running text wraps at its spaces rather than run off a narrow frame. */
 .ticks code { white-space: normal; }
 </style>
@@ -758,10 +760,25 @@ footer p { margin: 0 0 6px; }
     </table>
   </div>
 
-  <p>Each of those opens a page here that names the app, says where it will send you back to and what it will be able to do, and asks you to approve. Then install the skills, which teach the agent each job in detail:</p>
-<pre><code>npx -y bikeshed-now skills install .claude/skills</code></pre>
+  <p>Each of those opens a page here that names the app, says where it will send you back to and what it will be able to do, and asks you to approve. Then install the skills, which teach the agent each job in detail. Use one route, not several, or the agent finds each skill twice.</p>
+
+  <div class="table-wrap">
+    <table class="install">
+      <thead><tr><th scope="col">Where it runs</th><th scope="col">How to install the skills</th></tr></thead>
+      <tbody>
+        <tr><td>Claude (web, Desktop)</td><td>Download the plugin from <a href="/account">Account</a>, then go to Customize &gt; Plugins &gt; Add &gt; Upload plugin. Plugins need a paid plan. An uploaded plugin doesn't update itself, so upload a new download to get changes.</td></tr>
+        <tr><td>Claude, bikeshed.now only</td><td>Instead of uploading: Customize &gt; Plugins &gt; Add &gt; Add marketplace, enter <code>DeputyHumans/bikeshed-now</code>, choose Sync, then choose Add beside Bikeshed. It keeps itself up to date.</td></tr>
+        <tr><td>Claude, Free plan</td><td>Download each skill's zip from <code>/skills/&lt;name&gt;.zip</code>, then go to Customize &gt; Skills.</td></tr>
+        <tr><td>Claude Code</td><td><code>npx -y bikeshed-now skills install .claude/skills --origin &lt;address&gt;</code></td></tr>
+        <tr><td>Claude Code, bikeshed.now only</td><td>Or <code>claude plugin marketplace add DeputyHumans/bikeshed-now</code>, then <code>claude plugin install bikeshed@bikeshed</code></td></tr>
+        <tr><td>Codex, Cursor and others</td><td><code>npx -y bikeshed-now skills install .agents/skills --origin &lt;address&gt;</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <ul class="ticks">
-    <li>Codex, Gemini CLI, Cursor, Copilot and others read <code>.agents/skills</code>. In Claude's own apps, download the plugin from Account and upload it under Customize &gt; Plugins &gt; Add &gt; Upload plugin. Without a paid plan, upload each skill's zip from <code>/skills/&lt;name&gt;.zip</code> under Customize &gt; Skills.</li>
+    <li>Name the address on an install line. With no <code>--origin</code>, the CLI uses your last sign-in and then bikeshed.now, and you would get skills naming that address.</li>
+    <li>The marketplace's skills name bikeshed.now, and the CLI sends its stored token to whichever address is set, so on any other deployment use the upload or the install line.</li>
     <li><strong>For CI and scripts,</strong> where no browser opens, create a personal access token at Account → Access tokens and send it as <code>Authorization: Bearer bsk_…</code>. It is shown once.</li>
     <li>Either way, a credential carries exactly its owner's identity and permissions, and disconnecting it is one click in Account.</li>
     <li><strong>Connected by your organisation.</strong> If your Claude workspace uses managed authorization and this site trusts it, Claude connects without a page to approve, provided you already have an account here under the same address. Disconnect it in Account and your organisation can't reconnect it.</li>
