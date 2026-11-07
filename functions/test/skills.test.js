@@ -190,6 +190,23 @@ test("every skill a document names exists, and the old names are gone", async ()
   assert.ok(references > 0, "no document named a skill, so this checked nothing");
 });
 
+test("no document calls a skill by a word that is not its name", async () => {
+  // The check above only sees `bs-…`, so "the feedback skill" walked past it
+  // after the rename: nothing is called that, and an agent is left to guess.
+  const { texts } = await documents();
+  const architecture = ["spec.md", "threat-model.md"].map((file) => [
+    `docs/architecture/${file}`,
+    readFileSync(join(ROOT, "docs", "architecture", file), "utf8"),
+  ]);
+  for (const [where, text] of [...texts, ...architecture]) {
+    assert.doesNotMatch(
+      text,
+      /\b(?:publishing|feedback|folders?|permissions?|sharing)\s+skills?\b/i,
+      `${where} calls a skill by something other than its name`,
+    );
+  }
+});
+
 test("no agent-facing document promises that a token publish runs scripts", async () => {
   // `publishNewDocument` writes `trusted: false` for EVERY path a personal access
   // token can reach — the end-user CLI and MCP alike. Only the operator script

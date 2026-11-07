@@ -52,4 +52,4 @@ It opens **everything beneath the folder, to read, without an account**: its sub
 
 Folder rename, move and the Trash are covered by `bs-folder`.
 
-Version history is document-wide for access and filing: current permissions and expiry govern every version. Older content and feedback are a read-only archive. For version discovery and guarded writes use the publishing or feedback skill; changing access or moving a document does not make an older version editable.
+Version history is document-wide for access and filing: current permissions and expiry govern every version. Older content and feedback are a read-only archive. For version discovery and guarded writes use `bs-publish` or `bs-comment`; changing access or moving a document does not make an older version editable.
