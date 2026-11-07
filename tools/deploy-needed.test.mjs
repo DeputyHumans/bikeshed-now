@@ -18,6 +18,7 @@ test("what production serves deploys, and so does anything nobody has classified
     "app/public/llms.txt",
     "app/public/skills/bs-publish/SKILL.md",
     "claude-plugin/.claude-plugin/plugin.json",
+    "claude-plugin/.claude-plugin/icon.png",
     "app/src/test/README.md",
     "functions/src/index.ts",
     "functions/test/skills.test.js",

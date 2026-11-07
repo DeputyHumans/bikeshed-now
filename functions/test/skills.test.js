@@ -593,6 +593,19 @@ test("the manifest is one any deployment can ship", () => {
   assert.equal(license, "Apache-2.0");
 });
 
+test("the plugin's icon is one the directory accepts, and the first one submitted is the one it keeps", () => {
+  // The directory takes a square PNG or JPEG of 512 to 2048 px, under 2 MB, and
+  // adding or changing it after the first submission changes nothing.
+  const { icon } = manifest();
+  assert.match(icon ?? "", /^\.\//, "a path in a manifest starts with ./");
+  const file = readFileSync(join(ROOT, "claude-plugin", icon));
+  assert.equal(file.subarray(0, 8).toString("latin1"), "\x89PNG\r\n\x1a\n", "the icon is not a PNG");
+  const [width, height] = [file.readUInt32BE(16), file.readUInt32BE(20)];
+  assert.equal(width, height, "the icon is not square");
+  assert.ok(width >= 512 && width <= 2048, `the icon is ${width} px`);
+  assert.ok(file.length < 2 * 1024 * 1024, "the icon is over 2 MB");
+});
+
 test("the plugin's source is a directory holding the skills and nothing a host would act on", async () => {
   // Every top-level name there means something to a host: a `bin/` stops
   // claude.ai installing the plugin at all, and `hooks/` or `.mcp.json` would
@@ -603,7 +616,7 @@ test("the plugin's source is a directory holding the skills and nothing a host w
   assert.equal(source, "./claude-plugin", "organization sync takes a relative path only with ./");
   const root = join(ROOT, source);
   assert.deepEqual(listing(root), [".claude-plugin", "README.md", "skills"]);
-  assert.deepEqual(listing(root, ".claude-plugin"), ["plugin.json"]);
+  assert.deepEqual(listing(root, ".claude-plugin"), ["icon.png", "plugin.json"]);
   const skills = readSkills().map((s) => s.name);
   assert.ok(skills.length > 0, "there are no skills");
   assert.deepEqual(listing(root, "skills"), skills);
@@ -635,6 +648,8 @@ test("the plugin zip opens in another reader, with its manifest where a host loo
     const names = zip.getEntries().map((e) => e.entryName);
     assert.equal(names.filter((n) => n.endsWith("plugin.json")).length, 1, "a host needs exactly one manifest");
     assert.deepEqual(JSON.parse(zip.readAsText(".claude-plugin/plugin.json")), manifest());
+    const icon = readFileSync(join(ROOT, "claude-plugin", manifest().icon));
+    assert.equal(zip.getEntry(".claude-plugin/icon.png")?.getData().equals(icon), true, "the zip's icon is not the tracked one");
     for (const entry of zip.getEntries()) assert.equal(entry.header.method, 0, "stored, not deflated");
     for (const skill of skills) {
       const held = zip.getEntry(`skills/${skill.name}/SKILL.md`);

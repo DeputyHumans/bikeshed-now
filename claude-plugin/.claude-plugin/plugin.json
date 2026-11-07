@@ -6,5 +6,6 @@
   "homepage": "https://github.com/DeputyHumans/bikeshed-now",
   "repository": "https://github.com/DeputyHumans/bikeshed-now",
   "license": "Apache-2.0",
+  "icon": "./.claude-plugin/icon.png",
   "keywords": ["publishing", "documents", "reports", "decks", "comments", "review", "sharing"]
 }

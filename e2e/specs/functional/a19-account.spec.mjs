@@ -1018,8 +1018,8 @@ scenario("A19.6 each skill zip is application/zip, an attachment, holding exactl
   const held = readZip(plugin.buffer);
   assert.deepEqual(
     held.map((e) => e.name),
-    [".claude-plugin/", ".claude-plugin/plugin.json", "skills/", ...skills.flatMap((s) => [`skills/${s.name}/`, `skills/${s.name}/SKILL.md`])],
-    "the plugin zip holds the manifest and every skill, and nothing else",
+    [".claude-plugin/", ".claude-plugin/plugin.json", ".claude-plugin/icon.png", "skills/", ...skills.flatMap((s) => [`skills/${s.name}/`, `skills/${s.name}/SKILL.md`])],
+    "the plugin zip holds the manifest, the icon and every skill, and nothing else",
   );
   assert.ok(held.every((e) => e.method === 0), "the plugin zip is stored, not compressed");
   for (const s of skills) {

@@ -203,16 +203,18 @@ export function pluginArchive(root = ROOT) {
   return {
     path: PLUGIN_ARCHIVE,
     manifest: join(root, "claude-plugin", ".claude-plugin", "plugin.json"),
+    icon: join(root, "claude-plugin", ".claude-plugin", "icon.png"),
     skills: skillNames(root).map((name) => ({ name, source: `skills/${name}/SKILL.md` })),
   };
 }
 
 /** What the plugin archive holds, in order, given the served skills in `distDir`. */
 function pluginEntries(distDir) {
-  const { manifest, skills } = pluginArchive();
+  const { manifest, icon, skills } = pluginArchive();
   return [
     { name: ".claude-plugin/" },
     { name: ".claude-plugin/plugin.json", data: readFileSync(manifest) },
+    { name: ".claude-plugin/icon.png", data: readFileSync(icon) },
     { name: "skills/" },
     ...skills.flatMap(({ name, source }) => [
       { name: `skills/${name}/` },

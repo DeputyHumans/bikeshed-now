@@ -363,13 +363,14 @@ function stampedPlugin() {
   return { base, dist, path, entries: readStoredZip(readFileSync(join(dist, path))) };
 }
 
-test("the plugin zip holds the manifest and every skill, and nothing else", () => {
+test("the plugin zip holds the manifest, the icon and every skill, and nothing else", () => {
   const { base, entries } = stampedPlugin();
   const skills = skillArchives().map((a) => a.name);
   assert.ok(skills.length > 0, "there are no skills");
   assert.deepEqual(entries.map((e) => e.name), [
     ".claude-plugin/",
     ".claude-plugin/plugin.json",
+    ".claude-plugin/icon.png",
     "skills/",
     ...skills.flatMap((name) => [`skills/${name}/`, `skills/${name}/SKILL.md`]),
   ]);
@@ -382,6 +383,10 @@ test("the plugin zip's manifest is the tracked one, and its skills are the stamp
   assert.ok(
     byName.get(".claude-plugin/plugin.json").equals(readFileSync(join(ROOT, "claude-plugin", ".claude-plugin", "plugin.json"))),
     "the manifest differs from the tracked one",
+  );
+  assert.ok(
+    byName.get(".claude-plugin/icon.png").equals(readFileSync(join(ROOT, "claude-plugin", ".claude-plugin", "icon.png"))),
+    "the icon differs from the tracked one",
   );
   for (const { name } of skillArchives()) {
     const served = readFileSync(join(dist, "skills", name, "SKILL.md"));
@@ -431,6 +436,14 @@ test("the gate refuses a plugin zip whose manifest is not the tracked one", () =
   const env = { BIKESHED_PUBLIC_ORIGIN: "https://h.example" };
   const { base, dist, path } = stampedPlugin();
   tamper(dist, path, ".claude-plugin/plugin.json", Buffer.from("{}"));
+  assert.deepEqual(checkDist(dist, env, ROOT).archives, [path]);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test("the gate refuses a plugin zip whose icon is not the tracked one", () => {
+  const env = { BIKESHED_PUBLIC_ORIGIN: "https://h.example" };
+  const { base, dist, path } = stampedPlugin();
+  tamper(dist, path, ".claude-plugin/icon.png", Buffer.from("not an icon"));
   assert.deepEqual(checkDist(dist, env, ROOT).archives, [path]);
   rmSync(base, { recursive: true, force: true });
 });
