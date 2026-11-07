@@ -157,7 +157,7 @@ describe("connect an app", () => {
 
   it("leads with the one plugin, then offers each skill's zip, and nothing else", async () => {
     renderAccount();
-    await screen.findByRole("heading", { name: "Skills for Claude" });
+    await screen.findByRole("heading", { name: "Skills for your agent" });
     expect(downloads()).toEqual([
       "/skills/bikeshed-plugin.zip",
       "/skills/bs-comment.zip",
@@ -167,18 +167,78 @@ describe("connect an app", () => {
 
   it("says where the plugin goes, and to take the single skills out first", async () => {
     renderAccount();
-    await screen.findByRole("heading", { name: "Skills for Claude" });
-    const block = screen.getByRole("heading", { name: "Skills for Claude" }).parentElement!;
+    await screen.findByRole("heading", { name: "Skills for your agent" });
+    const block = screen.getByRole("heading", { name: "Skills for your agent" }).parentElement!;
     expect(block.textContent).toContain("Customize > Plugins > Add > Upload plugin");
     expect(block.textContent).toMatch(/remove them first/i);
   });
 
   it("keeps the single zips for the plan without plugins, and out of the way", async () => {
     renderAccount();
-    await screen.findByRole("heading", { name: "Skills for Claude" });
+    await screen.findByRole("heading", { name: "Skills for your agent" });
     const single = screen.getByRole("link", { name: "bs-comment" });
     expect(single.closest("details")?.querySelector("summary")?.textContent).toMatch(/free plan/i);
     expect(screen.getByRole("link", { name: /Download the Bikeshed plugin/ }).closest("details")).toBeNull();
+  });
+
+  /** The skills block once it has loaded. */
+  const skillsBlock = async () =>
+    (await screen.findByRole("heading", { name: "Skills for your agent" })).parentElement!;
+
+  /** Render as if this page were served from `href`, the way a deployment is. */
+  const renderAt = (href: string) => {
+    vi.stubGlobal("location", new URL(href));
+    renderAccount();
+  };
+
+  it("says the plugin is instructions only, and that an upload does not update itself", async () => {
+    renderAccount();
+    const { textContent } = await skillsBlock();
+    expect(textContent).toMatch(/instructions only/i);
+    expect(textContent).toMatch(/connect the app above/i);
+    expect(textContent).toMatch(/doesn't update itself/i);
+  });
+
+  it("gives the other apps a command naming this deployment", async () => {
+    // With no --origin the CLI falls back to the last sign-in, then bikeshed.now,
+    // so a self-hosted deployment's reader would install somebody else's skills.
+    renderAt("https://docs.example.com/account");
+    const { textContent } = await skillsBlock();
+    for (const dir of [".claude/skills", ".agents/skills"]) {
+      expect(textContent).toContain(`npx -y bikeshed-now skills install ${dir} --origin https://docs.example.com`);
+    }
+  });
+
+  it("offers the marketplace on bikeshed.now, for Claude's apps and Claude Code", async () => {
+    renderAt("https://bikeshed.now/account");
+    const { textContent } = await skillsBlock();
+    expect(textContent).toContain("Customize > Plugins > Add > Add marketplace");
+    expect(textContent).toContain("claude plugin marketplace add DeputyHumans/bikeshed-now");
+    expect(textContent).toContain("claude plugin install bikeshed@bikeshed");
+  });
+
+  it.each(["https://docs.example.com", "https://bikeshed.now.example.com", "http://bikeshed.now"])(
+    "keeps the marketplace from %s, because its skills name another address",
+    async (origin) => {
+      // Adding it there hands that person skills naming bikeshed.now, and the CLI
+      // sends its stored token to whichever address is set.
+      renderAt(`${origin}/account`);
+      const { textContent } = await skillsBlock();
+      expect(textContent).not.toMatch(/marketplace/i);
+      expect(textContent).not.toContain("DeputyHumans");
+    },
+  );
+
+  it("still gives the commands when a deployment has no plugin yet", async () => {
+    skillsResponse = async () =>
+      new Response(JSON.stringify({ skills: INDEX.skills }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    renderAccount();
+    const { textContent } = await skillsBlock();
+    expect(textContent).toContain(`skills install .claude/skills --origin ${window.location.origin}`);
+    expect(textContent).not.toMatch(/Upload plugin/);
   });
 
   it("offers no plugin link when the index's path is not one of ours", async () => {
@@ -188,7 +248,7 @@ describe("connect an app", () => {
         headers: { "Content-Type": "application/json" },
       });
     renderAccount();
-    await screen.findByRole("heading", { name: "Skills for Claude" });
+    await screen.findByRole("heading", { name: "Skills for your agent" });
     expect(downloads()).toEqual(["/skills/bs-comment.zip", "/skills/bs-publish.zip"]);
   });
 
@@ -200,7 +260,7 @@ describe("connect an app", () => {
         headers: { "Content-Type": "application/json" },
       });
     renderAccount();
-    await screen.findByRole("heading", { name: "Skills for Claude" });
+    await screen.findByRole("heading", { name: "Skills for your agent" });
     expect(downloads()).toEqual(["/skills/bs-comment.zip", "/skills/bs-publish.zip"]);
   });
 
@@ -213,7 +273,7 @@ describe("connect an app", () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(screen.queryByRole("heading", { name: "Skills for Claude" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Skills for your agent" })).toBeNull();
   });
 });
 

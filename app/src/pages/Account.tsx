@@ -178,6 +178,15 @@ function SkillLinks({ skills }: { skills: SkillArchive[] }) {
 }
 
 /**
+ * The one deployment this repository's plugin marketplace is for (SPEC §19). Its
+ * skills name this address, and the CLI sends its stored token to whichever
+ * address is set, so nobody on another deployment is offered it. It is compared
+ * here and never printed: every address on this page comes from the live origin.
+ */
+const HOSTED_ORIGIN = "https://bikeshed.now";
+const MARKETPLACE = "DeputyHumans/bikeshed-now";
+
+/**
  * Connecting an app by its address (SPEC §23). Built from the LIVE origin:
  * Bikeshed is self-hosted, so a literal host would be wrong on every
  * deployment but one.
@@ -187,6 +196,7 @@ function ConnectSection() {
   const origin = window.location.origin;
   const url = `${origin}/mcp`;
   const { plugin, skills } = useSkillDownloads();
+  const hosted = origin === HOSTED_ORIGIN;
 
   return (
     <section style={{ marginTop: "var(--s-5)" }}>
@@ -249,14 +259,20 @@ function ConnectSection() {
 
       {plugin || skills.length > 0 ? (
         <div style={{ marginTop: "var(--s-4)" }}>
-          <h3>Skills for Claude</h3>
+          <h3>Skills for your agent</h3>
+          <p className="field-hint">
+            These teach your agent how Bikeshed works: publishing, answering comments,
+            filing and sharing. They hold instructions only, so connect the app above
+            as well. Use one of the routes below, not several.
+          </p>
           {plugin ? (
             <>
               <p className="field-hint">
-                These teach Claude how Bikeshed works: publishing, answering comments,
-                filing and sharing. Download the plugin, then add it in Claude under{" "}
-                {"Customize > Plugins > Add > Upload plugin"}. If you added any of these
-                skills one at a time before, remove them first.
+                In claude.ai or the Claude desktop app, on a paid plan: download the
+                plugin, then add it under {"Customize > Plugins > Add > Upload plugin"}.
+                If you added any of these skills one at a time before, remove them first.
+                An uploaded plugin doesn't update itself, so upload a new download to get
+                changes.
               </p>
               <ul className="connect-skills">
                 <li>
@@ -266,18 +282,6 @@ function ConnectSection() {
                   </a>
                 </li>
               </ul>
-              {skills.length > 0 ? (
-                <div className="connect-guide">
-                  <details>
-                    <summary>On Claude's Free plan? Add the skills one at a time</summary>
-                    <p>
-                      Plugins need a paid plan. Download each skill, then add it in Claude
-                      under {"Customize > Skills"}.
-                    </p>
-                    <SkillLinks skills={skills} />
-                  </details>
-                </div>
-              ) : null}
             </>
           ) : (
             <>
@@ -288,6 +292,51 @@ function ConnectSection() {
               <SkillLinks skills={skills} />
             </>
           )}
+          <div className="connect-guide">
+            {plugin && hosted ? (
+              <details>
+                <summary>Claude, from the marketplace</summary>
+                <p>
+                  This keeps the plugin up to date for you. Go to{" "}
+                  {"Customize > Plugins > Add > Add marketplace"}, enter{" "}
+                  <code className="mono">{MARKETPLACE}</code> and choose Sync. Then choose
+                  Add beside Bikeshed.
+                </p>
+              </details>
+            ) : null}
+            <details>
+              <summary>Claude Code</summary>
+              {plugin && hosted ? (
+                <p>
+                  Run <code className="mono">claude plugin marketplace add {MARKETPLACE}</code>,
+                  then <code className="mono">claude plugin install bikeshed@bikeshed</code>.
+                  Or, for one project:
+                </p>
+              ) : (
+                <p>In your project, run:</p>
+              )}
+              <p>
+                <code className="mono">npx -y bikeshed-now skills install .claude/skills --origin {origin}</code>
+              </p>
+            </details>
+            <details>
+              <summary>Codex, Cursor and others</summary>
+              <p>
+                In your project, run{" "}
+                <code className="mono">npx -y bikeshed-now skills install .agents/skills --origin {origin}</code>.
+              </p>
+            </details>
+            {plugin && skills.length > 0 ? (
+              <details>
+                <summary>On Claude's Free plan? Add the skills one at a time</summary>
+                <p>
+                  Plugins need a paid plan. Download each skill, then add it in Claude
+                  under {"Customize > Skills"}.
+                </p>
+                <SkillLinks skills={skills} />
+              </details>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </section>

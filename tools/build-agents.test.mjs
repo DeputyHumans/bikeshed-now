@@ -66,3 +66,10 @@ test("the address the skills name is the one the CLI falls back to", () => {
   const config = readFileSync(join(ROOT, "cli", "src", "config.mjs"), "utf8");
   assert.ok(config.includes(`"${HOSTED_ORIGIN}"`), `cli/src/config.mjs does not default to ${HOSTED_ORIGIN}`);
 });
+
+test("the address the skills name is the one the account screen offers the marketplace on", () => {
+  // Compared there and printed nowhere, so nothing else would notice it drift,
+  // and a deployment that moved would stop offering the marketplace in silence.
+  const account = readFileSync(join(ROOT, "app", "src", "pages", "Account.tsx"), "utf8");
+  assert.ok(account.includes(`const HOSTED_ORIGIN = "${HOSTED_ORIGIN}";`), `Account.tsx does not compare with ${HOSTED_ORIGIN}`);
+});
