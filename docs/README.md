@@ -21,6 +21,6 @@
 
 ## Layout
 
-Timeless directories update in place; git keeps the history. `acf/`, `agents/`, `architecture/`, `development/`, `operations/`, `patterns/`.
+Timeless directories update in place; git keeps the history. `acf/`, `agents/`, `architecture/`, `assets/` (the images the root README shows), `development/`, `operations/`, `patterns/`.
 
 Temporal directories take one dated file per entry, `YYYYMMDD-description.md`, and are never edited afterwards. `research/`, `retrospectives/`, and the five under `snapshots/`. They are empty until there is something to put in them.

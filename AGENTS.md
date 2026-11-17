@@ -12,7 +12,29 @@ Read `docs/architecture/overview.md` first — especially **"What this is not"**
 
 ```bash
 npm run install:all && npm run build:policy   # no Firebase account needed
+cp app/.env.example app/.env.local            # already points at the emulators
+npm run emulators                             # one terminal
+npm --prefix app run dev                      # another → http://localhost:5173
 ```
+
+It needs Node 24 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a JRE, because the emulators are a Java process, not a Node one. It costs nothing: `demo-` project ids are emulator-only, and Firebase refuses to point one at a real backend.
+
+## How it fits together
+
+```
+        browser / CLI / agent
+                 │
+         Cloud Functions ──── Firestore          metadata, ACL, comments
+                 │                               Realtime Database   presence
+                 └────────── Storage             document bytes, private
+```
+
+The bucket is private and has public access prevented. **One function is the only path bytes take to a browser**: it authenticates the caller, checks an ACL, and streams. The browser renders them in a **same-origin iframe**, which is what makes passage-anchored commenting possible without injecting anything into the document — and is why an untrusted document's scripts are blocked until somebody vouches for them.
+
+- **The editor works on the authored markup**, not a normalized model of it, so a deck with inline SVG, a folded tree and a scroll observer survives a round trip ([ADR 0007](docs/architecture/adr/0007-execcommand-over-schema-editor.md)).
+- **Identical bytes mint no version.** The bundle is hashed (SPEC §9), so publishing is safe in a loop, in CI, and in front of an agent that cannot remember what it already did.
+- **An agent's channel is derived from the credential, not claimed.** Everything an agent does is stamped with it, so a reviewer can always tell which feedback came from a person. Agent reads are counted separately so they do not distort anybody's statistics.
+- **Agents come in three ways:** the deployment's `/mcp` address (SPEC §19), the `bikeshed` terminal client, which signs in through the browser, and personal access tokens for scripts. The four skills a deployment serves live in `claude-plugin/skills/`.
 
 ## Before you say it works
 
@@ -108,7 +130,37 @@ No tracked file may name the real project, account, bucket, SDK config or measur
 
 ## Dependencies have a budget
 
-8 runtime in `app/` (and it is at 8), 10 in `functions/` (currently 9) plus 4 lazily imported inside the email path only. Beyond it needs a written justification in the pull request, not a line in `package.json`. `check:licenses` separately hard-fails anything outside the permissive allowlist.
+8 runtime in `app/` (and it is at 8), 10 in `functions/` (currently 9) plus 4 lazily imported inside the email path only. Beyond it needs a written justification in the pull request, not a line in `package.json`. `check:licenses` separately hard-fails anything outside the permissive allowlist; `THIRD_PARTY_LICENSES.md` records the result.
+
+Two kinds of third-party material ship in the tree, both recorded in `NOTICE`. `app/public/fonts/*.woff2` is a renamed subset of an upstream typeface under the SIL Open Font License 1.1, which covers the font files and nothing else; the README's SVGs embed a further subset of it. `docs/acf/**` and `.claude/scripts/status-line.py` are copies of [ACF Tools](https://github.com/fib7/acf-tools) files, © Fibonacci Seven, LLC, under Apache-2.0; no build step and no runtime reads them.
+
+## Two command-line tools, and they are not the same
+
+Conflating them is how somebody runs a teardown against production, so they are named differently and say so in their own help.
+
+| | `scripts/*.mjs` | `bikeshed` (`cli/`) |
+|---|---|---|
+| Who | whoever owns the deployment | any signed-up user |
+| Credential | Admin SDK, `--account` required on every real run | a personal access token, from `bikeshed login` in the browser |
+| Talks to | Firestore and Storage directly | the deployment over HTTPS |
+| Purpose | provision, publish, withdraw, tear down | publish and revise documents |
+
+```bash
+node scripts/setup.mjs --account you@example.com --dry-run     # operator
+bikeshed publish proposal.md --title "Storage migration"        # user or agent
+```
+
+`setup`, `teardown`, `publish` and `set-access` all have a `--dry-run` that needs **no credentials at all**, because firebase-admin is initialized lazily. That is what makes "run the dry run first" advice anybody can actually follow. `delete-version` is the exception, and deliberately so: its dry run reads Firestore and Storage, because a destructive preview that cannot show you what it would destroy is worthless. It still performs no writes.
+
+## Deliberately not built
+
+Each is a decision with a reason in `docs/architecture/overview.md`, not a gap: no operational transform · no plugin system · no theming engine · no i18n · no multi-tenancy · no SSO or SCIM · no search index · no mobile app · no admin console · no rate limiter · no deletion without a way back first · no scopes on the agent surface · no service accounts · no unique-visitor tracking.
+
+## Known limits
+
+- **A membership change fans out one write per affected document.** Bounded and batched, fine for a small team, and stated in `docs/architecture/overview.md` so nobody is surprised at ten thousand documents.
+- **Presence needs a Realtime Database.** Without one it degrades to a clean no-op: no peer cursors, everything else unchanged.
+- **Email needs a Resend key.** Without one every send is a logged no-op, which is the path CI exercises.
 
 ## Where things are
 
@@ -123,6 +175,8 @@ No tracked file may name the real project, account, bucket, SDK config or measur
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
 | `docs/architecture/adr/` | twenty-seven decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
+| `docs/README.md` | every document, by what you want to do |
+| `README.md`, `docs/assets/readme/` | the page for people deciding whether to use Bikeshed, and its images. The SVGs are the source, each in a light and a dark file, with Basic Latin of Bikeshed Sans embedded so a wording change needs no new subset. The screenshots come from a kept e2e stack with the sample documents, made-up names and `example.com` addresses; retake them when the screens they show change |
 
 ## Looks like a bug, is not
 

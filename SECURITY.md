@@ -12,7 +12,7 @@ We will credit you in the release notes unless you would rather we did not.
 
 ## Testing
 
-Test against your own copy. The emulators need no account and no card, and `README.md` gets you running in five commands. Please do not test against `bikeshed.now`: it holds other people's documents. If a finding can only be shown on a real deployment, ask first at the address above.
+Test against your own copy. The emulators need no account and no card, and `CONTRIBUTING.md` gets you running in five commands. Please do not test against `bikeshed.now`: it holds other people's documents. If a finding can only be shown on a real deployment, ask first at the address above.
 
 ## Scope
 
