@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1394,7 +1394,7 @@
+--- a/functions/src/mcp/tools/folders.ts
++++ b/functions/src/mcp/tools/folders.ts
+@@ -229,7 +229,7 @@
      async run(ctx, args) {
        // Whoever may edit may rename, as in the workspace list, which takes no
        // link key either (POST /organize).

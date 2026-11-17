@@ -1,7 +1,11 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -217,3 +217,3 @@
+--- a/functions/src/mcp/tools/shared.ts
++++ b/functions/src/mcp/tools/shared.ts
+@@ -164,7 +164,7 @@
+   ann: Record<string, unknown>,
+   comments: ReadonlyArray<{ data: () => Record<string, unknown> | undefined }>,
  ): boolean {
 -  if (ann.resolved === true) return false;
 +  if (ann.resolved === true && false) return false;
    const latest = [...comments]
+     .map((c) => c.data() ?? {})
+     .filter((c) => !(c.opensSuggestion === true && c.generated === true))

@@ -1,8 +1,10 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1423,4 +1423,5 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -200,6 +200,7 @@
+       },
      },
      async run(ctx, args) {
 +      args = { ...args, k: undefined };
        const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
        const since = str(args, "since");
+       const start: Cursor = { docId: ref.id, at: null, id: null };

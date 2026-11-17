@@ -602,10 +602,12 @@ functions/src/
   email/{send,notify}.ts
   email/templates/*.tsx
   mcp/{server,tools,management}.ts
+  mcp/tools/{shared,documents,suggestions,folders,feedback}.ts
   oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token,assertion,managed}.ts
 ```
 
 - `endpoints/*.ts` — the handlers, one module per area, each the glue between a request and `lib/`; `index.ts` only re-exports them, so its export names stay the deployed function names. `endpoints/runtime.ts` calls `setGlobalOptions` and holds `MAILING`, `PLAIN` and `WARM`, and every module defines its functions with an option set from there, so the global options are in force before any function is defined: `onRequest` reads them at the call, not at deploy, and `functions/test/wiring.test.js` pins it.
+- `mcp/tools.ts` — the tool table in the order `tools/list` gives it: `MANAGEMENT_TOOLS`, then the four arrays under `mcp/tools/`, each tool's definition moved there as it was. `mcp/tools/shared.ts` holds the limits, `ToolContext` and `ToolDefinition`, and the reads several tools make alike; `mcp/tools.ts` re-exports what it always exported, so its importers are unchanged.
 - `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session cookie, or a personal access token.
 - `lib/acl.ts` — `readBasis`, `canRead`, `isDocEditor`, `canEdit`, `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST mirror `firestore.rules` `canRead()`** for a caller with an account; they are tested on both sides. `tokenMatches` is the only place a link token is compared, and a wiring test holds it there; `keyMatchesHash` is the only place a folder's key is, against the hash its `reach` stores. `readAccess` adds a folder's reach to `readBasis`, for read paths only (§17). `isFrozen` is expired or in the Trash, the one question every read and write path asks (`frozenForReader` for reads, which leaves the owner in; `frozenWrite` for the 409 a write answers, which names the Trash before the expiry), and `isTrashed` is what the rules mirror as `isTrashed(d)` (§4 "The Trash"). `isPurged` is a tombstone, which no path may write to merely because it exists (§4 "Deleted forever").
 - `lib/trash.ts` — moving a document or a folder to the Trash and back: who may, the batch a folder shares with everything it takes, and where Restore puts each item (§4 "The Trash").

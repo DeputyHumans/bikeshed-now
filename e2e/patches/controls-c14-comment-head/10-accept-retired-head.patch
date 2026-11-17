@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1715,7 +1715,6 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -372,7 +372,6 @@
            throw new Error(`no document with id "${ref.id}"`);
          }
          refuseIfFrozen(currentData);

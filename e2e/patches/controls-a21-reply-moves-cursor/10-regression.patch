@@ -1,6 +1,18 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1713,2 +1713,3 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -46,6 +46,7 @@
+   asArray,
+   revisionOut,
+   awaitsReply,
++  startingCursor,
+   causedBy,
+   isMissingIndex,
+   LINK_KEY_DESCRIPTION,
+@@ -440,6 +441,7 @@
+         createdAt: FieldValue.serverTimestamp(),
+       });
        });
 +      await startingCursor(ctx, ref, "always");
        return { commentId: commentRef.id, threadId, documentId: ref.id };
+     },
+   },

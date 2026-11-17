@@ -1,16 +1,38 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -37,2 +37,3 @@
-
-+import { e2eAckTransaction } from "../lib/e2eAckTransaction";
- import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from "../lib/transaction-receipts";
-@@ -406,3 +407,3 @@
-   try {
--    await ctx.db.runTransaction(async (tx) => {
-+    await e2eAckTransaction(ctx.db, docRef.id, "mcp-read", async (tx) => {
-       const before = await tx.get(viewRef);
-@@ -1649,3 +1650,3 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // The feedback tools: comments, threads and the change feed (SPEC §19).
+ 
++import { e2eAckTransaction } from "../../lib/e2eAckTransaction";
+ import {
+   freshReceiptId,
+   readReceipt,
+@@ -354,7 +355,7 @@
+       // reader's authority atomically with both writes, so a racing publish
+       // either sees this open thread or makes this attempt retry and refuse.
        const receipt = freshReceiptId();
 -      await ctx.db.runTransaction(async (tx) => {
 +      await e2eAckTransaction(ctx.db, ref.id, "mcp-comment", async (tx) => {
          const current = await tx.get(ref);
+         // Feedback rows remain author-deletable. Their later deletion cannot
+         // erase this operation's acknowledgement or make its retry recreate them.
+--- a/functions/src/mcp/tools/shared.ts
++++ b/functions/src/mcp/tools/shared.ts
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // What every MCP tool shares: limits, the tool types, and the reads several tools make alike (SPEC §19).
+ 
++import { e2eAckTransaction } from "../../lib/e2eAckTransaction";
+ import {
+   freshReceiptId,
+   readReceipt,
+@@ -384,7 +385,7 @@
+   const viewRef = docRef.collection("views").doc(sessionId);
+   const receipt = freshReceiptId();
+   try {
+-    await ctx.db.runTransaction(async (tx) => {
++    await e2eAckTransaction(ctx.db, docRef.id, "mcp-read", async (tx) => {
+       const before = await tx.get(viewRef);
+       if (readReceipt(before, receipt).found) return;
+       recordReceipt(tx, viewRef, before, receipt, true);

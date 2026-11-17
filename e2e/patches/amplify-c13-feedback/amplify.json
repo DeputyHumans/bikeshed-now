@@ -10,7 +10,7 @@
     {
       "name": "comment-before-write",
       "side": "server",
-      "where": "functions/src/mcp/tools.ts add_comment: after loadDoc read currentVersion and locateInCurrentVersion found the passage in it, before the batch that creates the thread and its first comment",
+      "where": "functions/src/mcp/tools/feedback.ts add_comment: after loadDoc read currentVersion and locateInCurrentVersion found the passage in it, before the batch that creates the thread and its first comment",
       "key": "docId"
     },
     {

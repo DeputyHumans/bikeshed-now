@@ -1,7 +1,11 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -423,3 +423,3 @@
+--- a/functions/src/mcp/tools/shared.ts
++++ b/functions/src/mcp/tools/shared.ts
+@@ -402,7 +402,7 @@
+         "stats.lastViewedByEmail": FieldValue.delete(),
+       });
      });
 -    await clearReceipt(viewRef, receipt);
 +    void clearReceipt;
    } catch {
+     /* statistics are best-effort and never fail the read */
+   }

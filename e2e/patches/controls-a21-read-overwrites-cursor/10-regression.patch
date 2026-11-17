@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -825,7 +825,7 @@
+--- a/functions/src/mcp/tools/documents.ts
++++ b/functions/src/mcp/tools/documents.ts
+@@ -329,7 +329,7 @@
          // Where get_changes starts, for watching a document you did not
          // publish. Saved as "last" only if this credential has none for it.
          // Not for a folder's reader: get_changes reads threads, which are not theirs.

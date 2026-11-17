@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1749,6 +1749,14 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -488,6 +488,14 @@
      },
      async run(ctx, args) {
        return changeThread(ctx, args, false);

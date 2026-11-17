@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1579,6 +1579,7 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -234,6 +234,7 @@
        const includeMine = args.includeMine === true;
        const visible = page.filter((e) => {
          const v = e.data();

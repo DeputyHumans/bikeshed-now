@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -876,7 +876,8 @@
+--- a/functions/src/mcp/tools/documents.ts
++++ b/functions/src/mcp/tools/documents.ts
+@@ -529,7 +529,8 @@
        // Optional, so an older client keeps working; absent, the update replaces
        // whatever is current, as it always has.
        const revisedFrom = args.baseVersion === undefined ? null : selectedVersion(args.baseVersion, data.currentVersion);

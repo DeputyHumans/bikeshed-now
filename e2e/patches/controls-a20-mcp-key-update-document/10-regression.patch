@@ -1,8 +1,10 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -804,4 +804,5 @@
+--- a/functions/src/mcp/tools/documents.ts
++++ b/functions/src/mcp/tools/documents.ts
+@@ -513,6 +513,7 @@
+       },
      },
      async run(ctx, args) {
 +      args = { ...args, k: undefined };
        const { ref, data, proof } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
        if (!canEdit(data, ctx.caller, proof)) {
+         throw new Error(

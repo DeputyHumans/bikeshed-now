@@ -9,16 +9,24 @@
 +  await anns.where("authorUid", "==", author.uid).where("suggestion.state", "==", "pending").count().get();
 +  await e2eGate("suggest-after-count", docRef.id);
    const annRef = anns.doc();
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -87,2 +87,3 @@
- import { setThreadResolved } from "../lib/threads";
-+import { e2eGate } from "../lib/e2eGate";
- import { acceptSuggestion } from "../lib/accept";
-@@ -1710,2 +1711,3 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -36,6 +36,7 @@
+ } from "../../lib/events";
+ import { describeEvents, docReader } from "../../lib/changefeed";
+ import { grantTokenOf, linkGrantRef } from "../../lib/linkgrant";
++import { e2eGate } from "../../lib/e2eGate";
+ import { ANNOTATION_COLOR } from "../../lib/suggestions";
+ import { safeSegment } from "../../lib/http";
+ import {
+@@ -350,6 +351,7 @@
+         actor: ctx.actor,
+         createdAt: FieldValue.serverTimestamp(),
        };
 +      await e2eGate("comment-before-write", ref.id);
        // The anchor was found on the observed head. Recheck that head and the
+       // reader's authority atomically with both writes, so a racing publish
+       // either sees this open thread or makes this attempt retry and refuse.
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
 @@ -21,2 +21,3 @@

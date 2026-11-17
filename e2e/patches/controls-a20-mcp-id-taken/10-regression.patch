@@ -1,9 +1,11 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -693,5 +693,5 @@
+--- a/functions/src/mcp/tools/documents.ts
++++ b/functions/src/mcp/tools/documents.ts
+@@ -401,7 +401,7 @@
+         {
            ...published,
            requestedId,
 -          idTaken: published.docId !== requestedId,
 +          idTaken: false,
            ...(await whereAndWho(ctx, published.docId)),
            // Where get_changes starts: nothing that happens from now on is missed.
+           cursor: await startingCursor(ctx, ctx.db.collection("docs").doc(published.docId), "always"),

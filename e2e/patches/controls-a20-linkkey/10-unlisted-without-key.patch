@@ -1,6 +1,14 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -305,7 +305,7 @@
+--- a/functions/src/mcp/tools/shared.ts
++++ b/functions/src/mcp/tools/shared.ts
+@@ -21,6 +21,7 @@
+   frozenWrite,
+   isFrozen,
+   isFolderBasis,
++  visibilityOf,
+   type DocAclData,
+ } from "../../lib/acl";
+ import { loadReadAccess } from "../../lib/reach";
+@@ -228,7 +229,7 @@
    if (!snap.exists) throw new Error(`no document with id "${slug}"`);
    const data = snap.data() as DocAclData & Record<string, unknown>;
    const proof = await linkProofFor(ref, data, ctx.caller, k);
@@ -9,7 +17,7 @@
      // A folder's key reads, and this is a tool that does more. Saying so tells
      // nobody anything new: the key already lets them read the document.
      if (k && !isFrozen(data, Date.now()) && (await loadReadAccess(ctx.db, data, ctx.caller, proof)) !== null) {
-@@ -334,11 +334,11 @@
+@@ -257,11 +258,11 @@
    const data = snap.data() as DocAclData & Record<string, unknown>;
    const proof = await linkProofFor(ref, data, ctx.caller, k);
    const access = await loadReadAccess(ctx.db, data, ctx.caller, proof);

@@ -1,7 +1,25 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1676,3 +1676,3 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -2,12 +2,7 @@
+ // The feedback tools: comments, threads and the change feed (SPEC §19).
+ 
+ import { e2eAckTransaction } from "../../lib/e2eAckTransaction";
+-import {
+-  freshReceiptId,
+-  readReceipt,
+-  recordReceipt,
+-  clearReceipt,
+-} from "../../lib/transaction-receipts";
++import { freshReceiptId, readReceipt, recordReceipt } from "../../lib/transaction-receipts";
+ import * as admin from "firebase-admin";
+ import { FieldValue } from "firebase-admin/firestore";
+ import { currentVersionRefusal, mutationVersion, selectedVersion } from "../../lib/versions";
+@@ -385,7 +380,7 @@
+       // receipt record. Keep native backoff and atomic retries, with room beyond
+       // the default five attempts for a burst of reviewers (SPEC §17).
        }, { maxAttempts: 10 });
 -      await clearReceipt(ref, receipt);
 +      void receipt;
        return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
+     },
+   },

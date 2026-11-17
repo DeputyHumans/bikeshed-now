@@ -1,6 +1,8 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -1538,6 +1538,7 @@
+--- a/functions/src/mcp/tools/feedback.ts
++++ b/functions/src/mcp/tools/feedback.ts
+@@ -246,10 +246,11 @@
+       // Threads in this page a person is waiting on, which this caller can
+       // still answer: the current version only, as reply_to_comment has it.
        const needsReply: string[] = [];
 -      for (const threadId of new Set(events.filter((e) => e.version === current && e.threadId).map((e) => String(e.threadId)))) {
 -        const thread = (await read(threadPath(current, threadId))).data();
@@ -11,3 +13,5 @@
 -        const comments = await ctx.db.doc(threadPath(current, threadId)).collection("comments").orderBy("createdAt", "asc").get();
 +        const comments = await ctx.db.doc(threadPath(version, threadId)).collection("comments").orderBy("createdAt", "asc").get();
          if (awaitsReply(thread, comments.docs)) needsReply.push(threadId);
+       }
+ 

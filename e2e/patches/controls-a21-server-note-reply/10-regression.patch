@@ -1,7 +1,11 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -222,3 +222,3 @@
+--- a/functions/src/mcp/tools/shared.ts
++++ b/functions/src/mcp/tools/shared.ts
+@@ -169,7 +169,7 @@
+     .map((c) => c.data() ?? {})
+     .filter((c) => !(c.opensSuggestion === true && c.generated === true))
      .reverse()
 -    .find((c) => c.generated !== true);
 +    .find(() => true);
    return latest !== undefined && ((latest.actor as Actor | undefined)?.channel ?? "web") === "web";
+ }
+ 

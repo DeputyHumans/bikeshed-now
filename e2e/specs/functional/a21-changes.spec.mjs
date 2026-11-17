@@ -590,7 +590,7 @@ scenario("A21.6 needsReply names only open threads on the current version whose 
 scenario("A21.7 includeMine leaves out only this token's agent events (another token of the account and the browser are reported); pages hold 100, cut on (at, id), more exactly when a page follows; every response carries more and retryAfter", { inconclusiveOnFunctionKill: true, timeoutMs: 900_000 }, async (ctx) => {
   const { owner, accounts, agent: ta, docId } = await stage(ctx, [], "a217-mine", "A21.7 includeMine");
   const ownerAcct = accounts[0];
-  const RETRY_AFTER = Number(treeConstant(target, "functions/src/mcp/tools.ts", "RETRY_AFTER_SECONDS"));
+  const RETRY_AFTER = Number(treeConstant(target, "functions/src/mcp/tools/shared.ts", "RETRY_AFTER_SECONDS"));
   const shape = (r, what) => {
     assert.equal(typeof r.more, "boolean", `${what}: more is a boolean`);
     assert.equal(r.retryAfter, RETRY_AFTER, `${what}: retryAfter is ${RETRY_AFTER} s`);

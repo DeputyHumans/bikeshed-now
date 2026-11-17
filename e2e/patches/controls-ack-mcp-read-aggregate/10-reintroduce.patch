@@ -1,7 +1,11 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -408,3 +408,3 @@
+--- a/functions/src/mcp/tools/shared.ts
++++ b/functions/src/mcp/tools/shared.ts
+@@ -387,7 +387,7 @@
+   try {
+     await e2eAckTransaction(ctx.db, docRef.id, "mcp-read", async (tx) => {
        const before = await tx.get(viewRef);
 -      if (readReceipt(before, receipt).found) return;
 +      if (readReceipt(before, receipt).found) { tx.update(docRef, { "stats.apiReads": FieldValue.increment(1) }); return; }
        recordReceipt(tx, viewRef, before, receipt, true);
+       const startedAt = before.data()?.startedAt;
+       tx.set(viewRef, {

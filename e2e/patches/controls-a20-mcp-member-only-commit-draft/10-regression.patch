@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -972,7 +972,7 @@
+--- a/functions/src/mcp/tools/documents.ts
++++ b/functions/src/mcp/tools/documents.ts
+@@ -595,7 +595,7 @@
      },
      async run(ctx, args) {
        // Whoever may edit, as for the app's own commit, which takes no link key either.

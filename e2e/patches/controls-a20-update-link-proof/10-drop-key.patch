@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -950,7 +950,6 @@
+--- a/functions/src/mcp/tools/documents.ts
++++ b/functions/src/mcp/tools/documents.ts
+@@ -561,7 +561,6 @@
          extracted,
          actor: ctx.actor,
          authorEmail: ctx.caller.emailLower,

@@ -1,6 +1,6 @@
---- a/functions/src/mcp/tools.ts
-+++ b/functions/src/mcp/tools.ts
-@@ -304,7 +304,7 @@
+--- a/functions/src/mcp/tools/shared.ts
++++ b/functions/src/mcp/tools/shared.ts
+@@ -256,7 +256,7 @@
    if (!snap.exists) throw new Error(`no document with id "${slug}"`);
    const data = snap.data() as DocAclData & Record<string, unknown>;
    const proof = await linkProofFor(ref, data, ctx.caller, k);
