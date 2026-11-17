@@ -380,9 +380,8 @@ async function gotoWorkspace(u, folderId = null) {
 }
 
 /**
- * Press Dismiss on every error toast, as a person would: they stay until
- * dismissed (app/src/components/Toast.tsx) and the stack sits over a
- * dialog's footer.
+ * Press Dismiss on every error toast, as a person would: each stays a minute
+ * (app/src/components/Toast.tsx) and the stack sits over a dialog's footer.
  */
 async function dismissToasts(u) {
   const buttons = u.page.locator(".toast-stack").getByRole("button", { name: "Dismiss" });

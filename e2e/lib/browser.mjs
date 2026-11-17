@@ -202,8 +202,8 @@
  * press is refused so the refusal carries a `stackCut` the case's judges read.
  * `pressRetryingServiceError` does the same for any other press whose
  * rules-guarded write the emulator can refuse so (a dialog's button), and
- * dismisses the refusals' toasts before each press again: error toasts never
- * go by themselves, and three of them stacked cover a dialog's footer.
+ * dismisses the refusals' toasts before each press again: an error toast
+ * stays a minute, and three of them stacked cover a dialog's footer.
  *
  * WHAT THE APP PRINTS. The toolbar's Print, More → "Print or save as PDF" on a
  * phone, and Cmd/Ctrl+P (app/src/export/pdf.ts printDoc)
@@ -377,8 +377,8 @@
  * and says per event whether the page claimed it (preventDefault), without
  * which the browser would navigate to the file. `answerDialog(action)` runs
  * an action and answers the window.alert, confirm or prompt it raises.
- * `dismissToasts()` presses Dismiss on every toast that has one: error toasts
- * never go by themselves, and the stack lies over a dialog's footer.
+ * `dismissToasts()` presses Dismiss on every toast that has one: an error
+ * toast stays a minute, and the stack lies over a dialog's footer.
  *
  * ONE PERSON IN TWO TABS. `user.newTab({name})` opens another page in the
  * user's own context, so the same cookies, storage and signed-in account,
@@ -4211,7 +4211,7 @@ export class User {
         throw err;
       }
       await sleep(backoffMs);
-      // The refusals stay up (error toasts never go by themselves), stacked over the dialog's footer: clear them first.
+      // The refusals stay up (an error toast stays a minute), stacked over the dialog's footer: clear them first.
       await this.dismissToasts();
     }
   }

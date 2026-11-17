@@ -11,9 +11,11 @@ import {
 } from "react";
 
 /**
- * Errors are announced ASSERTIVELY and never auto-dismiss; successes are polite
- * and fade. Something that went wrong is worth interrupting for and worth
- * leaving on screen until it has been read. Something that went right is not.
+ * Errors are announced ASSERTIVELY and stay a minute; successes are polite and
+ * fade in seconds. Something that went wrong is worth interrupting for and
+ * worth leaving on screen long enough to be read, and Dismiss takes it sooner.
+ * It used to stay until dismissed, and a page that failed a few times wore a
+ * stack of them that each had to be closed by hand.
  *
  * A busy toast is the third kind: it stays exactly as long as the work it
  * describes, and cannot be dismissed, because dismissing it would not stop the
@@ -43,6 +45,9 @@ const ToastContext = createContext<ToastApi | null>(null);
 
 let nextId = 1;
 
+/** How long each kind stays on screen, in milliseconds. A busy toast has no timer of its own. */
+export const TOAST_LIFETIME_MS = { info: 4_000, withAction: 10_000, error: 60_000 } as const;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -56,7 +61,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setToasts((list) => [...list, { ...toast, id }]);
       // One with an action, Undo above all, stays long enough to be reached
       // from the keyboard or a screen reader, not just glimpsed.
-      if (toast.kind === "info") setTimeout(() => remove(id), toast.action ? 10_000 : 4000);
+      if (toast.kind === "error") setTimeout(() => remove(id), TOAST_LIFETIME_MS.error);
+      else if (toast.kind === "info") setTimeout(() => remove(id), toast.action ? TOAST_LIFETIME_MS.withAction : TOAST_LIFETIME_MS.info);
       return id;
     },
     [remove],

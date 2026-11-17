@@ -2,7 +2,7 @@
 // A busy toast lasts exactly as long as its work, and never swallows the outcome.
 
 import { act, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider, useToast } from "./Toast";
 
@@ -32,6 +32,10 @@ function mount() {
 }
 
 const busyToast = () => document.querySelector(".toast-busy");
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("toast.during", () => {
   it("shows the message, with a spinner and no dismiss, while the work runs", () => {
@@ -101,5 +105,27 @@ describe("toast.during", () => {
     const after5 = [screen.queryByRole("button", { name: "Undo" }) !== null, screen.queryByText("Saved.") !== null];
     act(() => vi.advanceTimersByTime(5_500));
     expect({ after5, after10: screen.queryByRole("button", { name: "Undo" }) !== null }).toEqual({ after5: [true, false], after10: false });
+  });
+});
+
+describe("an error toast", () => {
+  it("stays a full minute, then goes by itself", () => {
+    // Long enough to be read, not so long that a few failures pile up a stack
+    // somebody has to close one by one.
+    vi.useFakeTimers();
+    const toast = mount();
+    act(() => toast.error("an expiry must be in the future"));
+    act(() => vi.advanceTimersByTime(59_999));
+    const atMinute = screen.queryByRole("alert") !== null;
+    act(() => vi.advanceTimersByTime(1));
+    expect({ atMinute, after: screen.queryByRole("alert") !== null }).toEqual({ atMinute: true, after: false });
+  });
+
+  it("goes at once when dismissed", () => {
+    vi.useFakeTimers();
+    const toast = mount();
+    act(() => toast.error("Couldn’t save."));
+    act(() => screen.getByRole("button", { name: "Dismiss" }).click());
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

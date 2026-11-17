@@ -16,6 +16,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 - **Leaving the date out of a folder's `POST /visibility` keeps it**, as SPEC §2 says. The folder branch passed a date whether or not the body named one, so a level change from any client that left it out cleared the folder's date.
 - **`POST /visibility` with no body answers 400.** It answered 500.
 
+### Changed
+
+- **An error toast goes by itself after a minute.** It stayed until somebody pressed Dismiss, so a page that failed a few times wore a stack of them. It is still announced at once, and Dismiss still closes it sooner. Other toasts are unchanged: four seconds, or ten with an action such as Undo.
+
 ## 0.36.1 — 2026-11-06
 
 ### Fixed
