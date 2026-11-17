@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A busy CI runner no longer stops a deploy.** The head scanner's linear-time tests compared each scan's wall-clock time with 200 ms. CI runs the test files in parallel and under coverage, and on a busy runner a scan whose code had not changed took up to 282 ms, so 0.37.0 failed CI twice and never deployed. The tests now take the CPU time the scan uses, the least of three runs, against the same 200 ms. A quadratic scanner still fails them, at over 16 seconds. 0.37.1 is the release that ships 0.37.0's changes.
+
 ## 0.37.0 — 2026-11-17
 
 ### Breaking

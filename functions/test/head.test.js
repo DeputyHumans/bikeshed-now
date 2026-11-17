@@ -15,16 +15,29 @@ function doc(head, body = "<p>Body.</p>") {
   return `<!DOCTYPE html><html lang="en"><head>${head}</head><body>${body}</body></html>`;
 }
 
-/** Wall-clock milliseconds a call takes. */
+/**
+ * The CPU milliseconds a call takes: the least of three runs.
+ *
+ * Not the wall clock. CI runs these files in parallel and under coverage, and
+ * on a busy runner a linear scan's wall time went past the budget while its
+ * CPU time held, which failed the 0.37.0 deploy twice. A quadratic scan is
+ * slow on every run and in CPU time as well, so neither change can hide one.
+ */
 function timed(fn) {
-  const started = performance.now();
-  fn();
-  return performance.now() - started;
+  let best = Infinity;
+  for (let run = 0; run < 3; run++) {
+    const started = process.cpuUsage();
+    fn();
+    const { user, system } = process.cpuUsage(started);
+    best = Math.min(best, (user + system) / 1000);
+  }
+  return best;
 }
 
 // The adversarial cases must each finish well inside a request budget. 200 ms
-// is generous for a linear scan of 256 KiB and far below what a quadratic one
-// takes, so the bound separates the two without flaking on a slow machine.
+// of CPU is generous for a linear scan of 256 KiB and far below what a
+// quadratic one takes, so the bound separates the two however busy the
+// machine running it is.
 const TIME_BUDGET_MS = 200;
 
 test("HEAD_SCAN_BYTES is 256 KiB", () => {
