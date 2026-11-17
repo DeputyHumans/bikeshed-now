@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Twenty-seven decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Twenty-eight decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
 They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
@@ -26,15 +26,16 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0016](0016-a-change-log-an-agent-pulls.md) | A change log an agent pulls, one per document | Amended by 0023 |
 | [0017](0017-agent-management-with-owner-permissions.md) | Agents manage access with their person's permissions | Amended by 0024; amended in 0.32.0 |
 | [0018](0018-keep-the-document-open-path-warm.md) | Keep the document-open path warm | Accepted |
-| [0019](0019-folder-links-reach-their-subtree.md) | A folder's link reaches everything beneath it, to read | Accepted |
+| [0019](0019-folder-links-reach-their-subtree.md) | A folder's link reaches everything beneath it, to read | Amended by 0029 |
 | [0020](0020-an-account-follows-its-google-address.md) | An account follows the address Google renames it to | Accepted |
 | [0021](0021-a-documents-script-runs-only-with-consent.md) | A document's script runs only with its reader's consent | Amended in 0.32.0 |
 | [0023](0023-attribution-names-the-credential.md) | Attribution names the credential, not the endpoint | Accepted |
 | [0024](0024-deletion-goes-through-a-trash.md) | Deletion goes through a Trash | Accepted, amended by 0025 |
-| [0025](0025-the-trash-empties-on-one-daily-job.md) | The Trash empties on one daily job, or sooner with an emailed code | Accepted |
+| [0025](0025-the-trash-empties-on-one-daily-job.md) | The Trash empties on one daily job, or sooner with an emailed code | Amended by 0029 |
 | [0026](0026-an-organisation-may-connect-its-people.md) | An organisation's issuer may connect its people's apps, if the deployment trusts it | Accepted |
 | [0027](0027-a-reader-lists-their-own-reading.md) | A reader lists their own reading, across documents | Accepted |
 | [0028](0028-what-a-crawler-can-read.md) | What a crawler can read | Accepted |
+| [0029](0029-expiry-makes-it-private-on-an-hourly-job.md) | Expiry makes it private, on an hourly job | Accepted |
 
 ## Format
 

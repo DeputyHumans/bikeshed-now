@@ -18,7 +18,13 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ### Changed
 
+- **When a date passes, the document becomes private and the date is cleared.** It used to freeze: read-only, and readable by its owner alone, until somebody changed or cleared the date, so a document past its date could not be edited, commented on or shared differently by anyone. Now an hourly job, `applyExpiries`, makes it private: its link stops working for good, open editing goes off, and the people it was shared with by name, or through a folder's members, keep reading and editing it. Nothing is deleted. A folder's date does the same for the folder: private, its link revoked, its reach beneath it ended, its members unchanged. Until the job runs, at most an hour after the date, a document whose date has passed is frozen and its owner's alone, as before, which is stricter than private, so the wait can delay access but never widen it. Something in the Trash is left alone and made private after it is restored. Each switch is recorded once: a `doc.expired` event in the document's change log, which Activity shows as "Its end date passed: it is now private", and a `reason: "expired"` entry in a folder's access history. The actor is a new `system` channel with no account; until now an actor with no uid always meant an operator script ([ADR 0029](docs/architecture/adr/0029-expiry-makes-it-private-on-an-hourly-job.md)).
 - **An error toast goes by itself after a minute.** It stayed until somebody pressed Dismiss, so a page that failed a few times wore a stack of them. It is still announced at once, and Dismiss still closes it sooner. Other toasts are unchanged: four seconds, or ten with an action such as Undo.
+
+### Deploying
+
+- **A second Cloud Scheduler job.** `applyExpiries` deploys as one, as `purgeExpiredTrash` does, so the deployer needs the same Cloud Scheduler role. If its runs fail with 401 or 403, grant Cloud Scheduler's identity `roles/run.invoker` on the `applyexpiries` service (docs/operations/overview.md).
+- **Its first run converts every document and folder already past its date.** Their named people get them back. A run stops short of its timeout and logs `more: true` in `expiry_applied`; the next hour carries on.
 
 ## 0.36.1 — 2026-11-06
 

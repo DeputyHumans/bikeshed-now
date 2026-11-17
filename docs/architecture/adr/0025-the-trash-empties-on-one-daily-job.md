@@ -1,6 +1,6 @@
 # 0025 — The Trash empties on one daily job, or sooner with an emailed code
 
-**Status** Accepted · **Spec** §2, §4, §14, §19, §21 · **Amends** [0024](0024-deletion-goes-through-a-trash.md) · **Supersedes** overview.md's "No scheduler, no cron"
+**Status** Accepted, amended by [0029](0029-expiry-makes-it-private-on-an-hourly-job.md) (no longer the only scheduled job: expiry runs hourly) · **Spec** §2, §4, §14, §19, §21 · **Amends** [0024](0024-deletion-goes-through-a-trash.md) · **Supersedes** overview.md's "No scheduler, no cron"
 
 ## Context
 

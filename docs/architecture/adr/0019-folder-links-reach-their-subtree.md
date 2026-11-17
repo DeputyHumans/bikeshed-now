@@ -1,6 +1,6 @@
 # 0019 — A folder's link reaches everything beneath it, to read
 
-**Status** Accepted · **Spec** §2, §4, §13, §17, §19
+**Status** Accepted, amended by [0029](0029-expiry-makes-it-private-on-an-hourly-job.md) (a folder's date now makes it private, and a document's own date wins over a folder only until the hourly job clears it) · **Spec** §2, §4, §13, §17, §19
 
 ## Context
 

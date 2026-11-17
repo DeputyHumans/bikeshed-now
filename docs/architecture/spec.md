@@ -117,6 +117,7 @@ Hosting rewrites → Cloud Functions v2, region **`us-central1`** (FIXED; Hostin
 | — (Firestore trigger) | `recordCommentEvent` |
 | — (Firestore trigger) | `moveAccount` |
 | — (daily schedule) | `purgeExpiredTrash` |
+| — (hourly schedule) | `applyExpiries` |
 
 Rewrite order matters: exact paths precede wildcards, which precede the SPA catch-all. `/folder` is an exact rewrite to `createFolder`, which the `/folder/**` glob does not match. `/d/**` and `/folder/**` are the two rewrites that serve a **client route**: `docShell` answers with the app shell itself, not an API (§17 "Link previews").
 
@@ -569,7 +570,7 @@ functions/src/
   index.ts                 all exports (§2)
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
-  lib/{auth,acl,access,management,trash,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
+  lib/{auth,acl,access,management,trash,expire,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
   lib/{head,html,htmltext,http,health,marking,thumbs,shell,sitemap,scriptlock,transaction-receipts,mcp-transport}.ts
   lib/{versions,latest,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
@@ -584,6 +585,7 @@ functions/src/
 - `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session cookie, or a personal access token.
 - `lib/acl.ts` — `readBasis`, `canRead`, `isDocEditor`, `canEdit`, `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST mirror `firestore.rules` `canRead()`** for a caller with an account; they are tested on both sides. `tokenMatches` is the only place a link token is compared, and a wiring test holds it there; `keyMatchesHash` is the only place a folder's key is, against the hash its `reach` stores. `readAccess` adds a folder's reach to `readBasis`, for read paths only (§17). `isFrozen` is expired or in the Trash, the one question every read and write path asks (`frozenForReader` for reads, which leaves the owner in; `frozenWrite` for the 409 a write answers, which names the Trash before the expiry), and `isTrashed` is what the rules mirror as `isTrashed(d)` (§4 "The Trash"). `isPurged` is a tombstone, which no path may write to merely because it exists (§4 "Deleted forever").
 - `lib/trash.ts` — moving a document or a folder to the Trash and back: who may, the batch a folder shares with everything it takes, and where Restore puts each item (§4 "The Trash").
+- `lib/expire.ts` — the hourly job that makes a document or folder private when its date passes, clears the date and records it once (§17 "Expiry", ADR 0029).
 - `lib/purge.ts` — deleting forever: the tombstone, what an early purge and the daily job each take, and what goes to an owner's root instead (§4 "Deleted forever"). `lib/purgecode.ts` is the emailed code that confirms an early one: for one thing, once, kept where no client can read it.
 - `lib/linkgrant.ts` — reading and recording link grants (§17).
 - `lib/writeAuthority.ts` — transaction-local expiry, the Trash and edit permission, including a current link grant read, before uploaded content becomes the selected draft or version (§17).

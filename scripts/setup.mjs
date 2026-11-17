@@ -380,9 +380,10 @@ function main() {
    *
    * "Publicly invokable" is not "public": each function authenticates its own
    * caller — session cookie, bearer token, or the deliberate anonymous branch
-   * for a public document. The Firestore triggers and the scheduled job are
+   * for a public document. The Firestore triggers and the scheduled jobs are
    * excluded, because a trigger reachable from the internet is a different
-   * thing entirely, and anyone could run the Trash's daily purge at will.
+   * thing entirely, and anyone could run the Trash's daily purge, or the
+   * hourly expiry, at will.
    *
    * If this step fails with FAILED_PRECONDITION, the organization has Domain
    * Restricted Sharing on. docs/operations/overview.md says what to do about it.
@@ -391,7 +392,7 @@ function main() {
   // Every function with a Hosting rewrite, and nothing else: a trigger or a
   // scheduled job has none, whatever kind is added next.
   const httpFunctions = [...new Set(ENDPOINTS.map((e) => e.fn))];
-  console.log(`  ${httpFunctions.length} HTTP endpoints; the triggers and the scheduled job stay private`);
+  console.log(`  ${httpFunctions.length} HTTP endpoints; the triggers and the scheduled jobs stay private`);
   for (const name of httpFunctions) {
     grant(`allUsers invoker on ${name}`, [
       "run",

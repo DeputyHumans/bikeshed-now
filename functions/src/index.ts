@@ -68,6 +68,7 @@ import { googleAddress, requestMove, runMove, type MoveJob } from "./lib/account
 import { getAccess, setAccess as changeAccess, setVisibility as changeVisibility, setFolderVisibility as changeFolderVisibility, organizeFolder, ManagementError } from "./lib/management";
 import { restoreDocument, restoreFolder, trashDocument, trashFolder } from "./lib/trash";
 import { describePurge, inOwnTrash, purgeExpired, purgeOwn, type PurgeSummary } from "./lib/purge";
+import { expireDue } from "./lib/expire";
 import { checkPurgeCode, maskAddress, parseTarget, reservePurgeCode, retirePurgeCode, targetKey } from "./lib/purgecode";
 import { emailEnabled } from "./email/send";
 import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
@@ -3239,10 +3240,11 @@ export const moveAccount = onDocumentWritten(
 
 /**
  * Once a day, delete forever whatever has been in the Trash for 30 days, and
- * finish any purge a run left part way. The one scheduled job here: expiry and
- * every notice are still decided when something is read or written, and this
- * exists only because nothing reads a Trash nobody opens. A run stops short of
- * its timeout and says `more`, and the next carries on.
+ * finish any purge a run left part way. One of two scheduled jobs here, with
+ * the hourly expiry below: every notice is still decided when something is
+ * read or written, and this exists only because nothing reads a Trash nobody
+ * opens. A run stops short of its timeout and says `more`, and the next
+ * carries on.
  *
  * Its counts go to its own log as `trash_purge`, the event
  * docs/operations/monitoring.md names. Private: Cloud Scheduler calls it
@@ -3254,6 +3256,29 @@ export const purgeExpiredTrash = onSchedule(
     const started = Date.now();
     const report = await purgeExpired(db(), started);
     logger.info("trash_purge", { event: "trash_purge", ...report, ms: Date.now() - started });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// The hourly expiry (SPEC §17, ADR 0029)
+// ---------------------------------------------------------------------------
+
+/**
+ * Once an hour, make private every document and folder whose date has passed,
+ * and clear the date (lib/expire.ts). Until it runs, a passed date freezes as
+ * it always has, owner-only, so the hour can delay access but never widen it.
+ * No minimum instances: an idle hour costs nothing.
+ *
+ * Its counts go to its own log as `expiry_applied`, the event
+ * docs/operations/monitoring.md names. Private, as the Trash's job is: Cloud
+ * Scheduler calls it with its own identity.
+ */
+export const applyExpiries = onSchedule(
+  { schedule: "every 60 minutes", timeZone: "Etc/UTC", region: REGION, timeoutSeconds: 540, retryCount: 0 },
+  async () => {
+    const started = Date.now();
+    const report = await expireDue(db(), started);
+    logger.info("expiry_applied", { event: "expiry_applied", ...report, ms: Date.now() - started });
   },
 );
 

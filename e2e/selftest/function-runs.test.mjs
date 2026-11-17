@@ -296,8 +296,9 @@ test("FIRESTORE_TRIGGERS is every Firestore trigger of functions/src/index.ts, a
   const triggers = kinds.filter((k) => /^onDocument(Created|Written|Updated|Deleted)$/.test(k.kind)).map((k) => k.name).sort();
   assert.deepEqual([...FIRESTORE_TRIGGERS].sort(), triggers);
   // A schedule is not a trigger functionRuns counts: the Functions emulator
-  // loads it and never runs it (lib/purge.ts is tested as a library instead).
-  assert.deepEqual(kinds.filter((k) => k.kind === "onSchedule").map((k) => k.name), ["purgeExpiredTrash"], "the one scheduled function (ADR 0025)");
+  // loads it and never runs it (lib/purge.ts and lib/expire.ts are tested as
+  // libraries instead, and A4.5 calls expireDocument itself).
+  assert.deepEqual(kinds.filter((k) => k.kind === "onSchedule").map((k) => k.name), ["purgeExpiredTrash", "applyExpiries"], "the two scheduled functions (ADR 0025, ADR 0029)");
   assert.deepEqual(kinds.filter((k) => !triggers.includes(k.name) && k.kind !== "onRequest" && k.kind !== "onSchedule"), [], "a function of another kind (a database or auth trigger) needs FIRESTORE_TRIGGERS revisited");
   assert.ok(Object.isFrozen(FIRESTORE_TRIGGERS));
 });

@@ -321,6 +321,25 @@ test("a reader sees no editor or owner event, and no draft", async () => {
   assert.equal(owner.state.draft.exists, true);
 });
 
+test("a date that made a document private reads as the date's doing, to its editors only", async () => {
+  // The hourly job writes it (lib/expire.ts): no uid, no email, no token.
+  const w = world();
+  const { cursor } = await w.call("get_document", OWNER, {});
+  w.store.set("docs/d1/events/expired-1", {
+    at: Timestamp.now(), type: "doc.expired", audience: "editors",
+    actor: { uid: null, channel: "system", via: "its end date" },
+    data: { expiresAt: 1_900_000_000_000, from: "unlisted", endedOpenEditing: false },
+  });
+  const owner = await w.call("get_changes", OWNER, { since: cursor });
+  const [event] = owner.events.filter((e) => e.type === "doc.expired");
+  assert.deepEqual(
+    [event.by, event.channel, event.via, event.automated, event.from, event.expiresAt],
+    [null, "system", "its end date", true, "unlisted", 1_900_000_000_000],
+  );
+  const reader = await w.call("get_changes", VIEWER, { since: cursor }, "tv");
+  assert.deepEqual(reader.events.filter((e) => e.type === "doc.expired"), [], "it says what level it had, as doc.visibility does");
+});
+
 test("needsReply names a thread a person spoke last in, and not one an agent or a note ended", async () => {
   const w = world();
   const { cursor } = await w.call("get_document", OWNER, {});
@@ -377,6 +396,8 @@ test("every way to change a document records an event, or says why it need not",
     manageSuggestion: "the thread: recordThreadEvent", saveThumbs: "thumbnails", mcp: "per tool, below",
     oauth: "credentials", oauthConsent: "credentials", sitemap: "reads", verifyEmail: "an account",
     purgeTrash: "deletes the document forever, its log with it: nothing is left to record into, and a watcher's next read finds no document",
+    // Schedules
+    purgeExpiredTrash: "deletes forever, as purgeTrash does",
     downloadBundle: "reads", getDraft: "reads", contentProxy: "reads", docShell: "reads",
     // Tools
     get_document_access: "reads", get_folder_access: "reads",
@@ -391,9 +412,10 @@ test("every way to change a document records an event, or says why it need not",
     reopen_thread: "recordThreadEvent", add_comment: "recordCommentEvent", reply_to_comment: "recordCommentEvent",
   };
   const RECORDS = { set_document_access: "access.changed", set_document_visibility: "doc.visibility, doc.expiry", setAccess: "access.changed", organize: "doc.renamed, doc.moved, doc.trashed, doc.restored", delete_folder: "doc.trashed", trash_document: "doc.trashed", restore_from_trash: "doc.restored", forkDoc: "fork.created", trustDoc: "doc.trust",
-    setVisibility: "doc.visibility, doc.expiry", fork_document: "fork.created", move_document: "doc.moved", rename_document: "doc.renamed" };
-  return import("../../scripts/lib/endpoints.mjs").then(({ ENDPOINTS: rows }) => {
-    for (const name of [...new Set(rows.map((r) => r.fn)), ...TOOL_NAMES]) {
+    setVisibility: "doc.visibility, doc.expiry", fork_document: "fork.created", move_document: "doc.moved", rename_document: "doc.renamed",
+    applyExpiries: "doc.expired" };
+  return import("../../scripts/lib/endpoints.mjs").then(({ ENDPOINTS: rows, SCHEDULED }) => {
+    for (const name of [...new Set(rows.map((r) => r.fn)), ...SCHEDULED, ...TOOL_NAMES]) {
       assert.ok(name in EXEMPT || name in RECORDS, `${name} changes documents? Record an event, or list it as exempt with a reason`);
     }
   });

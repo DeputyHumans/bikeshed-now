@@ -100,10 +100,15 @@ export const TRIGGERS = ["onCommentCreated", "recordVersionEvent", "recordThread
 /**
  * Functions Cloud Scheduler calls, with no Hosting rewrite and no public
  * invoker: `purgeExpiredTrash` deletes forever what has been in the Trash for
- * 30 days (SPEC §4, ADR 0025). Deploying one needs the Cloud Scheduler API
- * and the deployer's scheduler role (docs/operations/overview.md).
+ * 30 days (SPEC §4, ADR 0025), and `applyExpiries` makes private whatever has
+ * passed its date (SPEC §17, ADR 0029). Deploying one needs the Cloud
+ * Scheduler API and the deployer's scheduler role
+ * (docs/operations/overview.md).
  */
-export const SCHEDULED = ["purgeExpiredTrash"];
+export const SCHEDULED = ["purgeExpiredTrash", "applyExpiries"];
+
+/** How often each runs, as SPEC §2's table names it. */
+export const CADENCE = Object.freeze({ purgeExpiredTrash: "daily", applyExpiries: "hourly" });
 
 /** Every deployed function name, in `firebase functions:delete` order. */
 export function functionNames() {
