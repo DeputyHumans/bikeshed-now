@@ -1,6 +1,10 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -681,2 +681,3 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -455,6 +455,7 @@
+     }
+     return;
    }
 +  await bucket().deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true });
    // What the record moved past — a whole older version, or an older
+   // capture's keys under this one: nothing can name those images any more.
+   for (const gone of outcome.stale) {

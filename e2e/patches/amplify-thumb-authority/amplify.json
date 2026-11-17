@@ -4,7 +4,7 @@
     {
       "name": "thumb-after-upload",
       "side": "server",
-      "where": "functions/src/index.ts saveThumbs: after Promise.all JPEG uploads, before the metadata transaction",
+      "where": "functions/src/endpoints/content.ts saveThumbs: after Promise.all JPEG uploads, before the metadata transaction",
       "key": "docId"
     }
   ]

@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2236,9 +2236,9 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
+--- a/functions/src/endpoints/reading.ts
++++ b/functions/src/endpoints/reading.ts
+@@ -217,9 +217,9 @@
            ...(automated
            ? { apiReads: FieldValue.increment(isNewSession ? 1 : 0) }
            : {

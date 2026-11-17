@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -721,7 +721,7 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -493,7 +493,7 @@
    const proof = await linkProofFor(docSnap.ref, docData, caller, strParam(req, "k"));
    // A read of every byte, so a folder's reach counts, as it does for content.
    if ((await loadReadAccess(db(), docData, caller, proof)) === null) {

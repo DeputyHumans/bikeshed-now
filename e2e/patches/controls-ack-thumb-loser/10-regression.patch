@@ -1,7 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -648,3 +648,3 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -423,7 +423,7 @@
+     // A later publication may replace this upload's current key before the
+     // native SDK retries. Keep its bounded result, including original cleanup.
      const committed = readReceipt<{ stored: true; moved: false; stale: StaleThumbs[] }>(fresh, receipt);
 -    if (committed.found) return committed.result;
 +    if (Boolean(0) && committed.found) return committed.result;
      const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+     // Uploading bytes does not reserve authority: a sharing change may have
+     // removed this editor while Storage was accepting the candidate images.

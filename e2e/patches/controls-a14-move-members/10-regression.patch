@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1958,6 +1958,7 @@
+--- a/functions/src/endpoints/workspace.ts
++++ b/functions/src/endpoints/workspace.ts
+@@ -589,6 +589,7 @@
            ? []
            : [{ type: "doc.moved", audience: "editors", actor: eventActor(actorFrom(caller, req)), data: { from: fromFolder, to: target.id } }],
      );

@@ -1,7 +1,7 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2579,7 +2579,7 @@
-
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -199,7 +199,7 @@
+ 
    if (op === "create") {
      const name = typeof body?.name === "string" ? body.name.trim() : "";
 -    if (!name) {

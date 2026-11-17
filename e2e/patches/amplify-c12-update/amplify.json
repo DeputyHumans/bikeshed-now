@@ -4,7 +4,7 @@
     {
       "name": "draft-after-check",
       "side": "server",
-      "where": "functions/src/index.ts saveDraft: after the stale-base 409 check, before loadVersionMeta and writeDraft",
+      "where": "functions/src/endpoints/editing.ts saveDraft: after the stale-base 409 check, before loadVersionMeta and writeDraft",
       "key": "docId"
     },
     {

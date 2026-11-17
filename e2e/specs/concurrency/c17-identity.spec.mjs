@@ -246,7 +246,7 @@ const MAIL_MS = 90_000;
 const MEASURE = "c17-identity";
 
 /** functions/src/index.ts: the guesses one code allows, read from the tree the stack runs. */
-const VERIFY_MAX_ATTEMPTS = target ? Number(treeConstant(target, "functions/src/index.ts", "VERIFY_MAX_ATTEMPTS")) : 5;
+const VERIFY_MAX_ATTEMPTS = target ? Number(treeConstant(target, "functions/src/endpoints/verification.ts", "VERIFY_MAX_ATTEMPTS")) : 5;
 /** C19's burst sizes per N: the catalogue's 50 wrong codes and 10 code requests at N=20 (see SIZES). */
 const WRONG_AT_ONCE = Object.freeze({ 2: 6, 5: 13, 10: 25, 20: 50 });
 const STARTS_AT_ONCE = Object.freeze({ 2: 2, 5: 5, 10: 10, 20: 10 });

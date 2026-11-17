@@ -1,8 +1,6 @@
-diff --git a/functions/src/index.ts b/functions/src/index.ts
-index e7ea2df..ad3791e 100644
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1318,6 +1318,8 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
+--- a/functions/src/endpoints/editing.ts
++++ b/functions/src/endpoints/editing.ts
+@@ -311,6 +311,8 @@
    };
    const proof = await linkProofFor(docRef, data, caller, null);
    if (!canEdit(data, caller, proof)) {

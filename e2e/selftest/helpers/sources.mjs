@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-// Self-test helper: the product's endpoint and MCP tool sources, each read as one text (SPEC §12).
+// Self-test helper: the product's endpoint and MCP tool sources, file by file or as one text (SPEC §12).
 
 /**
  * The guard and trigger self-tests parse the product's source to learn which
  * functions exist, which can send email and which write comments. Read by one
  * file name, a parse goes quiet the day the code it is looking for moves: it
  * finds fewer functions, and every gap it would have reported for them closes.
- * So both texts are every file of their kind, and each self-test also pins what
- * it must find.
+ * So both are every file of their kind, and each self-test also pins what it
+ * must find. A parse that reads declarations wants the files apart: run
+ * together, the last declaration of one file would take in the next file's
+ * imports, and an import naming MAILING reads as a function bound to it.
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -31,10 +33,16 @@ export const ENDPOINT_FILES = Object.freeze(["index.ts", ...tsUnder("endpoints")
 /** functions/src-relative paths: the MCP tool table and the management tools. */
 export const TOOL_FILES = Object.freeze([join("mcp", "tools.ts"), ...tsUnder(join("mcp", "tools")), join("mcp", "management.ts")]);
 
-const read = (files) => files.map((f) => readFileSync(join(SRC, f), "utf8")).join("\n");
+const read = (files) => files.map((f) => readFileSync(join(SRC, f), "utf8"));
 
-/** Every endpoint source, as one text. */
-export const endpointSource = () => read(ENDPOINT_FILES);
+/** Each endpoint source's text, one entry per file. */
+export const endpointTexts = () => read(ENDPOINT_FILES);
 
-/** Every MCP tool source, as one text. */
-export const toolSource = () => read(TOOL_FILES);
+/** Each MCP tool source's text, one entry per file. */
+export const toolTexts = () => read(TOOL_FILES);
+
+/** Every endpoint source, as one text, for a pattern that matches within a line. */
+export const endpointSource = () => endpointTexts().join("\n");
+
+/** Every MCP tool source, as one text, for a pattern that matches within a line. */
+export const toolSource = () => toolTexts().join("\n");

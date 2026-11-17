@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1856,6 +1856,7 @@
+--- a/functions/src/endpoints/workspace.ts
++++ b/functions/src/endpoints/workspace.ts
+@@ -545,6 +545,7 @@
  
      const frozen = frozenWrite(data, Date.now());
      if (frozen) {

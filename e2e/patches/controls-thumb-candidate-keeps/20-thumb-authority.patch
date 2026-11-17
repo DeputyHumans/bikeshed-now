@@ -1,7 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -668,3 +668,3 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -444,7 +444,7 @@
+   if (outcome.stored) await clearReceipt(docRef, receipt);
+ 
    if (!outcome.stored) {
 -    await bucket()
 +    if (!outcome.denied) await bucket()
        .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
+       .catch(() => undefined);
+     if (outcome.denied) {

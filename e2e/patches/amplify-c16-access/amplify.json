@@ -28,7 +28,7 @@
     {
       "name": "team-members-after-read",
       "side": "server",
-      "where": "functions/src/index.ts manageTeamMembers: before the membership transaction (legacy gate name retained)",
+      "where": "functions/src/endpoints/account.ts manageTeamMembers: before the membership transaction (legacy gate name retained)",
       "key": "teamId"
     },
     {

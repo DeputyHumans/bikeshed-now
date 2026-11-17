@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2485,7 +2485,7 @@
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -90,7 +90,7 @@
      return;
    }
    const session = cookie.parse(req.headers.cookie || "")[SESSION_COOKIE_NAME];

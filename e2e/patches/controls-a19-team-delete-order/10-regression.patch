@@ -1,8 +1,8 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2419,11 +2419,8 @@
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -295,11 +295,8 @@
    }
-
+ 
    if (op === "delete") {
 +    const affected = await refanTeam(db(), teamId);
      await ref.delete();

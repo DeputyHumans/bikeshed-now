@@ -28,13 +28,14 @@ import { DEFAULT_POLICY, EMAIL_ROUTES, TRIGGER_COVERAGE, UNKNOWN_TOOL_PREFIX, cr
 import { createHttp } from "../lib/http.mjs";
 import { runCli } from "../lib/cli.mjs";
 import { tempDir } from "./helpers/tmp.mjs";
-import { endpointSource, toolSource } from "./helpers/sources.mjs";
+import { endpointTexts, toolTexts } from "./helpers/sources.mjs";
 
 // Every endpoint module and every tool module, never one file by name: a parse
 // that misses the file a function moved to finds fewer functions, and the gaps
-// it would have reported for them close without a word.
-const INDEX_TS = endpointSource();
-const TOOLS_TS = toolSource();
+// it would have reported for them close without a word. One text per file, so
+// no declaration runs on into the next file's imports.
+const INDEX_TEXTS = endpointTexts();
+const TOOLS_TEXTS = toolTexts();
 const FIREBASE_JSON = JSON.parse(readFileSync(join(REPO_ROOT, "firebase.json"), "utf8"));
 
 const EMAIL_HELPERS = ["sendInvitations", "sendCommentNotice", "sendVerificationCode", "sendEmail"];
@@ -90,7 +91,7 @@ function closure(all, seeds, re) {
 }
 
 function mailingFunctions() {
-  const all = blocks(INDEX_TS);
+  const all = INDEX_TEXTS.flatMap(blocks);
   const secretConsts = all.filter((b) => !deployed(b) && /RESEND_API_KEY/.test(b.text)).map((b) => b.name);
   const reach = closure(all.filter((b) => !deployed(b)), EMAIL_HELPERS);
   return all
@@ -100,19 +101,19 @@ function mailingFunctions() {
 }
 
 function commentWritingEndpoints() {
-  const all = blocks(INDEX_TS);
+  const all = INDEX_TEXTS.flatMap(blocks);
   const reach = closure(all.filter((b) => !deployed(b)), COMMENT_WRITERS, COMMENT_WRITE_RE);
   return all.filter((b) => b.exported && /\bonRequest\(/.test(b.text) && (calls(b.text, [...reach]) || COMMENT_WRITE_RE.test(b.text))).map((b) => b.name);
 }
 
 /** [{name, text}] for each tool in tools.ts. */
 function toolBlocks() {
-  const parts = TOOLS_TS.split(/\n  \{\n    name: "/).slice(1);
+  const parts = TOOLS_TEXTS.flatMap((t) => t.split(/\n  \{\n    name: "/).slice(1));
   return parts.map((p) => ({ name: p.slice(0, p.indexOf('"')), text: p }));
 }
 
 function commentWritingTools() {
-  const helpers = closure(blocks(TOOLS_TS).filter((b) => !toolTable(b)), COMMENT_WRITERS, COMMENT_WRITE_RE);
+  const helpers = closure(TOOLS_TEXTS.flatMap(blocks).filter((b) => !toolTable(b)), COMMENT_WRITERS, COMMENT_WRITE_RE);
   return toolBlocks().filter((t) => calls(t.text, [...helpers]) || COMMENT_WRITE_RE.test(t.text)).map((t) => t.name);
 }
 

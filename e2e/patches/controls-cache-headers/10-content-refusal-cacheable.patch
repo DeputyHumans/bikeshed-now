@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -585,8 +585,7 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -256,8 +256,7 @@
  export const contentProxy = onRequest(WARM, async (req, res) => {
    if (rejectMethod(req, res, ["GET", "HEAD"])) return;
  

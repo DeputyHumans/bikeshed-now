@@ -588,7 +588,9 @@ Whatever has no slot is in the ⋮ menu, with the version and length as its head
 ```
 functions/src/
   health.json                          operational marker contract
-  index.ts                 all exports (§2)
+  index.ts                 all exports (§2), each re-exported from endpoints/
+  endpoints/runtime.ts     global options, the option sets, db, bucket, now, refusal
+  endpoints/{session,content,sharing,editing,workspace,reading,verification,account,discovery,triggers,agents}.ts
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,trash,expire,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
@@ -603,6 +605,7 @@ functions/src/
   oauth/{routes,metadata,clients,redirect,fetch,consent,grants,token,assertion,managed}.ts
 ```
 
+- `endpoints/*.ts` — the handlers, one module per area, each the glue between a request and `lib/`; `index.ts` only re-exports them, so its export names stay the deployed function names. `endpoints/runtime.ts` calls `setGlobalOptions` and holds `MAILING`, `PLAIN` and `WARM`, and every module defines its functions with an option set from there, so the global options are in force before any function is defined: `onRequest` reads them at the call, not at deploy, and `functions/test/wiring.test.js` pins it.
 - `lib/auth.ts` — the §1 gate over a decoded token, an ID token, a session cookie, or a personal access token.
 - `lib/acl.ts` — `readBasis`, `canRead`, `isDocEditor`, `canEdit`, `canManageSharing`, and the folder equivalents. **`acl.ts canRead()` MUST mirror `firestore.rules` `canRead()`** for a caller with an account; they are tested on both sides. `tokenMatches` is the only place a link token is compared, and a wiring test holds it there; `keyMatchesHash` is the only place a folder's key is, against the hash its `reach` stores. `readAccess` adds a folder's reach to `readBasis`, for read paths only (§17). `isFrozen` is expired or in the Trash, the one question every read and write path asks (`frozenForReader` for reads, which leaves the owner in; `frozenWrite` for the 409 a write answers, which names the Trash before the expiry), and `isTrashed` is what the rules mirror as `isTrashed(d)` (§4 "The Trash"). `isPurged` is a tombstone, which no path may write to merely because it exists (§4 "Deleted forever").
 - `lib/trash.ts` — moving a document or a folder to the Trash and back: who may, the batch a folder shares with everything it takes, and where Restore puts each item (§4 "The Trash").
@@ -618,7 +621,7 @@ functions/src/
 - `lib/markdown/reading.ts` — the Markdown reading an agent gets of an HTML document, and the front matter that says it is one (§19 "Reading a document", ADR 0030): a linear strip of scripts, stylesheets, comments and `data:` values, then turndown with rules of its own that keep no HTML and escape nothing.
 - `lib/html.ts` — escaping for markup the functions emit into the app shell; separate from the Markdown renderer's escaper, whose bytes are part of the content hash.
 - `lib/scriptlock.ts` — whether a document's own script may run in a response: the lock every scriptable content and draft response carries, the run variant that alone can lift it, and who may trust a document for everyone (§2, §6c; ADR 0021).
-- `lib/shell.ts` — the `docShell` decision, the page composed from it, the splice into the shell template, and the runtime fetch of the shell from Hosting; the handler in `index.ts` is glue.
+- `lib/shell.ts` — the `docShell` decision, the page composed from it, the splice into the shell template, and the runtime fetch of the shell from Hosting; the handler in `endpoints/discovery.ts` is glue.
 - `lib/embed.ts` — the embed page `docShell` serves at `/embed/**`: the frame and link spliced into its template, and the one neutral refusal (§2 `GET /embed/…`).
 - `lib/sitemap.ts` — what `/sitemap.xml` says, given the public documents the handler read.
 - Bucket name: `BIKESHED_BUCKET` → `config/deploy.json` → `${projectId}-content`. **The Firebase default bucket is never assumed** (§14 of the risk register: `${projectId}.appspot.com` is wrong for post-2024 projects and `.firebasestorage.app` is wrong for pre-2024 ones).

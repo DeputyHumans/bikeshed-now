@@ -1,6 +1,15 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1627,6 +1627,9 @@
+--- a/functions/src/endpoints/workspace.ts
++++ b/functions/src/endpoints/workspace.ts
+@@ -2,7 +2,7 @@
+ // The workspace: suggestions, upload, folders, organizing and forking (SPEC §2, §13, §21, §22).
+ 
+ import { onRequest, type Request } from "firebase-functions/v2/https";
+-import { MAX_BUNDLE_BYTES } from "../config";
++import { MAX_BUNDLE_BYTES, publicOrigin } from "../config";
+ import { getAccess, setAccess as changeAccess, organizeFolder } from "../lib/management";
+ import { restoreDocument, restoreFolder, trashDocument, trashFolder } from "../lib/trash";
+ import {
+@@ -315,6 +315,9 @@
      res.status(500).json({ error: "could not create the document" });
      return;
    }

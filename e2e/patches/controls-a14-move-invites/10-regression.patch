@@ -1,11 +1,20 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1899,6 +1899,12 @@
+--- a/functions/src/endpoints/workspace.ts
++++ b/functions/src/endpoints/workspace.ts
+@@ -2,7 +2,7 @@
+ // The workspace: suggestions, upload, folders, organizing and forking (SPEC §2, §13, §21, §22).
+ 
+ import { onRequest, type Request } from "firebase-functions/v2/https";
+-import { MAX_BUNDLE_BYTES } from "../config";
++import { MAX_BUNDLE_BYTES, publicOrigin } from "../config";
+ import { getAccess, setAccess as changeAccess, organizeFolder } from "../lib/management";
+ import { restoreDocument, restoreFolder, trashDocument, trashFolder } from "../lib/trash";
+ import {
+@@ -589,6 +589,12 @@
            ? []
            : [{ type: "doc.moved", audience: "editors", actor: eventActor(actorFrom(caller, req)), data: { from: fromFolder, to: target.id } }],
      );
 +    if (target.id) {
-+      const { sendInvitations } = await import("./email/notify");
++      const { sendInvitations } = await import("../email/notify");
 +      await sendInvitations(caller.emailLower,
 +        (target.membership?.members ?? []).filter((email) => email !== caller.emailLower).map((email) => ({ email, role: "viewer" as const })),
 +        { title: "Moved document", kind: "document", url: `${publicOrigin()}/d/${id}` });

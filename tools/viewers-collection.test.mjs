@@ -64,7 +64,7 @@ test("every collection named `viewers` is docs/{docId}/viewers", () => {
     occurrences(),
     [
       // Its one writer, recordView, under `docRef = db().collection("docs").doc(docId)`.
-      'functions/src/index.ts: .collection("viewers")',
+      'functions/src/endpoints/reading.ts: .collection("viewers")',
       // The editor's per-document breakdown.
       'app/src/firestore.ts: collection(db,"docs",docId,"viewers")',
       // Recent's own reads: the same collection, as a group (SPEC §5).

@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1328,10 +1328,9 @@
+--- a/functions/src/endpoints/editing.ts
++++ b/functions/src/endpoints/editing.ts
+@@ -323,10 +323,9 @@
      return;
    }
    if (data.currentVersion !== baseVersion) {

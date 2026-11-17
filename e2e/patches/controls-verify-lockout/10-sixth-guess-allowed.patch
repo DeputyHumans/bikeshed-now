@@ -1,7 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2461,9 +2461,9 @@
-     if (Number(verification.expiresAt ?? 0) < Date.now()) {
+--- a/functions/src/endpoints/verification.ts
++++ b/functions/src/endpoints/verification.ts
+@@ -161,7 +161,7 @@
        tx.delete(ref);
        return { status: 409, error: "that code has expired" };
      }
@@ -10,4 +9,3 @@
        tx.delete(ref);
        return { status: 429, error: "too many attempts; request a new code" };
      }
-     if (expected !== verification.hash) {

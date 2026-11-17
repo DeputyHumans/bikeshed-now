@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2815,7 +2815,7 @@
+--- a/functions/src/endpoints/triggers.ts
++++ b/functions/src/endpoints/triggers.ts
+@@ -69,7 +69,7 @@
      if (owner) recipients.add(owner);
      // A new suggestion is for the people who can decide it: only they can
      // clear it, and until they do it holds back the next version (SPEC §22).

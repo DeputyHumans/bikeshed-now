@@ -14,7 +14,9 @@ const AdmZip = createRequire(new URL("../functions/package.json", import.meta.ur
 const sha = b => createHash("sha256").update(b).digest("hex");
 const need = (ok, why) => { if (!ok) throw new Error(`cloud qualification: ${why}`); };
 const guard = "    const last = Number(cooldowns[own] ?? 0);\n    if (now - last < COMMENT_EMAIL_COOLDOWN_MS) return false;\n";
-const overlays = new Set(["src/index.ts", "src/oauth/consent.ts", "src/oauth/token.ts", "src/mcp/server.ts", "src/lib/actor.ts", "src/lib/presence.ts", "src/config.ts", "src/email/notify.ts"]);
+// Every endpoint module stands where src/index.ts alone stood before the split: an overlay could touch any endpoint then, and can touch the same code now. Listed, not globbed, so a new module is refused until it is reviewed here.
+const ENDPOINT_MODULES = ["runtime", "session", "content", "sharing", "editing", "workspace", "reading", "verification", "account", "discovery", "triggers", "agents"].map(m => `src/endpoints/${m}.ts`);
+const overlays = new Set(["src/index.ts", ...ENDPOINT_MODULES, "src/oauth/consent.ts", "src/oauth/token.ts", "src/mcp/server.ts", "src/lib/actor.ts", "src/lib/presence.ts", "src/config.ts", "src/email/notify.ts"]);
 const timing = new Set(["cloud cooldown: automatic triggers did not overlap", ...["comment", "suggestion"].map(k => `cloud cooldown: ${k} cooldown calls did not overlap on one instance`)]);
 
 /** Reviewed overlays are pinned by the release policy, not trusted merely because the artifact names them. */

@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -232,7 +232,7 @@
+--- a/functions/src/endpoints/runtime.ts
++++ b/functions/src/endpoints/runtime.ts
+@@ -47,7 +47,7 @@
    caller: { uid: string; emailLower: string } | null,
    proof?: LinkProof,
  ): 403 | 404 {

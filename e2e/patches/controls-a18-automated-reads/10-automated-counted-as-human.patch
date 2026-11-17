@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2055,7 +2055,8 @@
+--- a/functions/src/endpoints/reading.ts
++++ b/functions/src/endpoints/reading.ts
+@@ -136,7 +136,8 @@
    const basis = access.basis;
  
    const actor = caller ? actorFrom(caller, req) : null;

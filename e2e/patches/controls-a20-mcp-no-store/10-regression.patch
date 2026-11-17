@@ -20,13 +20,13 @@
 -  response.setHeader("Cache-Control", "private, no-store");
    response.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate");
  });
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2978,7 +2978,6 @@
+--- a/functions/src/endpoints/agents.ts
++++ b/functions/src/endpoints/agents.ts
+@@ -19,7 +19,6 @@
  export const mcp = onRequest({ ...MAILING, cors: true }, async (req, res) => {
    // Before anything can answer: a GET's 405 and every 401 would otherwise
    // inherit Hosting's default max-age=600.
 -  noStore(res);
-   const { handleMcp } = await import("./mcp/server");
+   const { handleMcp } = await import("../mcp/server");
    await handleMcp(req, res);
  });

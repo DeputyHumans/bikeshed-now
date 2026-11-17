@@ -1,6 +1,14 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1328,6 +1328,9 @@ export const commitVersion = onRequest(PLAIN, async (req, res) => {
+--- a/functions/src/endpoints/editing.ts
++++ b/functions/src/endpoints/editing.ts
+@@ -4,6 +4,7 @@
+ import { versionStoragePrefix } from "../lib/storage";
+ import { onRequest } from "firebase-functions/v2/https";
+ import { parseCausalStamp, readStoredCausalStamp } from "../lib/causal";
++import { FieldValue } from "firebase-admin/firestore";
+ import { MAX_BUNDLE_BYTES } from "../config";
+ import { canEdit, frozenWrite, type DocAclData } from "../lib/acl";
+ import { actorFrom, resolveCaller } from "../lib/actor";
+@@ -323,6 +324,9 @@
      return;
    }
    if (data.currentVersion !== baseVersion) {

@@ -1,9 +1,13 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2850,4 +2850,4 @@
+--- a/functions/src/endpoints/triggers.ts
++++ b/functions/src/endpoints/triggers.ts
+@@ -102,8 +102,8 @@
+       if (account.id === authorUid) authorNow = e;
+       else recipients.add(e);
      }
 -    recipients.delete(authorEmail);
 -    if (authorNow) recipients.delete(authorNow);
 +    recipients.add(authorEmail);
 +    if (authorNow) recipients.add(authorNow);
      if (recipients.size === 0) return;
+ 
+     const quote = String(annSnap.data()?.anchor?.exact ?? "").slice(0, 300);

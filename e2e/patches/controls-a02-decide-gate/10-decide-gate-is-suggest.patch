@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1486,7 +1486,7 @@
+--- a/functions/src/endpoints/workspace.ts
++++ b/functions/src/endpoints/workspace.ts
+@@ -193,7 +193,7 @@
      });
      return;
    }

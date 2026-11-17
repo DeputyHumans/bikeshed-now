@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -660,7 +660,7 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -448,7 +448,7 @@
        .deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true })
        .catch(() => undefined);
      if (outcome.denied) {

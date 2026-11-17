@@ -370,7 +370,7 @@ test("every write of a new document's bytes refuses to overwrite", () => {
  * The Functions emulator wraps `firebase-admin` in a proxy that drops the
  * static namespace properties off `admin.firestore`, so `admin.firestore.
  * FieldValue` and `admin.firestore.Timestamp` are `undefined` there and fine
- * in production (see the import comment at the top of `src/index.ts`, and
+ * in production (see the import comment in `src/endpoints/runtime.ts`, and
  * CLAUDE.md). A unit suite cannot see it; the emulator finds it on the first
  * request that reaches the line. So the shape is pinned: those classes come
  * from the modular `firebase-admin/firestore` entry point. Type positions

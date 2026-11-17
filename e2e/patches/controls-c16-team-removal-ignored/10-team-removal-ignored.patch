@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2674,7 +2674,7 @@
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -357,7 +357,7 @@
      const set = new Set(before);
      for (const e of remove.map(normalizeEmail)) {
        // The owner is never removed: a team with no owner has no one who can fix it.

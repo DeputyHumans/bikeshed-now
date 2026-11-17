@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2816,7 +2816,7 @@
+--- a/functions/src/endpoints/triggers.ts
++++ b/functions/src/endpoints/triggers.ts
+@@ -70,7 +70,7 @@
      // A new suggestion is for the people who can decide it: only they can
      // clear it, and until they do it holds back the next version (SPEC §22).
      const suggestion = comment.opensSuggestion === true ? annSnap.data()?.suggestion : null;

@@ -1,18 +1,30 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -36,2 +36,3 @@
- import * as cookie from "cookie";
-+import { e2eIdentityGate } from "./lib/e2eIdentityGate";
- import * as mime from "mime-types";
-@@ -2469,2 +2470,5 @@
-
+--- a/functions/src/endpoints/verification.ts
++++ b/functions/src/endpoints/verification.ts
+@@ -4,6 +4,7 @@
+ import { onRequest } from "firebase-functions/v2/https";
+ import * as admin from "firebase-admin";
+ import { FieldValue } from "firebase-admin/firestore";
++import { e2eIdentityGate } from "../lib/e2eIdentityGate";
+ import { randomBytes, createHash } from "crypto";
+ import { VERIFY_TTL_MS } from "../config";
+ import { isAllowedEmail, isEmailShapeValid } from "../generated/policy";
+@@ -89,6 +90,9 @@
+       return;
+     }
+ 
 +    // e2e preliminary snapshot only; no transaction lock while waiting.
 +    await ref.get();
 +    await e2eIdentityGate("verify-start-after-read", uid);
      const code = sixDigitCode();
-@@ -2507,2 +2511,5 @@
+     const reservationId = randomBytes(16).toString("hex");
+     // Keyed by a hash so the record names no address; server-only, like the
+@@ -133,6 +137,9 @@
+ 
+   const body = jsonBody(req) as { code?: unknown } | null;
    const code = typeof body?.code === "string" ? body.code.trim() : "";
 +  // e2e preliminary snapshot only; the transaction re-reads after release.
 +  await ref.get();
 +  await e2eIdentityGate("verify-complete-after-read", uid);
    type VerificationCheck =
+     | { status: 400 | 409 | 429; error: string }
+     | { status: 200; email: string; identity: string };

@@ -1,9 +1,9 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2511,7 +2511,7 @@
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -387,7 +387,7 @@
    // was granted, and adding someone must grant it. Both are the same recompute.
    const affected = await refanTeam(db(), teamId);
-
+ 
 -  const beforeSet = new Set(before);
 +  const beforeSet = new Set(before.filter(() => false));
    const invitees: InviteTarget[] = members

@@ -1,6 +1,21 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1230,7 +1230,8 @@
+--- a/functions/src/endpoints/workspace.ts
++++ b/functions/src/endpoints/workspace.ts
+@@ -8,13 +8,13 @@
+ import {
+   canEdit,
+   canManageSharing,
+-  canRead,
+   canSuggest,
+   frozenWrite,
+   isDocApprover,
+   isDocEditor,
+   type DocAclData,
+ } from "../lib/acl";
++import { loadReadAccess } from "../lib/reach";
+ import { actorFrom, resolveCaller } from "../lib/actor";
+ import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
+ import {
+@@ -120,7 +120,8 @@
      draft?: { baseVersion?: unknown } | null;
    };
    const proof = await linkProofFor(ref, data, caller, typeof body.k === "string" ? body.k : null);

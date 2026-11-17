@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2265,7 +2265,7 @@
+--- a/functions/src/endpoints/reading.ts
++++ b/functions/src/endpoints/reading.ts
+@@ -213,7 +213,7 @@
          stats: {
            // Members receive this map. Reading identities belong only in the
            // editor-gated views/viewers records, including on legacy documents.

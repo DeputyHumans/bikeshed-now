@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2579,6 +2579,8 @@ export const docShell = onRequest(WARM, async (req, res) => {
+--- a/functions/src/endpoints/discovery.ts
++++ b/functions/src/endpoints/discovery.ts
+@@ -289,6 +289,8 @@
    const folder = doc && readBasis(doc, null, { k }) === null ? await folderOfDoc(db(), doc) : null;
    const decision = decideShell({ doc, folder, k, versionId: pinned, now: Date.now() });
    if (decision.kind === "generic") {

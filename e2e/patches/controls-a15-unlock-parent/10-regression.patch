@@ -1,6 +1,8 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2380,3 +2380,4 @@
+--- a/functions/src/endpoints/reading.ts
++++ b/functions/src/endpoints/reading.ts
+@@ -322,5 +322,6 @@
+   ) {
+     await recordLinkGrant(docRef, caller.uid, data.linkToken);
    }
 -  res.status(200).json(projection);
 +  const pointer = await db().collection("forks").doc(docId).get();

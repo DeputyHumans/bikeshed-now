@@ -1,6 +1,8 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2380,3 +2380,3 @@
+--- a/functions/src/endpoints/reading.ts
++++ b/functions/src/endpoints/reading.ts
+@@ -322,5 +322,5 @@
+   ) {
+     await recordLinkGrant(docRef, caller.uid, data.linkToken);
    }
 -  res.status(200).json(projection);
 +  res.status(200).json({ ...projection, forked: false });

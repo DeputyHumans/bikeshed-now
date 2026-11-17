@@ -1,7 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2283,3 +2283,3 @@
+--- a/functions/src/endpoints/reading.ts
++++ b/functions/src/endpoints/reading.ts
+@@ -167,7 +167,7 @@
+     const isNewViewer = Boolean(viewerSnap && !viewerSnap.exists);
+     const storedMs = isNewSession ? 0 : Number(sessionSnap.data()?.ms ?? 0);
      beatCeiling ??= storedMs + MAX_BEAT_MS;
 -    const delta = Math.max(0, Math.min(claimedMs, beatCeiling) - storedMs);
 +    const delta = Math.max(0, Math.min(claimedMs, caller ? beatCeiling : storedMs + MAX_BEAT_MS) - storedMs);
      const sessionMs = storedMs + delta;
+     // A read is reading: a beat reporting no new time is a tab nobody is looking
+     // at, which must not lift a document in Recent or clear "New since you read

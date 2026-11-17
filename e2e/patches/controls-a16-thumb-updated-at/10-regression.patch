@@ -1,7 +1,20 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -662,3 +662,3 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -58,7 +58,7 @@
+   safeSegment,
+   strParam,
+ } from "../lib/http";
+-import { db, bucket, refusal, PLAIN, WARM } from "./runtime";
++import { db, bucket, now, refusal, PLAIN, WARM } from "./runtime";
+ 
+ // ---------------------------------------------------------------------------
+ // Content
+@@ -436,7 +436,7 @@
+     if (!decision.write) return { stored: false, moved: false, stale: [] };
+     const result = { stored: true as const, moved: false as const, stale: decision.stale };
      recordReceipt(tx, docRef, fresh, receipt, result);
 -    tx.update(docRef, { thumb: decision.thumb });
 +    tx.update(docRef, { thumb: decision.thumb, updatedAt: now() });
      return result;
+   });
+   if (outcome.stored) await clearReceipt(docRef, receipt);

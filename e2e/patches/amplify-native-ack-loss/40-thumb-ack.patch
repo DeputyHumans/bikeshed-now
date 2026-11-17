@@ -1,11 +1,19 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -58,2 +58,3 @@
- import { isAllowedEmail, isEmailShapeValid } from "./generated/policy";
-+import { e2eAckTransaction } from "./lib/e2eAckTransaction";
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -13,6 +13,7 @@
+   clearReceipt,
+ } from "../lib/transaction-receipts";
+ import { MAX_BUNDLE_BYTES, PUBLIC_CACHE_SECONDS } from "../config";
++import { e2eAckTransaction } from "../lib/e2eAckTransaction";
  import {
-@@ -628,3 +629,3 @@
+   earlierEnd,
+   expiryMs,
+@@ -417,7 +418,7 @@
+   );
+ 
    const receipt = freshReceiptId();
 -  const outcome = await db().runTransaction(async (tx) => {
 +  const outcome = await e2eAckTransaction(db(), docId, `thumb-${kind}`, async (tx) => {
      const fresh = await tx.get(docRef);
+     // A later publication may replace this upload's current key before the
+     // native SDK retries. Keep its bounded result, including original cleanup.

@@ -1,7 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1226,3 +1226,3 @@
+--- a/functions/src/endpoints/editing.ts
++++ b/functions/src/endpoints/editing.ts
+@@ -143,7 +143,7 @@
+       // Unclocked writers replace a whole snapshot, so they must not overwrite
+       // any newer save. Legacy API callers still get request-time CAS.
        ...(!causal ? (expectedRevision === undefined ? { expectedDraft: data.draft } : { expectedRevision }) : {}),
 -      retireLive: !causal,
 +      retireLive: false,
        version,
+       content:
+         markdown === null ? { html } : { markdown, html: renderMarkdown(markdown, { title: data.title }).html },

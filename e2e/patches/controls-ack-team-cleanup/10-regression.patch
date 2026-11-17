@@ -1,7 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2822,3 +2822,3 @@
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -381,7 +381,7 @@
+     return completedChange;
+   });
    if (result.status !== 200) { res.status(result.status).end(); return; }
 -  await clearReceipt(ref, receipt);
 +  if (receipt.id === "never") await clearReceipt(ref, receipt);
    const { team, before, members, admins } = result;
+ 
+   // Removing someone from a team must revoke their access everywhere the team

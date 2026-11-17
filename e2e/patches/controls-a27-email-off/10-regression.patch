@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2498,7 +2498,7 @@
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -103,7 +103,7 @@
      badRequest(res, 'expected { op: "code" | "confirm", target: { kind, id } | { all: true } }');
      return;
    }

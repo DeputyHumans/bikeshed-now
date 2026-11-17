@@ -1,7 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2530,3 +2530,3 @@
+--- a/functions/src/endpoints/verification.ts
++++ b/functions/src/endpoints/verification.ts
+@@ -157,7 +157,7 @@
+     // The challenge allows at most five wrong attempts, so this receipt list
+     // is bounded by the existing limit and survives other concurrent guesses.
      const attemptIds = Array.isArray(verification.attemptIds) ? verification.attemptIds : [];
 -    if (attemptIds.includes(attemptId)) return { status: 400, error: "that code is not right" };
 +    if (Number(verification.attempts) >= 5 && attemptIds.includes(attemptId)) return { status: 400, error: "that code is not right" };
      if (Number(verification.expiresAt ?? 0) < Date.now()) {
+       tx.delete(ref);
+       return { status: 409, error: "that code has expired" };

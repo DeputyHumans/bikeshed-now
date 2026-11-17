@@ -1,6 +1,6 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2950,10 +2950,9 @@
+--- a/functions/src/endpoints/triggers.ts
++++ b/functions/src/endpoints/triggers.ts
+@@ -85,10 +85,9 @@
      for (const c of siblingSnap.docs) {
        const d = c.data() ?? {};
        const uid = uidOf(d);
@@ -14,7 +14,7 @@
        const e = normalizeEmail(String(d.authorEmail || ""));
        if (e) recipients.add(e);
      }
-@@ -2987,8 +2986,9 @@
+@@ -121,8 +120,9 @@
        // No account yet means no cooldown record and no preference to honour.
        // Staying silent is the right default: they were never told about the
        // document either.

@@ -12,6 +12,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ### Changed
 
+- **The functions are split by area.** `functions/src/index.ts` held every deployed function in 3,589 lines. It now only re-exports them, and each of its sections moved unchanged into `functions/src/endpoints/`: `session`, `content`, `sharing`, `editing`, `workspace`, `reading`, `verification`, `account`, `discovery`, `triggers` and `agents`, with `runtime` holding the option sets and what every handler shares. The functions a deploy sees, their names and their settings are identical. A test now holds every function to the runtime settings an operator manages, which a module loaded before `setGlobalOptions` would have reset, and the end-to-end harness's control patches, its zero-email guard and the tests that read a handler's source all follow the code to its new file (SPEC §8).
 - **Dependency updates, for development only.** `vite` moves to 6.4.6 in the app, which escapes module ids when it resolves a virtual module. `playwright-core` moves to 1.65.0, which drives Chromium r1254; the end-to-end harness prefers the cached Chrome for Testing build that matches it, as before.
 
 ## 0.37.1 — 2026-11-17

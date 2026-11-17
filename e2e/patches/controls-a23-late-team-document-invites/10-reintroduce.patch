@@ -1,9 +1,9 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2735,5 +2735,11 @@
+--- a/functions/src/endpoints/account.ts
++++ b/functions/src/endpoints/account.ts
+@@ -403,5 +403,11 @@
      });
    }
-
+ 
 +  for (const id of (await findGrantsForTeam(db(), teamId)).docIds) {
 +    const document = await db().collection("docs").doc(id).get();
 +    await sendInvitations(caller.emailLower, invitees, {

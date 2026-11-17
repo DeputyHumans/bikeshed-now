@@ -1,7 +1,11 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -2397,3 +2397,3 @@
+--- a/functions/src/endpoints/verification.ts
++++ b/functions/src/endpoints/verification.ts
+@@ -98,7 +98,7 @@
+     const reserved = await e2eAckTransaction(db(), uid, "verification-start", async (tx): Promise<"ok" | "account" | "address"> => {
+       const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
        const target = (await tx.get(targetRef)).data() as { sentAt?: unknown } | undefined;
 -      if (existing?.reservationId === reservationId) return "ok";
 +      if (reservationId === "never" && existing?.reservationId === reservationId) return "ok";
        const at = Date.now();
+       if (existing?.sentAt && at - existing.sentAt < VERIFY_RESEND_GAP_MS) return "account";
+       const recent = (Array.isArray(target?.sentAt) ? target.sentAt : [])

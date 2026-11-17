@@ -1,14 +1,30 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -116,5 +116,4 @@
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -6,12 +6,6 @@
+ import * as admin from "firebase-admin";
+ import * as mime from "mime-types";
+ import { randomBytes } from "crypto";
+-import {
+-  freshReceiptId,
+-  readReceipt,
+-  recordReceipt,
+-  clearReceipt,
+-} from "../lib/transaction-receipts";
+ import { MAX_BUNDLE_BYTES, PUBLIC_CACHE_SECONDS } from "../config";
+ import {
+   earlierEnd,
+@@ -38,7 +32,6 @@
+   thumbPrefix,
    thumbSlots,
    type ThumbKind,
 -  type StaleThumbs,
- } from "./lib/thumbs";
- import {
-@@ -641,28 +640,10 @@
+ } from "../lib/thumbs";
+ import { zipBundle, type BundleEntry } from "../lib/bundle";
+ import { linkProofFor } from "../lib/linkgrant";
+@@ -416,30 +409,12 @@
+     ),
    );
-
+ 
 -  const receipt = freshReceiptId();
 -  const outcome = await db().runTransaction(async (tx) => {
 -    const fresh = await tx.get(docRef);
@@ -39,5 +55,6 @@
 +  const outcome = decided.write
 +    ? { stored: true, moved: false, stale: decided.stale, denied: undefined as DocAclData | undefined }
 +    : { stored: false, moved: false, stale: [] as { versionId: string; key?: string }[], denied: undefined as DocAclData | undefined };
-
+ 
    if (!outcome.stored) {
+     await bucket()

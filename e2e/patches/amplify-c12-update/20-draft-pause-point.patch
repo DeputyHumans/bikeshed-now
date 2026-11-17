@@ -1,17 +1,17 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -154,6 +154,7 @@
-   versionEvents,
- } from "./lib/events";
- import { commitDraft, DraftConflict, draftRevision, loadVersionMeta, writeDraft } from "./lib/draft";
-+import { e2eC12Gate } from "./lib/e2eC12Gate";
- import { WriteAuthorityError } from "./lib/writeAuthority";
- import {
-   bearerFrom,
-@@ -1184,6 +1185,8 @@
+--- a/functions/src/endpoints/editing.ts
++++ b/functions/src/endpoints/editing.ts
+@@ -15,6 +15,7 @@
+   loadVersionMeta,
+   writeDraft,
+ } from "../lib/draft";
++import { e2eC12Gate } from "../lib/e2eC12Gate";
+ import { WriteAuthorityError } from "../lib/writeAuthority";
+ import { renderMarkdown } from "../lib/markdown/render";
+ import { htmlToMarkdown } from "../lib/markdown/serialize";
+@@ -123,6 +124,8 @@
      return;
    }
-
+ 
 +  await e2eC12Gate("draft-after-check", docId);
 +
    const version = await loadVersionMeta(ref, baseVersion);

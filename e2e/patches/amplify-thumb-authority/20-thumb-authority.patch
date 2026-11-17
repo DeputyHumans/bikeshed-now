@@ -1,10 +1,18 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -126,2 +126,3 @@
- import type { Principal } from "./lib/auth";
-+import { e2eThumbGate } from "./lib/e2eThumbGate";
+--- a/functions/src/endpoints/content.ts
++++ b/functions/src/endpoints/content.ts
+@@ -41,6 +41,7 @@
+   type StaleThumbs,
+ } from "../lib/thumbs";
+ import { zipBundle, type BundleEntry } from "../lib/bundle";
++import { e2eThumbGate } from "../lib/e2eThumbGate";
+ import { linkProofFor } from "../lib/linkgrant";
  import {
-@@ -642,2 +643,3 @@
-
+   contentSecurityPolicy,
+@@ -416,6 +417,7 @@
+     ),
+   );
+ 
 +  await e2eThumbGate("thumb-after-upload", docId);
    const receipt = freshReceiptId();
+   const outcome = await db().runTransaction(async (tx) => {
+     const fresh = await tx.get(docRef);

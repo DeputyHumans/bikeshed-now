@@ -1,15 +1,15 @@
---- a/functions/src/index.ts
-+++ b/functions/src/index.ts
-@@ -1854,12 +1854,6 @@
-       return;
-     }
- 
--    const frozen = frozenWrite(data, Date.now());
--    if (frozen) {
--      res.status(409).json(frozen);
+--- a/functions/src/endpoints/workspace.ts
++++ b/functions/src/endpoints/workspace.ts
+@@ -540,12 +540,6 @@
+     const proof = await linkProofFor(ref, data, caller, null);
+     if (!canEdit(data, caller, proof)) {
+       res.status(refusal(data, caller, proof)).end();
 -      return;
 -    }
 -
-     if (op === "delete") {
-       badRequest(res, "a document is not deleted: move it to the Trash with op \"trash\"");
+-    const frozen = frozenWrite(data, Date.now());
+-    if (frozen) {
+-      res.status(409).json(frozen);
        return;
+     }
+ 
