@@ -1,11 +1,7 @@
 --- a/functions/src/endpoints/account.ts
 +++ b/functions/src/endpoints/account.ts
-@@ -345,7 +345,7 @@
-   const result = await e2eAckTransaction(db(), teamId, "team-members", async (tx) => {
-     const snap = await tx.get(ref);
+@@ -347,3 +347,3 @@
      const completed = readReceipt<TeamChange>(snap, receipt);
 -    if (completed.found) return completed.result;
 +    if (completed.found) return { ...completed.result, before: completed.result.members };
      if (!snap.exists) {
-       return { status: 404 as const };
-     }

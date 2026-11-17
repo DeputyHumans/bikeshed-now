@@ -1,11 +1,9 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -133,7 +133,7 @@
-       });
+@@ -134,5 +134,5 @@
        return {
          documents: rows,
 -        nextCursor: snap.docs.length > limit ? snap.docs[limit - 1].id : null,
 +        nextCursor: null,
        };
      },
-   },

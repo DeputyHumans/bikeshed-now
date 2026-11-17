@@ -1,11 +1,7 @@
 --- a/functions/src/mcp/tools/feedback.ts
 +++ b/functions/src/mcp/tools/feedback.ts
-@@ -359,7 +359,7 @@
-         const current = await tx.get(ref);
-         // Feedback rows remain author-deletable. Their later deletion cannot
+@@ -361,3 +361,3 @@
          // erase this operation's acknowledgement or make its retry recreate them.
 -        if (readReceipt(current, receipt).found) return;
 +        if (readReceipt(current, receipt).found && ((await tx.get(annRef)).exists || (await tx.get(commentRef)).exists)) return;
          const currentData = (current.data() ?? {}) as DocAclData & { currentVersion?: string };
-         let proof = { k: str(args, "k"), grantToken: null as string | null };
-         if (current.exists && !canRead(currentData, ctx.caller, proof)

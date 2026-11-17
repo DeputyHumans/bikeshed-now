@@ -1,11 +1,7 @@
 --- a/functions/src/endpoints/verification.ts
 +++ b/functions/src/endpoints/verification.ts
-@@ -150,7 +150,7 @@
-       return { status: 409, error: "no verification in progress" };
-     }
+@@ -152,3 +152,3 @@
      const currentIdentity = identity(verification);
 -    if (checkedIdentity !== undefined && checkedIdentity !== currentIdentity) {
 +    if (checkedIdentity === "never" && checkedIdentity !== currentIdentity) {
        return { status: 409, error: "that code was replaced; use the latest code" };
-     }
-     checkedIdentity = currentIdentity;

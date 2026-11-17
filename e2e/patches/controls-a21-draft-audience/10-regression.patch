@@ -1,11 +1,7 @@
 --- a/functions/src/mcp/tools/feedback.ts
 +++ b/functions/src/mcp/tools/feedback.ts
-@@ -271,7 +271,7 @@
-         openThreads: open.data().count,
-         pendingSuggestions: pending.data().count,
+@@ -273,3 +273,3 @@
          // As the app shows it: an unsaved draft is an editor's business.
 -        ...(editor
 +        ...(true
            ? {
-               draft: draft
-                 ? { exists: true, lastEditedBy: draft.updatedByEmail ?? null, lastEditedAt: draft.updatedAt?.toDate?.().toISOString() ?? null }

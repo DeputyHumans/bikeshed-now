@@ -1,10 +1,8 @@
 --- a/functions/src/mcp/tools/shared.ts
 +++ b/functions/src/mcp/tools/shared.ts
-@@ -398,6 +398,7 @@
-       }, { merge: true });
+@@ -399,4 +399,5 @@
        tx.update(docRef, {
          "stats.apiReads": FieldValue.increment(1),
 +        "stats.views": FieldValue.increment(1),
          "stats.lastViewedByEmail": FieldValue.delete(),
        });
-     });

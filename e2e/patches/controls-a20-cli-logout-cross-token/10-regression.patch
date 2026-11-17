@@ -1,11 +1,9 @@
 --- a/functions/src/endpoints/account.ts
 +++ b/functions/src/endpoints/account.ts
-@@ -183,7 +183,7 @@
-       res.status(401).end();
+@@ -184,5 +184,5 @@
        return;
      }
 -    if (body?.tokenId !== undefined && body.tokenId !== presented.tokenId) {
 +    if (body?.tokenId !== undefined && body.tokenId !== presented.tokenId && presented.tokenId === "") {
        res.status(403).json({ error: "A token can revoke only itself." });
        return;
-     }

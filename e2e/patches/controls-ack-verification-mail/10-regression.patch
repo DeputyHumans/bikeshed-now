@@ -1,11 +1,7 @@
 --- a/functions/src/endpoints/verification.ts
 +++ b/functions/src/endpoints/verification.ts
-@@ -127,7 +127,7 @@
-     }
- 
+@@ -129,3 +129,3 @@
      const { sendVerificationCode } = await import("../email/notify");
 -    await sendVerificationCode(email, code, Math.round(VERIFY_TTL_MS / 60000));
 +    if (reservationId === "never") await sendVerificationCode(email, code, Math.round(VERIFY_TTL_MS / 60000));
      res.status(200).json({ sent: true, email });
-     return;
-   }

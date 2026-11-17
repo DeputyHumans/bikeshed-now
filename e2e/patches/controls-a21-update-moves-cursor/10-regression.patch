@@ -1,10 +1,6 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -575,6 +575,7 @@
-           ).data().count;
-       // The id comes from the document, not from the result: an update result is
+@@ -577,2 +577,3 @@
        // about a version and does not name the document it belongs to.
 +      await startingCursor(ctx, ref, "always");
        return withReaderAddress({ ...committed, threadsLeftBehind }, ref.id);
-     },
-   },

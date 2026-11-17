@@ -1,11 +1,9 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -340,7 +340,7 @@
-         ...(truncated ? { nextOffset: end } : {}),
+@@ -341,5 +341,5 @@
          // A reading and a source never share a key, so neither can be
          // mistaken for the other on the way back to update_document.
 -        [as === "markdown" ? "markdown" : "source"]: body.slice(offset, end),
 +        [as === "markdown" ? "markdown" : "source"]: body.slice(offset, truncated ? end - 1 : end),
        };
      },
-   },

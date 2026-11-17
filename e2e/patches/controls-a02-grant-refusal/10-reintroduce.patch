@@ -1,42 +1,26 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -385,7 +385,7 @@
-   }
-   const data = snap.data() as DocAclData & { currentVersion?: string; thumb?: unknown };
+@@ -387,3 +387,3 @@
    if (!isDocEditor(data, caller.uid, caller.emailLower)) {
 -    res.status(refusal(data, caller, await linkProofFor(docRef, data, caller, null))).end();
 +    res.status(refusal(data, caller)).end();
      return;
-   }
-   // Frozen as a reader meets it: an editor cannot read an expired or trashed
 --- a/functions/src/endpoints/sharing.ts
 +++ b/functions/src/endpoints/sharing.ts
-@@ -13,7 +13,6 @@
- import { canManageSharing, frozenWrite, isTrashed, type DocAclData } from "../lib/acl";
- import { parseExpiry } from "../lib/access";
+@@ -15,3 +15,2 @@
  import { actorFrom, resolveCaller } from "../lib/actor";
 -import { linkProofFor } from "../lib/linkgrant";
  import { syncPublicProjection } from "../lib/publicdoc";
- import { addEvent, eventActor } from "../lib/events";
- import { resolveMarking, type Marking } from "../lib/marking";
-@@ -129,7 +128,7 @@
-   }
-   const data = snap.data() as DocAclData;
+@@ -131,3 +130,3 @@
    if (!canManageSharing(data, caller.emailLower)) {
 -    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
 +    res.status(refusal(data, caller)).end();
      return;
-   }
-   // Only the browser's session lifts the sandbox for everyone. A token is a
-@@ -211,7 +210,7 @@
-   }
-   const data = snap.data() as DocAclData;
+@@ -213,3 +212,3 @@
    if (!canManageSharing(data, caller.emailLower)) {
 -    res.status(refusal(data, caller, await linkProofFor(ref, data, caller, null))).end();
 +    res.status(refusal(data, caller)).end();
      return;
-   }
- 
 --- a/functions/src/lib/management.ts
 +++ b/functions/src/lib/management.ts
 @@ -15,3 +15,2 @@

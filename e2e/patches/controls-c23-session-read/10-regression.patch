@@ -1,8 +1,6 @@
 --- a/functions/src/endpoints/editing.ts
 +++ b/functions/src/endpoints/editing.ts
-@@ -220,12 +220,7 @@
-   const requestedBase = strParam(req, "baseVersion");
-   const requestedEpoch = strParam(req, "liveEpoch");
+@@ -222,8 +222,3 @@
    const requestedRevision = strParam(req, "draftRevision");
 -  if ((requestedBase && requestedBase !== baseVersion) ||
 -      (requestedEpoch && requestedEpoch !== liveEpoch) ||
@@ -12,5 +10,3 @@
 -  }
 +  void [requestedBase, requestedEpoch, requestedRevision];
    if (strParam(req, "session") === "1") {
-     const version = await loadVersionMeta(docSnap.ref, baseVersion);
-     if (!version) { res.status(404).end(); return; }

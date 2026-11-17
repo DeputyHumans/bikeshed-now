@@ -1,7 +1,6 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -6,12 +6,6 @@
- import * as admin from "firebase-admin";
+@@ -7,10 +7,4 @@
  import * as mime from "mime-types";
  import { randomBytes } from "crypto";
 -import {
@@ -12,17 +11,13 @@
 -} from "../lib/transaction-receipts";
  import { MAX_BUNDLE_BYTES, PUBLIC_CACHE_SECONDS } from "../config";
  import {
-   earlierEnd,
-@@ -38,7 +32,6 @@
-   thumbPrefix,
+@@ -39,5 +33,4 @@
    thumbSlots,
    type ThumbKind,
 -  type StaleThumbs,
  } from "../lib/thumbs";
  import { zipBundle, type BundleEntry } from "../lib/bundle";
- import { linkProofFor } from "../lib/linkgrant";
-@@ -416,30 +409,12 @@
-     ),
+@@ -417,28 +410,10 @@
    );
  
 -  const receipt = freshReceiptId();
@@ -57,4 +52,3 @@
 +    : { stored: false, moved: false, stale: [] as { versionId: string; key?: string }[], denied: undefined as DocAclData | undefined };
  
    if (!outcome.stored) {
-     await bucket()

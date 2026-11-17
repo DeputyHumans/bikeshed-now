@@ -1,66 +1,38 @@
 --- a/functions/src/endpoints/account.ts
 +++ b/functions/src/endpoints/account.ts
-@@ -27,6 +27,7 @@
- } from "../lib/purgecode";
- import { emailEnabled } from "../email/send";
+@@ -29,2 +29,3 @@
  import { isAllowedEmail } from "../generated/policy";
 +import { e2eAckTransaction } from "../lib/e2eAckTransaction";
  import { canManageTeam, type TeamAclData } from "../lib/acl";
- import { normalizeEmail } from "../lib/access";
- import { resolveCaller } from "../lib/actor";
-@@ -341,7 +342,7 @@
-   const ref = db().collection("teams").doc(teamId);
-   const receipt = freshReceiptId();
+@@ -343,3 +344,3 @@
    type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
 -  const result = await db().runTransaction(async (tx) => {
 +  const result = await e2eAckTransaction(db(), teamId, "team-members", async (tx) => {
      const snap = await tx.get(ref);
-     const completed = readReceipt<TeamChange>(snap, receipt);
-     if (completed.found) return completed.result;
 --- a/functions/src/endpoints/reading.ts
 +++ b/functions/src/endpoints/reading.ts
-@@ -4,6 +4,7 @@
- import { onRequest, type Request } from "firebase-functions/v2/https";
- import { FieldValue } from "firebase-admin/firestore";
+@@ -6,2 +6,3 @@
  import { MAX_BEAT_MS, MAX_SESSION_MS } from "../config";
 +import { e2eAckTransaction } from "../lib/e2eAckTransaction";
  import {
-   canRead,
-   frozenForReader,
-@@ -152,7 +153,7 @@
-   // lost. One HTTP beat must not consume another cap on each callback attempt.
-   let beatCeiling: number | undefined;
+@@ -154,3 +155,3 @@
  
 -  const result = await db().runTransaction(async (tx) => {
 +  const result = await e2eAckTransaction(db(), docId, "reading-beat", async (tx) => {
      const sessionSnap = await tx.get(sessionRef);
-     const viewerSnap = viewerRef ? await tx.get(viewerRef) : null;
- 
 --- a/functions/src/endpoints/verification.ts
 +++ b/functions/src/endpoints/verification.ts
-@@ -7,6 +7,7 @@
- import { randomBytes, createHash } from "crypto";
- import { VERIFY_TTL_MS } from "../config";
+@@ -9,2 +9,3 @@
  import { isAllowedEmail, isEmailShapeValid } from "../generated/policy";
 +import { e2eAckTransaction } from "../lib/e2eAckTransaction";
  import { normalizeEmail } from "../lib/access";
- import { badRequest, jsonBody, rejectMethod } from "../lib/http";
- import { db, MAILING } from "./runtime";
-@@ -94,7 +95,7 @@
-     // Keyed by a hash so the record names no address; server-only, like the
-     // challenge itself (firestore.rules).
+@@ -96,3 +97,3 @@
      const targetRef = db().collection("verifyTargets").doc(createHash("sha256").update(email).digest("hex"));
 -    const reserved = await db().runTransaction(async (tx): Promise<"ok" | "account" | "address"> => {
 +    const reserved = await e2eAckTransaction(db(), uid, "verification-start", async (tx): Promise<"ok" | "account" | "address"> => {
        const existing = (await tx.get(ref)).data() as { sentAt?: number; reservationId?: string } | undefined;
-       const target = (await tx.get(targetRef)).data() as { sentAt?: unknown } | undefined;
-       if (existing?.reservationId === reservationId) return "ok";
-@@ -141,7 +142,7 @@
-     JSON.stringify([value.hash, value.email, value.sentAt, value.expiresAt]);
-   const attemptId = randomBytes(16).toString("hex");
+@@ -143,3 +144,3 @@
    let checkedIdentity: string | undefined;
 -  const checked = await db().runTransaction(async (tx): Promise<VerificationCheck> => {
 +  const checked = await e2eAckTransaction(db(), uid, "verification-complete", async (tx): Promise<VerificationCheck> => {
      const verification = (await tx.get(ref)).data() as
-       | { hash?: string; email?: string; expiresAt?: number; attempts?: number; sentAt?: number; attemptIds?: string[] }
-       | undefined;

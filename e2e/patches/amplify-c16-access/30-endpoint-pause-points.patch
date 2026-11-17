@@ -10,19 +10,11 @@
    await syncPresenceAccess(id, m.members, m.editorMembers, opensEditingToAnyAccount(data as DocAclData));
 --- a/functions/src/endpoints/account.ts
 +++ b/functions/src/endpoints/account.ts
-@@ -1,6 +1,7 @@
- // SPDX-License-Identifier: Apache-2.0
- // An account's own records: deleting forever, personal access tokens and teams (SPEC §2, §4, §18, §19).
+@@ -3,2 +3,3 @@
  
 +import { e2eAccessGate } from "../lib/e2eAccessGate";
  import { onRequest } from "firebase-functions/v2/https";
- import * as cookie from "cookie";
- import {
-@@ -339,6 +340,7 @@
-   }
- 
+@@ -341,2 +342,3 @@
    const ref = db().collection("teams").doc(teamId);
 +  await e2eAccessGate("team-members-after-read", teamId);
    const receipt = freshReceiptId();
-   type TeamChange = { status: 200; team: { name: string }; before: string[]; members: string[]; admins: string[] };
-   const result = await db().runTransaction(async (tx) => {

@@ -1,11 +1,9 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -428,7 +428,7 @@
-     const d = fresh.data() as (DocAclData & { currentVersion?: string; thumb?: unknown }) | undefined;
+@@ -429,5 +429,5 @@
      // Uploading bytes does not reserve authority: a sharing change may have
      // removed this editor while Storage was accepting the candidate images.
 -    if (d && !isDocEditor(d, caller.uid, caller.emailLower)) {
 +    if (d && !isDocEditor(d, caller.uid, caller.emailLower) && key.length === 0) {
        return { stored: false, moved: false, stale: [], denied: d };
      }
-     if (!d || d.currentVersion !== versionId || frozenForReader(d, caller)) {

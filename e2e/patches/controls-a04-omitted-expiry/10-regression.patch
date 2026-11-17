@@ -1,11 +1,7 @@
 --- a/functions/src/endpoints/sharing.ts
 +++ b/functions/src/endpoints/sharing.ts
-@@ -86,7 +86,7 @@
-   try {
-     const result = await changeVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, id, {
+@@ -88,3 +88,3 @@
        visibility: body?.visibility, publicEdit: body?.publicEdit === true,
 -      ...datePatch,
 +      expiresAt: expiry?.value ?? null,
      });
-     const { visibility, publicEdit, linkToken, expiresAt } = result;
-     res.status(200).json({ visibility, publicEdit, linkToken, expiresAt });

@@ -1,10 +1,8 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -434,6 +434,7 @@
-       },
+@@ -435,4 +435,5 @@
      },
      async run(ctx, args) {
 +      args = { ...args, k: undefined };
        const id = str(args, "id");
        const out = await forkDocument({
-         db: ctx.db,

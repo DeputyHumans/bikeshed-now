@@ -1,11 +1,9 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -471,7 +471,7 @@
-       "document you cannot open. Forks you cannot open are counted, never named.",
+@@ -472,5 +472,5 @@
      inputSchema: {
        type: "object",
 -      required: ["id"],
 +      required: ["id", "folder"],
        properties: {
          id: { type: "string", description: "The document id." },
-         k: {

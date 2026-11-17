@@ -1,11 +1,7 @@
 --- a/functions/src/endpoints/reading.ts
 +++ b/functions/src/endpoints/reading.ts
-@@ -165,7 +165,7 @@
-     const isNewSession = !sessionSnap.exists;
-     const isNewViewer = Boolean(viewerSnap && !viewerSnap.exists);
+@@ -167,3 +167,3 @@
      const storedMs = isNewSession ? 0 : Number(sessionSnap.data()?.ms ?? 0);
 -    beatCeiling ??= storedMs + MAX_BEAT_MS;
 +    beatCeiling ??= storedMs + MAX_BEAT_MS * 1000;
      const delta = Math.max(0, Math.min(claimedMs, beatCeiling) - storedMs);
-     const sessionMs = storedMs + delta;
-     // A read is reading: a beat reporting no new time is a tab nobody is looking

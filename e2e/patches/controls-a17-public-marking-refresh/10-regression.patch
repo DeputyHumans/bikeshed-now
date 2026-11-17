@@ -1,9 +1,6 @@
 --- a/functions/src/endpoints/sharing.ts
 +++ b/functions/src/endpoints/sharing.ts
-@@ -220,6 +220,5 @@
-     return;
-   }
+@@ -222,3 +222,2 @@
    await ref.set({ marking, updatedAt: now() }, { merge: true });
 -  await syncPublicProjection(db(), docId);
    res.status(200).json({ marking });
- });

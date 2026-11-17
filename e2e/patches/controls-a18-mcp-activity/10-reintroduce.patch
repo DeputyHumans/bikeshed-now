@@ -1,24 +1,15 @@
 --- a/functions/src/mcp/tools/shared.ts
 +++ b/functions/src/mcp/tools/shared.ts
-@@ -9,7 +9,7 @@
- } from "../../lib/transaction-receipts";
- import { versionStoragePrefix } from "../../lib/storage";
+@@ -11,3 +11,3 @@
  import * as admin from "firebase-admin";
 -import { FieldValue, Timestamp } from "firebase-admin/firestore";
 +import { FieldValue } from "firebase-admin/firestore";
  import { mutationVersion } from "../../lib/versions";
- import { bucketName, publicOrigin } from "../../config";
- import { actedThrough, type Actor } from "../../lib/actor";
-@@ -388,12 +388,10 @@
-       const before = await tx.get(viewRef);
-       if (readReceipt(before, receipt).found) return;
+@@ -390,3 +390,2 @@
        recordReceipt(tx, viewRef, before, receipt, true);
 -      const startedAt = before.data()?.startedAt;
        tx.set(viewRef, {
-         sessionId, uid: ctx.caller.uid, email: ctx.caller.emailLower, versionId,
-         ms: 0, via: "app", automated: true, actor: ctx.actor,
+@@ -395,3 +394,2 @@
          reads: FieldValue.increment(1),
 -        startedAt: startedAt instanceof Timestamp ? startedAt : FieldValue.serverTimestamp(),
          lastBeatAt: FieldValue.serverTimestamp(),
-       }, { merge: true });
-       tx.update(docRef, {

@@ -1,11 +1,9 @@
 --- a/functions/src/endpoints/editing.ts
 +++ b/functions/src/endpoints/editing.ts
-@@ -230,7 +230,7 @@
-     const version = await loadVersionMeta(docSnap.ref, baseVersion);
+@@ -231,5 +231,5 @@
      if (!version) { res.status(404).end(); return; }
      const causal = hasDraft ? readStoredCausalStamp(docData.draft?.causal) : null;
 -    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry, ...(causal ? { causal } : {}) });
 +    res.status(200).json({ baseVersion, liveEpoch, draftRevision: revision, entry: version.entry, ...(false && causal ? { causal } : {}) });
      return;
    }
- 

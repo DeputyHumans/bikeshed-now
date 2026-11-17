@@ -1,19 +1,11 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -13,6 +13,7 @@
-   clearReceipt,
- } from "../lib/transaction-receipts";
+@@ -15,2 +15,3 @@
  import { MAX_BUNDLE_BYTES, PUBLIC_CACHE_SECONDS } from "../config";
 +import { e2eAckTransaction } from "../lib/e2eAckTransaction";
  import {
-   earlierEnd,
-   expiryMs,
-@@ -417,7 +418,7 @@
-   );
- 
+@@ -419,3 +420,3 @@
    const receipt = freshReceiptId();
 -  const outcome = await db().runTransaction(async (tx) => {
 +  const outcome = await e2eAckTransaction(db(), docId, `thumb-${kind}`, async (tx) => {
      const fresh = await tx.get(docRef);
-     // A later publication may replace this upload's current key before the
-     // native SDK retries. Keep its bounded result, including original cleanup.

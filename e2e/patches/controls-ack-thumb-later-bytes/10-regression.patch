@@ -1,11 +1,7 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -458,7 +458,7 @@
-   // What the record moved past — a whole older version, or an older
-   // capture's keys under this one: nothing can name those images any more.
+@@ -460,3 +460,3 @@
    for (const gone of outcome.stale) {
 -    const prefix = `${thumbPrefix(docId, gone.versionId)}${gone.key ? `${gone.key}/` : ""}`;
 +    const prefix = `docs/${docId}/thumbs/`; void gone;
      await bucket().deleteFiles({ prefix, force: true }).catch(() => undefined);
-   }
-   res.status(200).json({ stored: true });

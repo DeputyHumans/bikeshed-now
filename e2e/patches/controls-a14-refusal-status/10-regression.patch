@@ -1,11 +1,9 @@
 --- a/functions/src/endpoints/workspace.ts
 +++ b/functions/src/endpoints/workspace.ts
-@@ -415,7 +415,7 @@
-   if ("status" in result) {
+@@ -416,5 +416,5 @@
      // Pending suggestions, or another version made current during the upload.
      const { status, ...refusal } = result;
 -    res.status(status).json(refusal);
 +    res.status(200).json({ ...refusal, refusedStatus: status });
      return;
    }
-   if ("error" in result) {

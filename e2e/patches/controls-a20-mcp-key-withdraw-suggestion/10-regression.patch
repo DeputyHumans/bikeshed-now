@@ -1,10 +1,8 @@
 --- a/functions/src/mcp/tools/suggestions.ts
 +++ b/functions/src/mcp/tools/suggestions.ts
-@@ -134,6 +134,7 @@
-       },
+@@ -135,4 +135,5 @@
      },
      async run(ctx, args) {
 +      args = { ...args, k: undefined };
        return changeOwnSuggestion(ctx, args, "withdraw", {});
      },
-   },

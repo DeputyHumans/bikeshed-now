@@ -1,10 +1,8 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -298,6 +298,7 @@
- 
+@@ -299,4 +299,5 @@
    const gate = await readGate(caller, docId, parts.k ?? strParam(req, "k"));
    if (!gate) {
 +    if ((await db().collection("docs").doc(docId).get()).exists) { res.status(404).send("Access revoked"); return; }
      res.status(404).end();
      return;
-   }

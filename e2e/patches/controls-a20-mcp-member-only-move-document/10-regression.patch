@@ -1,11 +1,9 @@
 --- a/functions/src/mcp/tools/folders.ts
 +++ b/functions/src/mcp/tools/folders.ts
-@@ -175,7 +175,7 @@
-       },
+@@ -176,5 +176,5 @@
      },
      async run(ctx, args) {
 -      const { ref, data } = await loadDoc(ctx, str(args, "id"));
 +      const { ref, data } = await loadDoc(ctx, str(args, "id"), str(args, "k"));
        // Moving a document changes who can read it: the destination folder's
        // members become its members, and its link and public level reach it.
-       // So it is the owner's, as sharing is: an editor who could file the

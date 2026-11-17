@@ -1,10 +1,8 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -481,6 +481,7 @@
-       },
+@@ -482,4 +482,5 @@
      },
      async run(ctx, args) {
 +      args = { ...args, k: undefined };
        const id = str(args, "id");
        const out = await lineageFor({ db: ctx.db, caller: ctx.caller, docId: id, k: str(args, "k") || null });
-       if (!out.ok) throw new Error(`no document with id "${id}"`);

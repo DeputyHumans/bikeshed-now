@@ -1,10 +1,6 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -455,6 +455,7 @@
-     }
-     return;
+@@ -457,2 +457,3 @@
    }
 +  if (kind === "slides") await bucket().deleteFiles({ prefix: `${thumbPrefix(docId, versionId)}${key}/`, force: true });
    // What the record moved past — a whole older version, or an older
-   // capture's keys under this one: nothing can name those images any more.
-   for (const gone of outcome.stale) {
