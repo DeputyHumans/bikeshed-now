@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-// A4 Expiry: read-time enforcement per role, frozen writes, refused dates, S25 and the expiry chip (SPEC §17).
+// A4 Expiry: the hour before the job, frozen writes, refused dates, S25, the chip, and the job making it private (SPEC §17).
 
 /**
- * "An expired document is read-only, and visible only to its owner" (SPEC §17
- * "Expiry"), measured on every surface the SPEC names, each case with its own
- * accounts and documents:
+ * "When its date passes, a document becomes private and its date is cleared"
+ * (SPEC §17 "Expiry"): an hourly job makes the change, and until it runs a
+ * passed date freezes the document, owner-only, as it did before the job
+ * existed. The emulator never runs a schedule, so A4.1 to A4.4 measure that
+ * hour on every surface the SPEC names, and A4.5 runs the job's own step for
+ * its document (lib/expiry-job.mjs). Each case has its own accounts and
+ * documents:
  *
- *   A4.1  a public document set to expire a measured lead ahead (at least
+ *   A4.1  the hour before the job: a public document set to expire a measured lead ahead (at least
  *         20 s). Before the date nothing changes (and a shared cache may not
  *         keep a read past it); every request sent once the date has passed
  *         sees it expired: every non-owner read is the absent id's 404, the
@@ -17,11 +21,17 @@
  *         refused with a 400 and NOT applied (the record is untouched)
  *   A4.3  S25: POST /visibility with the body SPEC §2 documents, which has no
  *         `expiresAt`, must not lift an expiry the owner set
- *   A4.4  the expiry chip escalates in wording and state over the last week
- *         and past the date; the owner's tap opens Share, anyone else's says
- *         what the state means
+ *   A4.4  on a shared document, the chip escalates in wording and state over
+ *         the last week and past the date; the owner's tap opens Share,
+ *         anyone else's says what the state means
+ *   A4.5  the job's step: past the date, the hour's freeze; then private, the
+ *         link dead for good, the named viewer back, writes open again, one
+ *         doc.expired in the log, Activity and get_changes, and a second run
+ *         that changes nothing (local only)
+ *   A4.6  in that hour, the owner changes the level in Share: the dialog
+ *         sends no date, so the passed one is not refused
  *
- * The waits on the expiry instant itself (A4.1, A4.4) are the only waits on
+ * The waits on the expiry instant itself (A4.1, A4.4 to A4.6) are the only waits on
  * time: the product's expiry IS a time (isExpired is `expiresAt <= now`, read
  * at each request), and nothing signals that it passed. How far ahead that
  * instant is set is measured, not fixed: on a shared stack under load one
@@ -59,6 +69,7 @@ import { absentDocId, fork, publish, updateUpload } from "../../lib/seed.mjs";
 import { setVisibility, share } from "../../lib/grant.mjs";
 import { postThumb, thumbPath } from "../../lib/thumbs.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
+import { runExpiry } from "../../lib/expiry-job.mjs";
 import { sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
 
 const target = currentTarget();
@@ -133,6 +144,12 @@ const A43_BODY_MS = 600_000;
 // there. Still short of A4.1's, so the file takes no longer.
 const A44_TIMEOUT_MS = 1_260_000;
 const A44_BODY_MS = 1_260_000;
+// A4.5 and A4.6 each set one date a measured lead ahead and wait for it, then
+// make a handful of reads and writes: well inside A4.4's.
+const A45_TIMEOUT_MS = 900_000;
+const A45_BODY_MS = 900_000;
+const A46_TIMEOUT_MS = 900_000;
+const A46_BODY_MS = 900_000;
 
 // --- the loaded stack -----------------------------------------------------------
 
@@ -691,7 +708,9 @@ scenario("A4.4 the expiry chip escalates in words and state through the last wee
   let slowestChipMs = 0;
   const expire = async (at) => {
     const t = Date.now();
-    const r = await settle(ctx, O, docId, { visibility: "private", publicEdit: false, expiresAt: at });
+    // Unlisted: a date only makes a shared document private, and on a private
+    // one a date to come shows no chip at all (app/src/expiry.ts).
+    const r = await settle(ctx, O, docId, { visibility: "unlisted", publicEdit: false, expiresAt: at });
     slowestWriteMs = Math.max(slowestWriteMs, Date.now() - t);
     if (!r.landed) assert.equal(r.expiresAt, at, "POST /visibility answers the date it set");
   };
@@ -714,16 +733,16 @@ scenario("A4.4 the expiry chip escalates in words and state through the last wee
   // Whole days plus an hour, so the seconds a render takes cannot round a count down.
   const ladder = [
     { left: 30 * DAY + HOUR, words: null, soon: false, what: "a month out: the date, no warning" },
-    { left: 10 * DAY + HOUR, words: "Expires in 10 days", soon: false, what: "ten days out: a count, still no warning" },
-    { left: 7 * DAY + HOUR, words: "Expires in 7 days", soon: false, what: "just over a week: not yet the last week" },
-    { left: 6 * DAY + HOUR, words: "Expires in 6 days", soon: true, what: "inside the last week: it insists" },
-    { left: 1 * DAY + HOUR, words: "Expires tomorrow", soon: true, what: "a day out" },
-    { left: 2 * HOUR, words: "Expires today", soon: true, what: "the last day" },
+    { left: 10 * DAY + HOUR, words: "Goes private in 10 days", soon: false, what: "ten days out: a count, still no warning" },
+    { left: 7 * DAY + HOUR, words: "Goes private in 7 days", soon: false, what: "just over a week: not yet the last week" },
+    { left: 6 * DAY + HOUR, words: "Goes private in 6 days", soon: true, what: "inside the last week: it insists" },
+    { left: 1 * DAY + HOUR, words: "Goes private tomorrow", soon: true, what: "a day out" },
+    { left: 2 * HOUR, words: "Goes private today", soon: true, what: "the last day" },
   ];
   for (const step of ladder) {
     const at = Date.now() + step.left;
     await expire(at);
-    const words = step.words ?? `Expires ${await dayIn(o.page, at)}`;
+    const words = step.words ?? `Goes private on ${await dayIn(o.page, at)}`;
     ctx.step(`${step.what}: "${words}"${step.soon ? ", data-soon" : ""}`);
     await expectChip(o, { label: words, text: words, soon: step.soon, expired: false }, step.what);
 
@@ -736,12 +755,12 @@ scenario("A4.4 the expiry chip escalates in words and state through the last wee
       await dialog.getByRole("button", { name: "Close" }).click();
       await dialog.waitFor({ state: "detached", timeout: UI_MS });
 
-      ctx.step("the viewer taps the same chip: no dialog, a toast that says nothing is deleted and who can open it after");
+      ctx.step("the viewer taps the same chip: no dialog, a toast that says nothing is deleted and who keeps it after");
       await expectChip(v, { label: words, text: words, soon: true, expired: false }, `${step.what} (viewer)`);
       const since = v.toastMark();
       await v.page.locator(".viewer-toolbar .expiry-chip").click();
       const toast = await v.waitForToast(() => true, { since, timeout: UI_MS });
-      assert.equal(toast.text, `Readable until ${await dayIn(v.page, at)}. Nothing is deleted then — only its owner can open it after that.`);
+      assert.equal(toast.text, `Shared until ${await dayIn(v.page, at)}. Nothing is deleted then: it becomes private, a link to it stops working, and the people it is shared with by name keep it.`);
       assert.equal(await v.page.getByRole("dialog").count(), 0, "a reader is handed no dialog");
     }
   }
@@ -753,16 +772,161 @@ scenario("A4.4 the expiry chip escalates in words and state through the last wee
   const at = Date.now() + leadMs;
   await expire(at);
   try {
-    await expectChip(o, { label: "Expires today", text: "Expires today", soon: true, expired: false }, "before the date");
+    await expectChip(o, { label: "Goes private today", text: "Goes private today", soon: true, expired: false }, "before the date");
   } catch (err) {
-    // The chip has no timer, but any render after the date may say "Expired": then this read measured nothing.
+    // The chip has no timer, but any render after the date may say "Going private": then this read measured nothing.
     if (Date.now() >= at) ctx.inconclusive(`the date passed ${Date.now() - at} ms before the chip was read before it`);
     throw err;
   }
   await untilTime(at + CLOCK_SKEW_MS);
   await openDoc(o, docId);
-  await expectChip(o, { label: "Expired", text: "Expired", soon: false, expired: true }, "past the date");
+  await expectChip(o, { label: "Going private", text: "Going private", soon: false, expired: true }, "past the date");
   ctx.step("the owner's tap still opens Share, the one place the date is changed");
   await o.page.locator(".viewer-toolbar .expiry-chip").click();
   await o.page.getByRole("dialog", { name: `Share “${title}”` }).waitFor({ state: "visible", timeout: UI_MS });
+}));
+
+// --- A4.5 ----------------------------------------------------------------------
+
+/** GET /content with a link key, as a stranger holding the link reads it. */
+const keyed = (k, docId) => `/content/~${encodeURIComponent(k)}/${encodeURIComponent(docId)}/v1/index.html`;
+
+/**
+ * The lead a date is set ahead: three times what one setting took, between
+ * LEAD_MIN_MS and LEAD_MAX_MS, so the before-the-date reads finish before it.
+ */
+const leadAfter = (writeMs) => Math.min(LEAD_MAX_MS, Math.max(LEAD_MIN_MS, 3 * writeMs));
+
+scenario("A4.5 the job makes a document past its date private: the link dies for good, the named viewer has it back, writes open again, and the change is recorded once", {
+  // The emulator never runs the schedule: the case runs the job's own step
+  // for its one document (lib/expiry-job.mjs), never the sweep, which would
+  // convert every other case's document past its date.
+  tiers: ["local"],
+  timeoutMs: A45_TIMEOUT_MS,
+}, judged(A45_BODY_MS, async (ctx) => {
+  const [OA, VA] = await castFor(ctx, ["owner", "viewer"]);
+  const O = await sessionFor(ctx, OA);
+  const V = await sessionFor(ctx, VA);
+  const AN = client(ctx, "anon");
+  const G = resender(ctx);
+  const content = (id) => `/content/${encodeURIComponent(id)}/v1/index.html`;
+  const title = `A4.5 private ${runTag(target.runId)}-${rand4()}`;
+  const up = await publishDoc(ctx, O.http, { body: docHtml(title, rand4()), filename: "index.html", title, name: "a4-private" });
+  const docId = up.docId;
+  precondition(typeof docId === "string" && docId, `the document was published: ${JSON.stringify(up.json)}`);
+  await grant(ctx, O, docId, VA, "viewer");
+
+  ctx.step("the owner makes it readable by link with open editing on, then sets its date a measured lead ahead");
+  const t0 = Date.now();
+  await settle(ctx, O, docId, { visibility: "unlisted", publicEdit: true });
+  const key = (await readDoc(target, `docs/${docId}`))?.linkToken;
+  precondition(typeof key === "string" && key.length >= 22, "the link has a key");
+  const at = Date.now() + leadAfter(Date.now() - t0);
+  await settle(ctx, O, docId, { visibility: "unlisted", publicEdit: true, expiresAt: at });
+
+  const before = cells("before the date");
+  before.cell("V GET /content", st(await G("V GET /content", () => V.http.get(content(docId)))), 200);
+  before.cell("AN GET /content with the link", st(await G("AN GET /content (link)", () => AN.get(keyed(key, docId)))), 200);
+  if (Date.now() >= at) ctx.inconclusive(`the date passed ${Date.now() - at} ms before the before-the-date reads finished`);
+  before.assertAll(ctx);
+
+  ctx.step("past the date, before the job: frozen, and its owner's alone (SPEC §17)");
+  await untilTime(at + CLOCK_SKEW_MS);
+  const rename = (name) => O.http.postJson("/organize", { kind: "doc", id: docId, op: "rename", name });
+  const during = cells("past the date, before the job");
+  during.cell("V GET /content", st(await G("V GET /content", () => V.http.get(content(docId)))), 404);
+  during.cell("AN GET /content with the link", st(await G("AN GET /content (link)", () => AN.get(keyed(key, docId)))), 404);
+  during.cell("O GET /content", st(await G("O GET /content", () => O.http.get(content(docId)))), 200);
+  during.cell("O POST /organize rename", expiredWrite(await G("O POST /organize rename", () => rename(`${title} (renamed)`))), { status: 409, expired: true });
+  during.assertAll(ctx);
+
+  ctx.step("the job's step for this document");
+  const run = await runExpiry(target, "document", docId);
+  ctx.ev.json("runExpiry", { outcome: run.outcome, ms: run.ms });
+  assert.equal(run.outcome, "expired", "the job made it private");
+
+  const rec = await readDoc(target, `docs/${docId}`);
+  const viewer = String(VA.email).toLowerCase();
+  const after = cells("after the job");
+  after.cell("the record", {
+    visibility: rec?.visibility, publicEdit: rec?.publicEdit, hasLink: typeof rec?.linkToken === "string", hasDate: rec?.expiresAt != null,
+    viewerKept: (rec?.members ?? []).map((e) => String(e).toLowerCase()).includes(viewer),
+  }, { visibility: "private", publicEdit: false, hasLink: false, hasDate: false, viewerKept: true });
+  after.cell("V GET /content (named, so it has it back)", st(await G("V GET /content", () => V.http.get(content(docId)))), 200);
+  after.cell("AN GET /content with the old link", st(await G("AN GET /content (link)", () => AN.get(keyed(key, docId)))), 404);
+  after.cell("O POST /organize rename (writes open again)", st(await G("O POST /organize rename", () => rename(`${title} (renamed)`))), 200);
+  const events = (await readCollection(target, `docs/${docId}/events`)).filter((e) => e.data?.type === "doc.expired").map((e) => e.data);
+  ctx.ev.json("doc.expired events", events);
+  after.cell("one doc.expired, the date's doing", events.map((e) => ({ audience: e.audience, actor: e.actor, data: e.data })), [
+    { audience: "editors", actor: { uid: null, channel: "system", via: "its end date" }, data: { expiresAt: at, from: "unlisted", endedOpenEditing: true } },
+  ]);
+  const activity = await G("O GET /activity", () => O.http.get("/activity", { query: { docId } }));
+  const row = (activity.json?.items ?? []).find((i) => i.type === "doc.expired");
+  after.cell("Activity names the date, not a person", row ? { by: row.by ?? null, channel: row.channel, via: row.via, from: row.from } : null, { by: null, channel: "system", via: "its end date", from: "unlisted" });
+  const mcpO = mcpFor(ctx, "owner-mcp", (await mintToken(O, { name: "e2e a4.5 owner", channel: "mcp" })).token);
+  await mcpO.initialize();
+  const changes = await G("O get_changes", () => mcpO.call("get_changes", { id: docId, since: "all" }));
+  const change = (changes.json?.events ?? []).find((e) => e.type === "doc.expired");
+  after.cell("get_changes reports it", change ? { by: change.by ?? null, channel: change.channel, via: change.via } : null, { by: null, channel: "system", via: "its end date" });
+
+  ctx.step("unlisted again, it gets a new link: the old one is dead for good");
+  const reopened = await settle(ctx, O, docId, { visibility: "unlisted" });
+  const newKey = reopened.landed ? (await readDoc(target, `docs/${docId}`))?.linkToken : reopened.linkToken;
+  after.cell("a new key, not the old one", { minted: typeof newKey === "string", same: newKey === key }, { minted: true, same: false });
+  after.cell("AN GET /content with the old link, once unlisted again", st(await G("AN GET /content (old link)", () => AN.get(keyed(key, docId)))), 404);
+  await settle(ctx, O, docId, { visibility: "private" });
+
+  ctx.step("a second run of the job's step changes nothing, and records nothing");
+  const again = await runExpiry(target, "document", docId);
+  after.cell("second run", { outcome: again.outcome, events: (await readCollection(target, `docs/${docId}/events`)).filter((e) => e.data?.type === "doc.expired").length }, { outcome: "skipped", events: 1 });
+  after.assertAll(ctx);
+}));
+
+// --- A4.6 ----------------------------------------------------------------------
+
+scenario("A4.6 in the hour before the job, the owner changes the level in Share without the passed date being sent back and refused", {
+  tiers: ["local", "prod"],
+  timeoutMs: A46_TIMEOUT_MS,
+}, judged(A46_BODY_MS, async (ctx) => {
+  const [OA] = await castFor(ctx, ["owner"]);
+  ctx.step("the owner signs in through the UI; their browser session publishes, makes it readable by link, and sets its date a measured lead ahead");
+  const o = await signedIn(ctx, OA, "owner");
+  const O = await browserSession(o, { account: OA, http: client(ctx, "owner") });
+  const title = `A4.6 share ${runTag(target.runId)}-${rand4()}`;
+  const up = await publishDoc(ctx, O.http, { body: docHtml(title, rand4()), filename: "index.html", title, name: "a4-share" });
+  const docId = up.docId;
+  precondition(typeof docId === "string" && docId, `the document was published: ${JSON.stringify(up.json)}`);
+  const t0 = Date.now();
+  await settle(ctx, O, docId, { visibility: "unlisted", publicEdit: false });
+  const at = Date.now() + leadAfter(Date.now() - t0);
+  await settle(ctx, O, docId, { visibility: "unlisted", publicEdit: false, expiresAt: at });
+
+  ctx.step("past the date, the owner opens the document and its chip, which opens Share");
+  await untilTime(at + CLOCK_SKEW_MS);
+  await openDoc(o, docId);
+  await o.page.locator(".viewer-toolbar .expiry-chip").click();
+  const dialog = o.page.getByRole("dialog", { name: `Share “${title}”` });
+  await dialog.waitFor({ state: "visible", timeout: UI_MS });
+
+  ctx.step("the owner chooses Private: the dialog sends the level and no date, so the server has nothing to refuse");
+  const since = o.toastMark();
+  const privateRadio = dialog.getByRole("radio", { name: /^Private/ });
+  // A click, not check(): the radio is controlled and moves only on the
+  // server's answer, so check() would call the unmoved radio a failure.
+  await privateRadio.click({ timeout: UI_MS });
+  // The radio moves only once the server has answered (VisibilitySection); a
+  // refusal leaves it and shows an error toast instead. Either ends the wait.
+  await o.page.waitForFunction(
+    () => document.querySelector('.visibility-section input[value="private"]')?.checked === true || document.querySelector(".toast-stack [role=alert]") !== null,
+    null,
+    { timeout: UI_MS },
+  );
+  const errors = o.toastsSince(since).filter((t) => t.kind === "error").map((t) => t.text);
+  const rec = await readDoc(target, `docs/${docId}`);
+  const stored = rec?.expiresAt == null ? null : typeof rec.expiresAt.toMillis === "function" ? rec.expiresAt.toMillis() : rec.expiresAt;
+  assert.deepEqual(
+    { errors, visibility: rec?.visibility, expiresAt: stored },
+    { errors: [], visibility: "private", expiresAt: at },
+    "a level change in Share leaves the date out, so a date that has passed does not refuse it (SPEC §2), and the date stays for the job to clear",
+  );
 }));

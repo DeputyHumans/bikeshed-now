@@ -1,0 +1,13 @@
+{
+  "oracle": "Share sends a date only when it changes: A4.6, a level change in the hour before the job",
+  "what": "the level radio sends the stored date back with the level (app/src/components/VisibilitySection.tsx), which the server refuses as in the past",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.6 in the hour before the job, the owner changes the level in Share without the passed date being sent back and refused",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "a level change in Share leaves the date out"
+  }
+}

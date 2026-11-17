@@ -1,0 +1,13 @@
+{
+  "oracle": "the expiry job revokes the link: A4.5, the record after the job and the key a document made unlisted again gets",
+  "what": "expireDocument makes the document private but leaves its linkToken (functions/src/lib/expire.ts), so making it unlisted again would revive every old copy of the link",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.5 the job makes a document past its date private: the link dies for good, the named viewer has it back, writes open again, and the change is recorded once",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "after the job: \\d+ of \\d+ cells wrong:\\n  the record: got \\{[^\\n]*\"hasLink\":true"
+  }
+}

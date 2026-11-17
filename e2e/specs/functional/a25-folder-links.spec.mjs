@@ -2,7 +2,7 @@
 // A25 Folder links: a folder's link or public level opens everything beneath it, to read, and nothing else (SPEC §13, §17; ADR 0019).
 
 /**
- * Catalogue A25.1–A25.4, each case with its own accounts, folders and documents.
+ * Catalogue A25.1–A25.5, each case with its own accounts, folders and documents.
  *
  *   A25.1  HTTP: a folder made unlisted opens a private document two levels
  *          down: /unlock in both forms, the bytes cacheable at the keyed URL
@@ -13,6 +13,10 @@
  *          surface at once, and a document moved out stops answering to it
  *   A25.3  a folder's date ends its link and nothing else: the key holder is
  *          told it ended, the owner still reads, the document is not frozen
+ *          (the hour before the hourly job, which the emulator never runs)
+ *   A25.5  the job's step for that folder (lib/expiry-job.mjs): private, its
+ *          link dead for good, its reach beneath it gone, its members kept,
+ *          one `reason: "expired"` entry in its access history
  *   A25.4  the browser: a signed-out visitor opens the folder link, steps into
  *          a document, and is offered no comments
  *
@@ -29,6 +33,7 @@ import { mintToken, openSession } from "../../lib/session.mjs";
 import { createFolder, publish } from "../../lib/seed.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { cacheControl, eventually, sameHeadersExceptDate } from "../../lib/assert.mjs";
+import { runExpiry } from "../../lib/expiry-job.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -246,5 +251,50 @@ scenario("A25.4 a signed-out visitor opens a folder's link, steps into a documen
       { timeout: 20_000, message: "the document's text is in the frame" },
     );
     assert.equal(await a.page.getByRole("button", { name: /^comments$/i }).count(), 0, "no comments toggle for a folder's reader");
+  });
+});
+
+// --- A25.5 ------------------------------------------------------------------------
+
+scenario("A25.5 the job makes a folder past its date private: its link is dead for good, its reach beneath it ends, its members keep it, and its history says so", { ...LOCAL, timeoutMs: 300_000 }, async (ctx) => {
+  const [owner] = await castSessions(["owner"]);
+  const anon = ctx.http({ actor: "anon" });
+  const { top, sub, doc } = await tree(owner, "private");
+
+  await closing(owner, top.folderId, async () => {
+    const endsAt = Date.now() + 8_000;
+    const k = (await folderLevel(owner, top.folderId, "unlisted", endsAt)).linkToken;
+    assert.equal((await anon.get(keyed(k, doc.docId))).status, 200, "the link opens the document beneath it before the date");
+    const before = await readDoc(target, `folders/${top.folderId}`);
+
+    ctx.step("after the date, before the job: the link has ended, and the folder still carries its level and date");
+    await eventually(async () => (await anon.postJson("/unlock", { docId: doc.docId, k })).status === 404, { timeout: 30_000, message: "the link ends at its date" });
+    const waiting = await readDoc(target, `folders/${top.folderId}`);
+    precondition(waiting?.visibility === "unlisted" && waiting?.expiresAt != null, "the folder is still unlisted with its date until the job runs");
+
+    ctx.step("the job's step for this folder");
+    assert.equal((await runExpiry(target, "folder", top.folderId)).outcome, "expired");
+    const folder = await readDoc(target, `folders/${top.folderId}`);
+    assert.deepEqual(
+      { visibility: folder?.visibility, hasLink: typeof folder?.linkToken === "string", hasDate: folder?.expiresAt != null, members: folder?.members },
+      { visibility: "private", hasLink: false, hasDate: false, members: before?.members },
+      "private, its link and date gone, its members as they were",
+    );
+    assert.deepEqual((await readDoc(target, `folders/${sub.folderId}`))?.reach ?? [], [], "nothing above reaches the subfolder any more");
+    const entries = (await readCollection(target, `folders/${top.folderId}/acl`)).map((e) => e.data).filter((e) => e.reason === "expired");
+    assert.deepEqual(
+      entries.map((e) => ({ channel: e.actor?.channel, uid: e.actor?.uid, visibility: e.visibility, expiresAt: e.expiresAt, linkRotated: e.linkRotated })),
+      [{ channel: "system", uid: null, visibility: { from: "unlisted", to: "private" }, expiresAt: { from: endsAt, to: null }, linkRotated: true }],
+      "one entry in the folder's access history, the date's doing",
+    );
+
+    ctx.step("unlisted again, the folder gets a new link: the old one is dead for good");
+    const again = await folderLevel(owner, top.folderId, "unlisted");
+    assert.notEqual(again.linkToken, k, "a new key");
+    assert.equal((await anon.get(keyed(k, doc.docId))).status, 404, "the old key opens nothing");
+
+    ctx.step("a second run of the job's step changes nothing");
+    assert.equal((await runExpiry(target, "folder", top.folderId)).outcome, "skipped");
+    assert.equal((await readCollection(target, `folders/${top.folderId}/acl`)).filter((e) => e.data?.reason === "expired").length, 1);
   });
 });

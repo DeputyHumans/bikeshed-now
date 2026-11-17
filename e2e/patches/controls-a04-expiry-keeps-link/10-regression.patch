@@ -1,0 +1,10 @@
+--- a/functions/src/lib/expire.ts
++++ b/functions/src/lib/expire.ts
+@@ -59,7 +59,6 @@ export async function expireDocument(db: Db, id: string, now = Date.now()): Prom
+     tx.set(ref, {
+       visibility: "private",
+       publicEdit: false,
+-      linkToken: FieldValue.delete(),
+       updatedAt: FieldValue.serverTimestamp(),
+     }, { merge: true });
+     if (!recorded) {

@@ -1,0 +1,11 @@
+--- a/functions/src/lib/expire.ts
++++ b/functions/src/lib/expire.ts
+@@ -62,7 +62,7 @@ export async function expireDocument(db: Db, id: string, now = Date.now()): Prom
+       linkToken: FieldValue.delete(),
+       updatedAt: FieldValue.serverTimestamp(),
+     }, { merge: true });
+-    if (!recorded) {
++    if (!recorded && eventRef.id === "") {
+       tx.create(eventRef, eventRecord({
+         type: "doc.expired",
+         // As doc.visibility is: it says what level it had.

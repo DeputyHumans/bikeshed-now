@@ -8,6 +8,6 @@
   },
   "stack": [],
   "expect": {
-    "message": "the expiry chip \\(just over a week: not yet the last week\\) not shown within \\d+ ms of load \\d+ of /d/\\S+ \\(want \\{\"label\":\"Expires in 7 days\",\"text\":\"Expires in 7 days\",\"soon\":false,\"expired\":false\\}, last read \\{\"label\":\"Expires in 7 days\",\"text\":\"Expires in 7 days\",\"soon\":true"
+    "message": "the expiry chip \\(just over a week: not yet the last week\\) not shown within \\d+ ms of load \\d+ of /d/\\S+ \\(want \\{\"label\":\"Goes private in 7 days\",\"text\":\"Goes private in 7 days\",\"soon\":false,\"expired\":false\\}, last read \\{\"label\":\"Goes private in 7 days\",\"text\":\"Goes private in 7 days\",\"soon\":true"
   }
 }

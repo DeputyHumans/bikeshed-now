@@ -1,0 +1,13 @@
+{
+  "oracle": "the expiry job records the change: A4.5, one doc.expired in the change log, Activity and get_changes",
+  "what": "expireDocument writes no doc.expired event (functions/src/lib/expire.ts), so the switch is missing from the document's history",
+  "target": {
+    "spec": "e2e/specs/functional/a04-expiry.spec.mjs",
+    "case": "A4.5 the job makes a document past its date private: the link dies for good, the named viewer has it back, writes open again, and the change is recorded once",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "after the job: \\d+ of \\d+ cells wrong:[\\s\\S]*one doc.expired, the date's doing: got \\[\\]"
+  }
+}
