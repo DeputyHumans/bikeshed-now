@@ -61,3 +61,15 @@ export const PLAIN = { region: REGION };
  * each is a standing monthly charge, priced there; nothing else is warm.
  */
 export const WARM = { ...PLAIN, minInstances: 1 };
+/**
+ * The two services that turn a whole HTML page into a Markdown reading:
+ * `docMarkdown` and `mcp`'s `get_document` (ADR 0030). At the 256 MiB default,
+ * reading a 2.2 MB page, production killed `docMarkdown` three times in thirty
+ * seconds on 2026-11-17, and `mcp` on the fourth page of one read ("262 MiB
+ * used"); each kill handed the next request a cold start. A Linux container
+ * of the same size did NOT reproduce it (three readings peaked at 206 MiB), so
+ * what production adds is unmeasured and only its log can show this is
+ * enough. 1 GiB leaves room for several readings at once on `mcp`, which
+ * takes up to 80 requests. Neither service is warm, so it is paid per request.
+ */
+export const READS_PAGES = { memory: "1GiB" } as const;

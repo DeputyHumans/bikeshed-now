@@ -18,6 +18,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 ### Fixed
 
 - **Seven end-to-end controls test something again.** All seven failed before the split, the same way on the tree before it. `smoke` and the MCP read-acknowledgement case still compared `get_document`'s answer with the uploaded HTML, which since 0.37.0 is a Markdown reading unless the call asks for `as: "source"`, so the smoke MCP case and the three read-acknowledgement controls failed on a clean stack; both now ask for the source. `controls-a20-mcp-move-root` had drifted 240 lines and made `get_lineage`'s `folder` required instead of `move_document`'s, so its oracle had nothing to see. The two A23 invitation controls stopped compiling when email moved behind a lazy import (ADR 0008): they called `sendInvitations` with nothing in scope, and one used `findGrantsForTeam` without importing it. Each is re-cut against the current source with the same bug planted.
+- **A large document's Markdown reading no longer kills the function that makes it.** `/d/<id>.md` and `get_document` ran at the 256 MiB default. Reading a 2.2 MB page, production killed `docMarkdown` three times in thirty seconds, so every fetch of it took 3.5 to 5.1 s with a cold start inside, and `bikeshed get` failed with a 500 when `mcp` was killed on the fourth page. Both functions now run with 1 GiB, pinned by a test. Neither is kept warm, so the memory is paid per request.
 
 ## 0.37.1 — 2026-11-17
 

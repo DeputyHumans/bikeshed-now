@@ -43,7 +43,7 @@ import {
   safeSegment,
   strParam,
 } from "../lib/http";
-import { db, bucket, PLAIN, WARM } from "./runtime";
+import { db, bucket, PLAIN, READS_PAGES, WARM } from "./runtime";
 import { contentTypeOf, readGate, setContentCache } from "./content";
 
 // ---------------------------------------------------------------------------
@@ -374,7 +374,7 @@ export const docShell = onRequest(WARM, async (req, res) => {
  * of the warm ones: the conversion is synchronous, and a large page would
  * stall the instance every document open waits on.
  */
-export const docMarkdown = onRequest(PLAIN, async (req, res) => {
+export const docMarkdown = onRequest({ ...PLAIN, ...READS_PAGES }, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
 
   // Uncacheable until something deliberately says otherwise. See noStore().

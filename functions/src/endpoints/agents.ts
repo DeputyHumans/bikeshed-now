@@ -3,7 +3,7 @@
 
 import { onRequest } from "firebase-functions/v2/https";
 import { noStore } from "../lib/http";
-import { MAILING, PLAIN } from "./runtime";
+import { MAILING, PLAIN, READS_PAGES } from "./runtime";
 
 // ---------------------------------------------------------------------------
 // Agent surface
@@ -16,7 +16,7 @@ import { MAILING, PLAIN } from "./runtime";
  * the credential is a Bearer token, never the session cookie, so there is no
  * cross-site request forgery surface to widen by allowing it.
  */
-export const mcp = onRequest({ ...MAILING, cors: true }, async (req, res) => {
+export const mcp = onRequest({ ...MAILING, ...READS_PAGES, cors: true }, async (req, res) => {
   // Before anything can answer: a GET's 405 and every 401 would otherwise
   // inherit Hosting's default max-age=600.
   noStore(res);

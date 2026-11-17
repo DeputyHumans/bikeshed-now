@@ -98,6 +98,20 @@ test("exactly the three services a document open waits on are kept warm", () => 
   assert.deepEqual(warm, ["contentProxy=1", "docShell=1", "session=1"]);
 });
 
+test("exactly the services that make a Markdown reading have the memory for one", () => {
+  // At the 256 MiB default, reading a 2.2 MB page, production killed
+  // docMarkdown three times in thirty seconds and mcp on the fourth page of one
+  // read (READS_PAGES). The emulator has no memory limit, so only the built
+  // endpoint can show the setting, and only a production log can show that it
+  // was enough.
+  const built = require("../lib/index.js");
+  const sized = Object.keys(built)
+    .filter((n) => built[n]?.__endpoint?.availableMemoryMb !== undefined)
+    .map((n) => `${n}=${built[n].__endpoint.availableMemoryMb}`)
+    .sort();
+  assert.deepEqual(sized, ["docMarkdown=1024", "mcp=1024", "moveAccount=512"]);
+});
+
 test("every function deploys with the runtime settings the operator manages left alone", () => {
   // setGlobalOptions({ preserveExternalChanges: true }) is read when each
   // function is DEFINED: onRequest copies the global options into its endpoint
