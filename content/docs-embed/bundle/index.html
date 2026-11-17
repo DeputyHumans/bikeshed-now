@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Put a Bikeshed document on your web page</title>
+<meta name="description" content="Show a Bikeshed document on a site of your own, and keep it up to date by publishing here.">
+<!--
+  SPDX-License-Identifier: Apache-2.0
+
+  The guide to embedding a document in another site's page (SPEC §2
+  "GET /embed/…", ADR 0031). Published into the deployment's public Docs
+  folder, beside the guides at /docs and /docs/developers, and checked by the
+  same three rules:
+
+    - No script. A document published through the CLI starts sandboxed, and
+      a document with no scripts never asks anybody to trust it.
+    - Every chapter carries an id, so a comment anchors to its chapter.
+    - Chapters are divs, never <section> or <article>, and no class name a
+      deck framework uses, so the viewer never mistakes the guide for slides.
+
+  The stylesheet is the developer guide's, copied: a document cannot share a
+  file with another document. Keep the three in step.
+
+  The snippet's quotes are written as entities on purpose: check-content fails
+  a bundle with a real src attribute naming another site anywhere in it, even
+  in a comment, because a sample must never make a reader's browser fetch from
+  a third party.
+-->
+<style>
+@font-face {
+  font-family: "Bikeshed Sans";
+  src: url("/fonts/bikeshed-sans-var.woff2") format("woff2-variations"),
+       url("/fonts/bikeshed-sans-var.woff2") format("woff2");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-02AF, U+1E00-1E9F, U+2000-206F, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f4f3f8;
+  --line: rgba(26, 26, 38, 0.14);
+  --ink: #1a1a26;
+  --muted: #55526b;
+  --accent: #4b3dd1;
+  --accent-soft: #edeafb;
+  --on-accent: #ffffff;
+  --annotation: #b5257b;
+  --danger: #b02318;
+  --sans: "Bikeshed Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --shadow-sm: 0 1px 3px rgba(26, 26, 38, 0.08), 0 1px 2px rgba(26, 26, 38, 0.04);
+  --shadow-md: 0 4px 12px rgba(26, 26, 38, 0.1), 0 1px 3px rgba(26, 26, 38, 0.06);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 17px/1.6 var(--sans);
+}
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+}
+.chapter { margin: 0 0 96px; }
+.chapter:last-child { margin-bottom: 48px; }
+
+h1, h2, h3 { margin: 0; font-weight: 650; text-wrap: balance; }
+h1 {
+  font-size: clamp(2.1rem, 1.6rem + 2.4vw, 3.2rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  margin-bottom: 20px;
+}
+h2 {
+  font-size: clamp(1.5rem, 1.3rem + 1vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin-bottom: 12px;
+}
+h3 { font-size: 1.05rem; line-height: 1.3; margin-bottom: 6px; }
+p { margin: 0 0 16px; }
+p, li, dd, figcaption { text-wrap: pretty; }
+a { color: var(--accent); text-underline-offset: 2px; }
+strong { font-weight: 650; }
+
+code, kbd, pre { font-family: var(--mono); }
+code {
+  font-size: 0.86em;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+pre {
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+pre code { padding: 0; border: 0; background: none; font-size: inherit; white-space: pre; }
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 6px;
+  font-size: 0.8em;
+  line-height: 1.6;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+/* The one-sentence answer every chapter opens with. */
+.answer {
+  font-size: clamp(1.08rem, 1rem + 0.4vw, 1.25rem);
+  line-height: 1.45;
+  font-weight: 600;
+  margin-bottom: 28px;
+}
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.muted { color: var(--muted); }
+.ticks { margin: 0; padding: 0 0 0 20px; }
+.ticks li { margin: 0 0 10px; }
+.ticks li::marker { color: var(--muted); }
+
+figure { margin: 0 0 32px; }
+figcaption {
+  margin-top: 12px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.panel {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hide-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- The opening ------------------------------------------------------- */
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 40px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.wordmark svg { width: 28px; height: 28px; }
+.tld, .stop { color: var(--accent); }
+.lead {
+  font-size: clamp(1.15rem, 1rem + 0.7vw, 1.45rem);
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+
+.loop ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+}
+.loop li {
+  position: relative;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.loop li + li::before {
+  content: "→";
+  content: "→" / "";
+  position: absolute;
+  left: -23px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.loop b { display: block; font-size: 1.1rem; font-weight: 650; margin-bottom: 4px; }
+.loop span { display: block; font-size: 0.86rem; line-height: 1.45; color: var(--muted); }
+/* The comment is the step that usually gets lost, and the revision is the one
+   any agent can take, so those two are the ones that are marked. */
+.loop .is-comment { border: 2px solid var(--annotation); }
+.loop .is-comment b { color: var(--annotation); }
+.loop .is-agent { border: 2px solid var(--accent); }
+.loop .is-agent b { color: var(--accent); }
+.loop-again {
+  position: relative;
+  height: 22px;
+  margin: 0 12.5% 0;
+  border: 2px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+}
+.loop-again span {
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  transform: translateX(-50%);
+  padding: 0 10px;
+  background: var(--bg);
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.loop figcaption { margin-top: 24px; }
+
+.dogfood {
+  margin: 0 0 32px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--annotation);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface);
+}
+.dogfood p { margin: 0; }
+.hl {
+  border: 1px solid var(--annotation);
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.toc ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.toc a {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.86rem;
+  text-decoration: none;
+}
+.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+/* --- Where it fits ----------------------------------------------------- */
+
+.lanes {
+  display: grid;
+  grid-template-columns: 6.5rem repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(3, auto);
+  gap: 8px 12px;
+}
+.lane-row { grid-column: 1 / -1; border-radius: 8px; background: var(--surface); }
+.lane-name {
+  grid-column: 1;
+  align-self: center;
+  padding-left: 12px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.r1 { grid-row: 1; }
+.r2 { grid-row: 2; }
+.r3 { grid-row: 3; }
+.c1 { grid-column: 2; }
+.c2 { grid-column: 3; }
+.c3 { grid-column: 4; }
+.c4 { grid-column: 5; }
+.lane-step {
+  margin: 8px 0;
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.lane-step .n {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 16px;
+}
+.cards > div { min-width: 0; }
+.cards .icon { color: var(--accent); margin-bottom: 10px; }
+.cards p { margin: 0; font-size: 0.94rem; }
+
+/* --- Start ------------------------------------------------------------- */
+
+.ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 16px;
+}
+.ways > div { min-width: 0; display: flex; flex-direction: column; }
+.ways h3 { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.ways .icon { color: var(--accent); }
+.ways ol { margin: 0; padding-left: 20px; font-size: 0.94rem; }
+.ways li { margin-bottom: 8px; }
+.ways p { font-size: 0.86rem; margin: 0; }
+
+/* --- Comments: a still of the real interaction --------------------------
+   The highlight is an OUTLINE over a transparent background, the way the
+   viewer draws it. A fill would advertise something that does not exist. */
+
+.mock {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.mock-prose { margin: 0; line-height: 1.75; }
+.thread { display: flex; flex-direction: column; gap: 8px; }
+.comment {
+  padding: 12px 16px;
+  border-left: 3px solid var(--annotation);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.88rem;
+}
+.comment p { margin: 0; }
+.who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px !important;
+  font-weight: 650;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* --- Suggestions ------------------------------------------------------- */
+
+.suggestion del {
+  text-decoration-color: var(--annotation);
+  text-decoration-thickness: 2px;
+  color: var(--muted);
+}
+.suggestion ins {
+  text-decoration: none;
+  border-bottom: 2px solid var(--accent);
+}
+.review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.86rem;
+}
+.review .note { flex: 1 1 16rem; color: var(--muted); }
+.btn {
+  display: inline-block;
+  padding: 4px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  font-weight: 600;
+}
+.btn-primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+
+/* --- Sharing ----------------------------------------------------------- */
+
+.ladder {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.ladder > div {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.ladder > div:first-child { background: var(--surface); }
+.ladder h3 { display: flex; align-items: center; gap: 8px; }
+.ladder .icon { color: var(--accent); width: 20px; height: 20px; }
+.ladder p { margin: 0; font-size: 0.86rem; color: var(--muted); }
+.ladder-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.table-wrap { overflow-x: auto; margin: 0 0 24px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td {
+  padding: 8px 16px 8px 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+thead th {
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+tbody th { font-weight: 650; white-space: nowrap; }
+.roles td { text-align: center; }
+.roles thead th:not(:first-child) { text-align: center; }
+.yes { font-weight: 700; }
+.no { color: var(--muted); }
+
+/* --- Versions ---------------------------------------------------------- */
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  position: relative;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 15px;
+  border-top: 2px solid var(--line);
+}
+.timeline li { position: relative; min-width: 0; }
+.dot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--bg);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+.timeline .draft .dot { border-style: dashed; border-color: var(--muted); color: var(--muted); }
+.timeline .current .dot { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.timeline b { display: block; margin: 10px 0 2px; font-size: 0.9rem; }
+.timeline .desc { display: block; font-size: 0.84rem; line-height: 1.45; color: var(--muted); }
+.gate {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.88rem;
+}
+.gate ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 24px; }
+
+/* --- Agents ------------------------------------------------------------ */
+
+.headline {
+  margin-bottom: 40px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface);
+  font-size: 1.05rem;
+}
+.agent-loop {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+.agent-loop li {
+  position: relative;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.agent-loop li + li::before {
+  content: "→";
+  content: "→" / "";
+  position: absolute;
+  left: -23px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.agent-loop b { display: block; font-size: 1.1rem; font-weight: 650; color: var(--accent); margin-bottom: 4px; }
+.agent-loop span { display: block; font-size: 0.88rem; line-height: 1.45; margin-bottom: 10px; }
+.agent-loop code { font-size: 0.74rem; }
+.agent-loop + .loop-again { margin: 0 16.7%; }
+.aside { margin-top: 16px; font-size: 0.9rem; color: var(--muted); }
+.inbox { margin-top: 32px; padding: 20px 24px; }
+.inbox-title {
+  margin: 0 0 12px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.inbox-item { padding: 12px 0 12px 16px; border-left: 3px solid var(--annotation); font-size: 0.92rem; }
+.inbox-item + .inbox-item { margin-top: 12px; }
+.inbox-item p { margin: 0 0 4px; }
+.inbox-item b { margin-right: 6px; }
+.inbox-item .quote { color: var(--muted); }
+.can {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.can > div { min-width: 0; padding: 16px 20px; border-radius: 12px; background: var(--surface); }
+.can p { margin: 0; font-size: 0.92rem; }
+
+/* --- Present and export ------------------------------------------------ */
+
+.export {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.page {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  padding: 28px 24px 40px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: var(--shadow-md);
+}
+.page .bar { height: 8px; margin-bottom: 10px; border-radius: 4px; background: var(--surface); }
+.page .bar.title { width: 55%; height: 14px; margin-bottom: 18px; background: var(--line); }
+.page .bar.short { width: 70%; }
+.stamp {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.page-foot {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 12px;
+  font-size: 0.66rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+dl { margin: 0; }
+dt { font-weight: 650; }
+dd { margin: 0 0 14px; font-size: 0.94rem; }
+.keys dd { color: var(--muted); }
+
+.notes dt { font-size: 1rem; }
+.notes dd { margin-bottom: 18px; }
+
+footer {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+  border-top: 1px solid var(--line);
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+footer p { margin: 0 0 6px; }
+
+/* --- Narrow frames ------------------------------------------------------
+   The guide is read inside the viewer, beside a comment panel, so these
+   respond to the FRAME's width, which is narrower than the window. */
+
+@media (max-width: 860px) {
+  .loop ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .loop li:nth-child(3)::before { content: none; }
+  .loop-again { display: none; }
+  .mock, .export { grid-template-columns: minmax(0, 1fr); }
+  .agent-loop { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .agent-loop li + li::before { content: "↓"; content: "↓" / ""; left: 20px; top: -21px; transform: none; }
+  .agent-loop + .loop-again { display: none; }
+}
+
+@media (max-width: 600px) {
+  main { padding: 32px 16px 64px; }
+  .chapter { margin-bottom: 64px; }
+  .loop ol { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .loop li + li::before { content: "↓"; content: "↓" / ""; left: 20px; top: -21px; transform: none; }
+  .loop li:nth-child(3)::before { content: "↓"; content: "↓" / ""; }
+  .lanes { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .lane-row, .lane-name { display: none; }
+  .lane-step { grid-row: auto; grid-column: 1; }
+  .lane-step .hide-text { position: static; width: auto; height: auto; clip: auto; font-weight: 650; }
+  .ladder { grid-template-columns: minmax(0, 1fr); }
+  .ladder-axis { display: none; }
+  .timeline { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-left: 0; }
+  .timeline::before { left: 15px; right: auto; top: 16px; bottom: 16px; border-top: 0; border-left: 2px solid var(--line); }
+  .timeline li { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; }
+  .timeline .dot { grid-row: span 2; align-self: start; }
+  .timeline b { margin-top: 4px; }
+  .roles th, .roles td { padding-right: 10px; }
+  footer { padding-left: 16px; padding-right: 16px; }
+}
+
+@media print {
+  body { font-size: 11pt; }
+  main { padding: 0; }
+  .toc, .dogfood { display: none; }
+  .chapter { margin-bottom: 32pt; }
+  figure, .panel, .cards > div, .ways > div, tr, dd { break-inside: avoid; }
+  .panel, .comment, .lane-step, .agent-loop li, .page { box-shadow: none; }
+  a { color: inherit; }
+}
+/* --- Developer guide only ----------------------------------------------- */
+
+.term { margin-top: 32px; }
+.subhead { margin: 32px 0 12px; }
+.reference h3 { margin: 32px 0 8px; }
+.reference td:first-child, .connect td:first-child { white-space: nowrap; }
+.connect td code { white-space: normal; }
+.install td:first-child { width: 30%; }
+.install code { white-space: normal; overflow-wrap: anywhere; }
+/* A whole command in running text wraps at its spaces rather than run off a narrow frame. */
+.ticks code { white-space: normal; }
+</style>
+</head>
+<body>
+<main>
+
+<div class="chapter" id="top">
+  <p class="wordmark">
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <path d="M4 14 16 4l12 10" stroke-width="2.6"/>
+      <path d="M6.5 15v13M25.5 15v13" stroke-width="2.6"/>
+      <path d="M11 18.5h10M11 26.5h10" stroke-width="2"/>
+      <path d="M11 22.5h7" stroke-width="2" stroke="#b5257b"/>
+    </svg>
+    <span>bikeshed<span class="tld">.now</span></span>
+  </p>
+
+  <p class="eyebrow">A guide</p>
+  <h1>Put a Bikeshed document on your web page<span class="stop">.</span></h1>
+  <p class="lead">Show a document on a site of your own, such as a wiki, a product page or a status page, and keep it up to date by publishing here.</p>
+  <p class="headline"><strong>Change <code>/d/</code> to <code>/embed/</code> and put it in an iframe.</strong> Your page shows the latest version, and every reader is counted.</p>
+
+  <div class="dogfood">
+    <p><strong>New to Bikeshed?</strong> <a href="/docs">How Bikeshed works</a> explains the rest, and <a href="/docs/developers">Bikeshed for developers</a> covers agents and the command line.</p>
+  </div>
+
+  <nav class="toc" aria-label="In this guide">
+    <ol>
+      <li><a href="#show">What you can show</a></li>
+      <li><a href="#snippet">Add it to a page</a></li>
+      <li><a href="#size">Size and layout</a></li>
+      <li><a href="#access">Who can see it</a></li>
+      <li><a href="#reads">What counts as a read</a></li>
+      <li><a href="#limits">What an embed doesn't do</a></li>
+    </ol>
+  </nav>
+</div>
+
+<div class="chapter" id="show">
+  <p class="eyebrow">01</p>
+  <h2>What you can show</h2>
+  <p class="answer">A document anyone may read: a public one, or one shared by link, with its key.</p>
+
+  <ul class="ticks">
+    <li>A public document, or one in a public folder, shows to anyone who opens your page.</li>
+    <li>A document shared as <em>Anyone with the link</em> needs its key on the address, as <code>?k=</code> followed by the key from its link. Anyone who can read your page's source can then read the document, so only do this where that's fine.</li>
+    <li>A private document, one past its end date, or one in the Trash shows <em>This document isn’t available here.</em> So does an address that doesn't exist, so an embed never says whether a private document is there.</li>
+    <li>People you shared a private document with can't see it in an embed either, because another site's page never sends their sign-in. <em>Open in Bikeshed</em>, under the embed, takes them to it.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="snippet">
+  <p class="eyebrow">02</p>
+  <h2>Add it to a page</h2>
+  <p class="answer">Take the document's address, change <code>/d/</code> to <code>/embed/</code>, and put that in an iframe.</p>
+
+  <p>If the document is at <code>https://bikeshed.example/d/q3-plan</code>, its embed is at <code>https://bikeshed.example/embed/q3-plan</code>:</p>
+
+<pre><code>&lt;iframe src=&quot;https://bikeshed.example/embed/q3-plan&quot;
+        title=&quot;Q3 plan&quot;
+        width=&quot;100%&quot; height=&quot;640&quot;
+        style=&quot;border: 0&quot;&gt;&lt;/iframe&gt;</code></pre>
+
+  <ul class="ticks">
+    <li>Use this site's address in place of <code>bikeshed.example</code>.</li>
+    <li>It shows the latest version, and a new one reaches your page within five minutes. To keep one version, put it on the address: <code>/embed/q3-plan/v3</code>.</li>
+    <li>Give the iframe a <code>title</code>, which is what a screen reader announces.</li>
+    <li>Leave out <code>sandbox</code>. If your site needs it, use <code>sandbox=&quot;allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox&quot;</code>. With less, the document still shows, but its links stop opening and its readers stop being counted.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="size">
+  <p class="eyebrow">03</p>
+  <h2>Size and layout</h2>
+  <p class="answer">Your page decides how big the embed is. The document scrolls inside it.</p>
+
+  <ul class="ticks">
+    <li>Set a height, because an iframe doesn't grow to fit what's in it. 640 pixels suits most documents, and a short note needs less.</li>
+    <li>For a box that keeps its shape as the page narrows, give the iframe <code>width: 100%; height: auto; aspect-ratio: 4 / 3</code> in your stylesheet.</li>
+    <li>A link that leaves the document opens in a new tab, so your page stays where it was.</li>
+    <li>A deck shows as one long page. Slide by slide, presenting and the slide rail are in Bikeshed, one click away.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="access">
+  <p class="eyebrow">04</p>
+  <h2>Who can see it</h2>
+  <p class="answer">The embed follows the document's own sharing, so you change it in Share, never on your page.</p>
+
+  <ul class="ticks">
+    <li>Make the document private, give it an end date that passes, or move it to the Trash, and within five minutes the embed says it isn't available here.</li>
+    <li>Sharing a document by link again after making it private gives it a new key, and every embed that used the old one stops.</li>
+    <li>A document that was readable only because its folder is public stops showing when it moves out of that folder.</li>
+    <li>Any site can embed a public document, as any site can link to one. To keep a document off other sites, share it by link or keep it private.</li>
+    <li>Search engines are asked to leave the embed alone and find the document at its own address.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="reads">
+  <p class="eyebrow">05</p>
+  <h2>What counts as a read</h2>
+  <p class="answer">Someone reading your page is reading the document, and is counted as any reader is.</p>
+
+  <ul class="ticks">
+    <li>An embed counts once it has been on screen for two seconds, in the part of your page the reader can see, in a tab they're looking at. An embed further down that nobody scrolls to isn't a read.</li>
+    <li>Reading time counts while the reader is active, as it does in Bikeshed.</li>
+    <li>Readers of an embed are counted without their names, even those with an account here, because another site's page never sends their sign-in.</li>
+    <li>The document's <em>Activity</em> says how many visits came through an embed, and marks each read that did.</li>
+    <li>Where this site measures use with analytics, the embed asks the reader first, once for each site that shows it. No title, address or contents are sent. Bikeshed's own count includes everyone, and analytics only those who said yes.</li>
+  </ul>
+</div>
+
+<div class="chapter" id="limits">
+  <p class="eyebrow">06</p>
+  <h2>What an embed doesn't do</h2>
+  <p class="answer">It shows the document. Everything else happens in Bikeshed.</p>
+
+  <dl class="notes">
+    <dt>No comments.</dt>
+    <dd>Comments, highlights and suggestions are in Bikeshed. <em>Open in Bikeshed</em> takes a reader to them.</dd>
+    <dt>No scripts.</dt>
+    <dd>A page's own scripts never run in an embed, even where Bikeshed runs them for everyone.</dd>
+    <dt>Not the file address.</dt>
+    <dd>The address a document's files are served from, under <code>/content/</code>, can be put in an iframe too, but it is fixed to one version, counts nothing, and its links don't open. Use <code>/embed/</code>.</dd>
+    <dt>Your page has the last word.</dt>
+    <dd>The page around an embed decides its size and what sits beside it or over it. Bikeshed can't change that, so readers trust your page as much as the document.</dd>
+  </dl>
+</div>
+
+</main>
+<footer>
+  <p>Publishing the document in the first place? <a href="/docs">How Bikeshed works</a> covers that in plain words.</p>
+  <p>Something wrong on this page? Select it and comment.</p>
+</footer>
+</body>
+</html>

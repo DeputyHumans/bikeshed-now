@@ -533,6 +533,16 @@ While something is in the Trash it is its owner's alone and read-only. Its link,
 
 If the person wants something gone sooner, they do it themselves in the browser's Trash: Delete forever, or Empty trash, with a code emailed to their address. Where the deployment's email is off, nothing can be deleted sooner. A fork whose original was deleted forever says so: `get_lineage` gives `moreWasDeleted`.
 
+## Put a document on another site's page
+
+A public document, or an unlisted one with its key, can be shown on any web page in an iframe of its embed address: the document's `url` with `/d/` changed to `/embed/`.
+
+```html
+<iframe src="https://<deployment>/embed/proposal" title="Proposal" width="100%" height="640" style="border: 0"></iframe>
+```
+
+It shows the current version, so it follows each update within five minutes, and `/embed/<id>/<version>` pins one. An unlisted document needs `?k=<key>`, which puts the key in the host page's source for anyone who looks: say so before you hand one over. A private, expired or trashed document shows a page saying it isn't available, and so does an id that doesn't exist. The embed counts reads as the viewer does and shows no comments; its link opens the document, where they are. A document's scripts never run in it. Tell the person not to add a `sandbox` attribute, or to include `allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox`, or its links stop opening and its readers stop being counted. The guide at `https://<deployment>/d/docs-embed` says the rest.
+
 ## What you cannot do, and why
 
 - **Delete anything forever.** You can move a document or a folder to the Trash and restore it; the Trash deletes what stays there after 30 days, and only the person can delete it sooner, in the browser, with a code emailed to them. `POST /purge` refuses every token, yours included.

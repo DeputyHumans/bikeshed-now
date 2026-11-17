@@ -173,7 +173,7 @@ Each is a decision with a reason in `docs/architecture/overview.md`, not a gap: 
 | `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/architecture/adr/` | twenty-nine decisions, each with its reversal condition |
+| `docs/architecture/adr/` | thirty decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 | `docs/README.md` | every document, by what you want to do |
 | `README.md`, `docs/assets/readme/` | the page for people deciding whether to use Bikeshed, and its images. The SVGs are the source, each in a light and a dark file, with Basic Latin of Bikeshed Sans embedded so a wording change needs no new subset. The screenshots come from a kept e2e stack with the sample documents, made-up names and `example.com` addresses; retake them when the screens they show change. A new PNG there must be added to `EXPECTED_BINARIES` in `scripts/check-secrets.sh`, which reads tracked files only, so it passes `verify` until the commit and then fails CI |
@@ -191,6 +191,7 @@ Each is a decision with a reason in `docs/architecture/overview.md`, not a gap: 
 - **The skills name `bikeshed.now`, and the agent guide says `<deployment>`.** A marketplace reads `claude-plugin/` straight from GitHub with no build in between, so it has to hold an address that works. `tools/build-agents.mjs` swaps it back on the way into `app/public/skills/`, because a real address served by another deployment would send that deployment's token here.
 - **A public document's shell holds its words, hidden.** They are for a crawler that runs no JavaScript ([ADR 0028](docs/architecture/adr/0028-what-a-crawler-can-read.md)). The stylesheet hides them and the app replaces them on mount; an attribute or inline style would read to a parser as a page choosing not to say them.
 - **`robots.txt` names no bot.** A bot obeys only the group that names it, so naming one would lift every other rule for it.
+- **`/embed/**` is left out of the `DENY` glob, and its prefix ignores case.** It is the one page any site may frame ([ADR 0031](docs/architecture/adr/0031-a-document-can-be-embedded-in-another-site.md)), and it is safe only because it is not the app: `app/src/embed/graph.test.ts` holds its imports away from the router, sign-in and Firestore. `docShell` matches the prefix decoded and in any case, so no spelling Hosting routes there can come back as a frameable app shell.
 - **The email secret holds a single space.** `defineSecret` demands a version; Secret Manager refuses an empty payload. Whitespace is how a deployment says "email off", and `apiKey()` trims.
 
 ## Agentic Continuous Flow (ACF)

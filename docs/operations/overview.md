@@ -235,7 +235,17 @@ bikeshed publish content/docs-developers/bundle/index.html --id docs-developers 
 
 Each `url` it returns must end in the id you asked for. A taken id gets a suffix instead, and the redirect would point at nothing. Then, as their owner, run `bikeshed visibility docs public` and `bikeshed visibility docs-developers public`, or use Share → Who can see it → **Public** in the app. A public document takes comments from anyone signed in, so the guides collect their own corrections.
 
-To publish a change, `bikeshed update docs content/docs/bundle/index.html`, or the same for `docs-developers`; identical bytes publish nothing. Under `vite` dev there is no redirect, and `/docs` lands on `/`. The Hosting emulator honours it, but only one started after the change: a running one keeps the configuration it started with.
+To publish a change, `bikeshed update docs content/docs/bundle/index.html`, or the same for `docs-developers`; identical bytes publish nothing.
+
+**The embed guide**, `content/docs-embed`, has no redirect: it is filed in the deployment's public Docs folder, beside the others, and both guides link to `/d/docs-embed`. Publish it into that folder, then make it public itself, so it stays readable if it is ever moved:
+
+```bash
+bikeshed get docs-embed     # must fail, as above
+bikeshed publish content/docs-embed/bundle/index.html --id docs-embed --title "Put a Bikeshed document on your web page" --folder <Docs folder id>
+bikeshed visibility docs-embed public
+```
+
+`bikeshed folders` lists the folder's id. Changes go out with `bikeshed update docs-embed content/docs-embed/bundle/index.html`. Under `vite` dev there is no redirect, and `/docs` lands on `/`. The Hosting emulator honours it, but only one started after the change: a running one keeps the configuration it started with.
 
 ### What crawlers may read
 
@@ -469,7 +479,7 @@ firebase hosting:channel:delete <channel> --project <id>   # only if it is on a 
 
 For the primary channel there is no purge API. The reliable move is to withdraw the version with `delete-version.mjs`, which removes the bytes the cached URL points at, and accept that the cached copy expires on its own.
 
-**The document page is in the same window.** A public or unlisted document's `/d/**` page carries its title and an excerpt in its head, cached `public, max-age` for the same five minutes as the content. Withdrawing a version does not purge it, and neither does making the document private: the cached shell can still say what the document was called until it expires on its own.
+**The document page is in the same window.** A public or unlisted document's `/d/**` page carries its title and an excerpt in its head, cached `public, max-age` for the same five minutes as the content. So does its embed page, `/embed/**`, which names the current version: a document made private goes on showing on another site's page until the cached embed expires. Withdrawing a version does not purge it, and neither does making the document private: the cached shell can still say what the document was called until it expires on its own.
 
 The same window applies after a **hosting deploy**. The cached page names the previous release's hashed assets. Firebase's documentation says a deploy clears cached content across the CDN; if function responses turn out not to be included, a CDN-cached shell can go on naming asset files the new release no longer serves for up to 300 s. A browser that already holds the page keeps it for at most 300 s either way, and a reload after that fetches a fresh one.
 

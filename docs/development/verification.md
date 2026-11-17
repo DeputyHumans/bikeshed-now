@@ -287,6 +287,16 @@ The same steps can be driven from a script with the system WebKit: a `WKWebView`
 11. A comment posted with a token: tap `agent`. A toast says what it came through, and the thread stays as it was.
 
 
+### 20 · Another site's page embeds a document, and the read is counted
+
+The embed page is for a page on another site, so check it from one. `localhost` and `127.0.0.1` are different sites to a browser even on one machine, while two ports of one host are the same site, and would carry the session cookie the real thing never sees. Serve a one-line page from a scratch directory (`python3 -m http.server 8901`) holding `<iframe src="http://127.0.0.1:<hosting port>/embed/<public id>" style="width:100%;height:600px;border:0">`, and open it at `http://localhost:8901/`.
+
+1. The document shows at its current version, and `curl -sI http://127.0.0.1:<hosting port>/embed/<public id>` has no `x-frame-options` and no `frame-ancestors`, but `cache-control: public, max-age=300` and `x-robots-tag: noindex`.
+2. Make the host page tall enough that the embed starts below the fold. Wait: the document's Stats panel counts nothing. Scroll to it and wait two seconds: one more visit, and the label says how many came through embeds. The Activity panel says *read it in an embed*.
+3. A link that leaves the document opens a new tab, and the host page stays.
+4. Make the document private and reload after five minutes: *This document isn’t available here*, the same page an id that does not exist gets.
+5. `curl -sI` for `/EMBED/<id>`, `/d/<id>` and `/signup`: the first is the embed page, the other two carry `x-frame-options: DENY`. On the emulator this is a smoke test only; Hosting's header globs are checked on a deployment (SPEC §2 "GET /embed/…").
+
 ## Automated: `npm run test:e2e`
 
 The suite in `e2e/` runs most of this walkthrough by itself. It builds a copy of the product from the tree and starts it on its own ports, with its own emulators, a local Mailpit for mail and its own `functions/.env.local`. It builds the app from `app/.env.example` with the copy's own origin, so none of "Running it" applies to it and nothing in it can reach a deployment. It is **opt-in**, and neither `npm run verify` nor CI runs it. One run takes minutes and gigabytes, and it needs Java, Mailpit and system Chrome on the machine. Its concurrency tier is a measurement that wants the machine to itself. [`e2e/README.md`](../../e2e/README.md) is the full guide.

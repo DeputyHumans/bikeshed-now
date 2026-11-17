@@ -105,10 +105,11 @@ async function documents() {
       ["docs/agents/agent-guide.md", GUIDE],
       ["claude-plugin/README.md", readFileSync(join(ROOT, "claude-plugin", "README.md"), "utf8")],
       ...skills.map((s) => [`claude-plugin/skills/${s.name}/SKILL.md`, s.text]),
-      // The guides a deployment opens at /docs and /docs/developers. People
-      // read them, but the developer guide makes the same claims about the
-      // surface, and the user guide must go on naming none it gets wrong.
-      ...["docs", "docs-developers"].map((id) => [
+      // The guides a deployment opens at /docs and /docs/developers, and the
+      // embed guide filed beside them. People read them, but the developer
+      // guide makes the same claims about the surface, and the others must go
+      // on naming none they get wrong.
+      ...["docs", "docs-developers", "docs-embed"].map((id) => [
         `content/${id}/bundle/index.html`,
         readFileSync(join(ROOT, "content", id, "bundle", "index.html"), "utf8"),
       ]),

@@ -2,7 +2,7 @@
 
 `docs/architecture/spec.md` says what the system does and is normative. This file says why it is shaped this way, and — more usefully — what it deliberately is not.
 
-The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — twenty-nine records of about thirty lines each.
+The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -16,7 +16,7 @@ The alternative is a sandboxed cross-origin frame with an injected `annotator.js
 
 We keep same-origin and pay for it with an explicit **trust model** (SPEC §6c): a document that did not come from a trusted publisher renders with `sandbox="allow-same-origin"` and no `allow-scripts`, so its JS cannot read the app origin's auth token. Annotation and editing keep working because they are parent-driven — `contentEditable` and `execCommand`, not iframe scripts.
 
-See `adr/0001-same-origin-iframe.md`.
+See `adr/0001-same-origin-iframe.md`. Another site may frame a document too, but only through the embed page, `/embed/<id>`, which frames the bytes the same way and is not the app (`adr/0031-a-document-can-be-embedded-in-another-site.md`).
 
 ### 2. `execCommand`, not a schema editor
 

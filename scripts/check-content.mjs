@@ -69,7 +69,8 @@ function checkUniversal(name, file, text) {
 }
 
 /**
- * The two published guides, content/docs and content/docs-developers, are not
+ * The published guides, content/docs, content/docs-developers and
+ * content/docs-embed, are not
  * samples, but they are checked like them, and by the same rules: what makes
  * one a good document to read and comment on in the viewer makes the other one.
  */
@@ -221,6 +222,7 @@ const EXPECTATIONS = {
   },
   docs: guideRules("docs"),
   "docs-developers": guideRules("docs-developers"),
+  "docs-embed": guideRules("docs-embed"),
 };
 
 for (const name of readdirSync(CONTENT)) {

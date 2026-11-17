@@ -1,6 +1,6 @@
 ---
 name: bs-share
-description: Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document or folder visibility, open editing or expiry; or explaining inherited and team access.
+description: Use when inspecting or changing who can read, suggest, edit or approve a Bikeshed document or folder; changing document or folder visibility, open editing or expiry; explaining inherited and team access; or putting a document on another site's page with its embed address.
 ---
 
 # Manage access on Bikeshed
@@ -53,3 +53,13 @@ It opens **everything beneath the folder, to read, without an account**: its sub
 Folder rename, move and the Trash are covered by `bs-folder`.
 
 Version history is document-wide for access and filing: current permissions and expiry govern every version. Older content and feedback are a read-only archive. For version discovery and guarded writes use `bs-publish` or `bs-comment`; changing access or moving a document does not make an older version editable.
+
+## Put a document on another site's page
+
+A public document, or an unlisted one with its key, can be shown on any web page in an iframe of its embed address: the document's `url` with `/d/` changed to `/embed/`.
+
+```html
+<iframe src="https://bikeshed.now/embed/proposal" title="Proposal" width="100%" height="640" style="border: 0"></iframe>
+```
+
+It shows the current version, so it follows each update within five minutes, and `/embed/<id>/<version>` pins one. An unlisted document needs `?k=<key>`, which puts the key in the host page's source for anyone who looks: say so before you hand one over. A private, expired or trashed document shows a page saying it isn't available, and so does an id that doesn't exist; making a document private is how to take an embed down. The embed counts reads as the viewer does and shows no comments; its link opens the document, where they are. A document's scripts never run in it. Tell the person not to add a `sandbox` attribute, or to include `allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox`, or its links stop opening and its readers stop being counted.
