@@ -4,7 +4,7 @@
          ]
        },
        {
--        "source": "!/@(content|draft|thumb)/**",
+-        "source": "!/@(content|draft|thumb|embed)/**",
 +        "source": "/__frame_control_unused__/**",
          "headers": [
            {

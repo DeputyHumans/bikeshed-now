@@ -1,6 +1,6 @@
 --- a/app/src/analytics.ts
 +++ b/app/src/analytics.ts
-@@ -78,12 +78,11 @@
+@@ -91,12 +91,11 @@ function resolve(): Promise<Analytics | null> {
    if (!analyticsConfigured() || optedOut) return Promise.resolve(null);
    // Denial means the measurement script is never fetched, rather than fetched
    // and then disabled — a request nobody sends cannot be logged by anybody.
@@ -11,6 +11,6 @@
        const { initializeAnalytics, isSupported } = await import("firebase/analytics");
 -      if (!(await isSupported()) || optedOut || readConsent() !== "granted") return null;
 +      if (!(await isSupported()) || optedOut) return null;
+       const app = await firebaseApp();
        instance = initializeAnalytics(app, {
          config: {
-           // The one line that keeps document slugs out of a third party's logs.
