@@ -5,6 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
+const { endpointFiles, toolFiles, sourceDeclaring } = require("./sources");
 
 const ROOT = join(__dirname, "..", "..");
 
@@ -95,6 +96,39 @@ test("exactly the three services a document open waits on are kept warm", () => 
     .map((n) => `${n}=${built[n].__endpoint.minInstances}`)
     .sort();
   assert.deepEqual(warm, ["contentProxy=1", "docShell=1", "session=1"]);
+});
+
+test("every function deploys with the runtime settings the operator manages left alone", () => {
+  // setGlobalOptions({ preserveExternalChanges: true }) is read when each
+  // function is DEFINED: onRequest copies the global options into its endpoint
+  // at the call, not at deploy. A function defined before that call — in a
+  // module loaded ahead of it — gets every resettable setting marked for reset,
+  // and the deploy overwrites what the operator API set. The emulator applies
+  // none of these settings, so only the built endpoint can show it.
+  const { RESET_VALUE } = require("firebase-functions/v2/options");
+  const built = require("../lib/index.js");
+  const deployed = Object.keys(built).filter((n) => built[n]?.__endpoint);
+  assert.ok(deployed.length >= 30, `the built functions were read (${deployed.length})`);
+  const reset = deployed.filter((n) => Object.values(built[n].__endpoint).includes(RESET_VALUE));
+  assert.deepEqual(reset, [], "these would deploy with their runtime settings reset");
+});
+
+test("every deployed function and every tool is declared once in the sources the shape tests read", () => {
+  // The shape tests in this directory find a handler through sources.js. A
+  // module missing from that set would let a test that asserts something is
+  // absent pass on code it never read.
+  const built = require("../lib/index.js");
+  const endpoints = endpointFiles().map((f) => readFileSync(f, "utf8")).join("\n");
+  for (const name of Object.keys(built).filter((n) => built[n]?.__endpoint)) {
+    const found = endpoints.match(new RegExp(`^export const ${name} = on(?:Request|Document\\w+|Schedule)\\(`, "gm")) ?? [];
+    assert.equal(found.length, 1, `${name} is declared ${found.length} times in the endpoint sources`);
+  }
+  const { TOOL_NAMES } = require("../lib/mcp/tools.js");
+  const tools = [...toolFiles(), join(__dirname, "..", "src", "mcp", "management.ts")].map((f) => readFileSync(f, "utf8")).join("\n");
+  for (const name of TOOL_NAMES) {
+    const found = tools.match(new RegExp(`^    name: "${name}",$`, "gm")) ?? [];
+    assert.equal(found.length, 1, `${name} is declared ${found.length} times in the tool sources`);
+  }
 });
 
 test("a cold start never loads the email renderer", () => {
@@ -219,10 +253,6 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
    * before the first `return` in each byte-serving handler, which is what makes
    * a future early return safe by construction rather than by remembering.
    */
-  const { readFileSync } = require("node:fs");
-  const { join } = require("node:path");
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
-
   // `forkDoc` serves no bytes, but its lineage answer is per caller — who may
   // see which ancestor, and the owner's inventory — so it is held to the same
   // rule: a cached lineage would show one reader's view of a document to the next.
@@ -232,6 +262,7 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   // any handler code runs its own header, and a refusal cached for ten minutes
   // is a sign-in that cannot be retried (SPEC §23).
   for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "docMarkdown", "recordView", "unlockDoc", "forkDoc", "saveThumbs", "setAccess", "setFolderAccess", "setVisibility", "organize", "mcp", "oauth", "oauthConsent"]) {
+    const src = sourceDeclaring(`export const ${name} = onRequest(`);
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);
@@ -260,9 +291,9 @@ test("no endpoint compares a link token by hand", () => {
    * through `readBasis`, and nowhere else (SPEC §17).
    */
   const files = [
-    join(__dirname, "..", "src", "index.ts"),
+    ...endpointFiles(),
     join(__dirname, "..", "src", "lib", "shell.ts"),
-    join(__dirname, "..", "src", "mcp", "tools.ts"),
+    ...toolFiles(),
     join(__dirname, "..", "src", "lib", "fork.ts"),
   ];
   for (const file of files) {
@@ -280,7 +311,7 @@ test("only a public document writes the realtime key that lets any account edit"
 });
 
 test("MCP declares its invitation secret and delegates all management writes", () => {
-  const index = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const index = sourceDeclaring("export const mcp = onRequest(");
   const management = readFileSync(join(__dirname, "..", "src", "mcp", "management.ts"), "utf8");
   assert.match(index, /export const mcp = onRequest\(\{ \.\.\.MAILING,/);
   assert.match(management, /from "\.\.\/lib\/management"/);
@@ -307,7 +338,7 @@ test("every write of a new document's bytes refuses to overwrite", () => {
    * `CREATE_ONLY`, which is exactly "only if no object exists".
    */
   const publish = readFileSync(join(__dirname, "..", "src", "lib", "publish.ts"), "utf8");
-  const index = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const index = sourceDeclaring("export const forkDoc = onRequest(");
 
   const { CREATE_ONLY } = require("../lib/lib/publish.js");
   assert.deepEqual(CREATE_ONLY, { preconditionOpts: { ifGenerationMatch: 0 } });
@@ -406,7 +437,7 @@ test("every path that mints a version decides trust inside its transaction", () 
 
 /** The source of one exported endpoint, up to the next export. */
 function endpointBody(name) {
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring(`export const ${name} = onRequest(`);
   const start = src.indexOf(`export const ${name} = onRequest(`);
   assert.ok(start > 0, `${name} not found`);
   const next = src.indexOf("\nexport ", start + 1);
@@ -434,7 +465,7 @@ test("a thumbnail is read through the same gate as content, and only if the reco
 });
 
 test("a member's thumbnail is kept by their browser and never by a shared cache", () => {
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring("function setThumbCache(");
   const fn = src.slice(src.indexOf("function setThumbCache("), src.indexOf("GET /content/[~<key>/]"));
   assert.match(fn, /`private, max-age=\$\{maxAge\}, immutable`/);
   // Capped at expiry, like every other window.
@@ -494,7 +525,7 @@ test("the consent page and the sign-in page cannot be framed", () => {
 });
 
 test("the consent endpoint takes no cross-origin calls and no personal token", () => {
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring("export const oauthConsent = onRequest(");
   const start = src.indexOf("export const oauthConsent = onRequest(");
   assert.ok(start > 0, "oauthConsent not found");
   assert.match(src.slice(start, start + 60), /onRequest\(PLAIN,/, "oauthConsent must not enable CORS");
@@ -522,7 +553,7 @@ test("every version write and withdrawal moves its document's summary, through t
   // The summary of the current version (lib/latest.ts) is kept by the one
   // place every way of making or withdrawing a version passes through. The
   // unit suite runs no triggers, so the call is pinned here.
-  const index = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const index = sourceDeclaring("export const recordVersionEvent = onDocumentWritten(");
   const start = index.indexOf("export const recordVersionEvent = onDocumentWritten(");
   assert.ok(start > 0, "recordVersionEvent not found");
   const body = index.slice(start, index.indexOf("\nexport ", start + 1));

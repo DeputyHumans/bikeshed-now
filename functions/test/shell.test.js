@@ -5,6 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
+const { sourceDeclaring } = require("./sources");
 const { Readable } = require("node:stream");
 
 const {
@@ -747,7 +748,7 @@ test("docShell sets the public cache header only after the page is built", () =>
    * shell with the public header already on it, and that broken page would be
    * cached at a public URL for the whole window.
    */
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring("export const docShell = onRequest(");
   const start = src.indexOf("export const docShell = onRequest(");
   assert.ok(start > 0, "docShell not found");
   const end = src.indexOf("\n});", start);
@@ -768,7 +769,7 @@ test("docShell's fallback re-asserts no-store before it serves the generic shell
    * already on the response. The generic shell must carry neither, so the
    * catch puts the default back before anything is sent.
    */
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring("export const docShell = onRequest(");
   const start = src.indexOf("export const docShell = onRequest(");
   assert.ok(start > 0, "docShell not found");
   const body = src.slice(start, src.indexOf("\n});", start));
@@ -790,7 +791,7 @@ test("docShell logs why there is no shell before it answers 503", () => {
    * module's own wording and never a URL, and the handler logs it — the
    * `reason`, not the message, which is the rule every log line here obeys.
    */
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring("export const docShell = onRequest(");
   const start = src.indexOf("export const docShell = onRequest(");
   assert.ok(start > 0, "docShell not found");
   const body = src.slice(start, src.indexOf("\n});", start));
@@ -817,7 +818,7 @@ test("docShell says why it fell back to the generic shell, naming neither the UR
    * path, which contains the document id from the URL, and no log line may
    * carry the request URL or `k`.
    */
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring("export const docShell = onRequest(");
   const start = src.indexOf("export const docShell = onRequest(");
   assert.ok(start > 0, "docShell not found");
   const body = src.slice(start, src.indexOf("\n});", start));
@@ -861,7 +862,7 @@ test("docShell names the step that failed, so a template regression reads differ
    * and the template). Each stage must be entered before the call that can
    * throw in it, or the log names the wrong one.
    */
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+  const src = sourceDeclaring("export const docShell = onRequest(");
   const start = src.indexOf("export const docShell = onRequest(");
   assert.ok(start > 0, "docShell not found");
   const body = src.slice(start, src.indexOf("\n});", start));

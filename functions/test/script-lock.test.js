@@ -4,11 +4,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const admin = require("firebase-admin");
-const { readFileSync } = require("node:fs");
-const { join } = require("node:path");
 const { Timestamp } = require("firebase-admin/firestore");
 
 const { fakeFirestore, fakeToken, withFakeAdmin, invoke } = require("./fakes.js");
+const { sourceDeclaring } = require("./sources");
 const {
   RUN_ANCESTORS,
   SCRIPT_LOCK,
@@ -342,8 +341,8 @@ test("a token never lifts the sandbox for everyone, even a superadmin owner's; i
 test("every 200 a document path serves passes through the script lock first", () => {
   // Structural, like the noStore test: a new branch that streams a document
   // without the lock would serve it scripted at its plain address.
-  const src = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
   for (const name of ["contentProxy", "getDraft"]) {
+    const src = sourceDeclaring(`export const ${name} = onRequest(`);
     const start = src.indexOf(`export const ${name} = onRequest(`);
     const end = src.indexOf("\n});\n", start);
     const body = src.slice(start, end);
