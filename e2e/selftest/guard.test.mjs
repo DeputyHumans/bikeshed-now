@@ -3,7 +3,7 @@
 
 /**
  * Parity, from the product's own source:
- *   - every onRequest export in functions/src/index.ts that is bound to
+ *   - every onRequest export of the endpoint modules that is bound to
  *     RESEND_API_KEY or reaches an email helper (sendInvitations,
  *     sendCommentNotice, sendVerificationCode, sendEmail — transitively through
  *     local functions) maps through firebase.json's rewrites to paths, and each

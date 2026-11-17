@@ -6,7 +6,7 @@
  * documents (the stack is shared with other specs). Expected behaviour is
  * SPEC §4 ("events/{eventId}"), SPEC §19 ("Watching a document: get_changes")
  * and ADR 0016; the source it was checked against is functions/src/lib/events.ts
- * and the get_changes tool in functions/src/mcp/tools.ts.
+ * and the get_changes tool in functions/src/mcp/tools/feedback.ts.
  *
  *   A21.1  a person's browser thread, comment and resolve reach the owner's
  *          agent as thread.opened, comment.added (body and quote, read from

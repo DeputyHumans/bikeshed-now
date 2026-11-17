@@ -9,7 +9,7 @@
  * after a failure line, stray ends, exactness, which lines count, names, the
  * TypeErrors, and caseFunctionRuns over a stack's log (the mark's line, a
  * partial last line, the runs in flight before the window, `until`, null off
- * a local stack). FIRESTORE_TRIGGERS is pinned to functions/src/index.ts.
+ * a local stack). FIRESTORE_TRIGGERS is pinned to the endpoint modules' source.
  * No stack, no browser.
  */
 

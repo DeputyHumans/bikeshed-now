@@ -42,7 +42,7 @@
  *     recipient — owner, approvers, prior participants — is a run account with
  *     emailNotifications === false.
  *
- * `selftest/guard.test.mjs` parses functions/src/index.ts and mcp/tools.ts and
+ * `selftest/guard.test.mjs` parses every endpoint and MCP tool module and
  * fails when an email-capable function or a comment-writing tool is not covered
  * here. Change the product, and that test says what to add.
  * `selftest/firestore-client.test.mjs` does the same for the comment trigger's

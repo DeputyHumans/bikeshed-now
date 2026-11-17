@@ -4,7 +4,7 @@
 /**
  * The actor × operation table is DATA (MATRIX below): one row per actor, one
  * column per operation, each cell the status SPEC §1.4b, §2 and §17 give, as
- * checked against functions/src/index.ts and functions/src/lib/acl.ts. Every
+ * checked against functions/src/endpoints/ and functions/src/lib/acl.ts. Every
  * row is its own scenario, named by its actor, and a failing scenario lists
  * every bad cell as `<actor>×<op>`, not only the first.
  *

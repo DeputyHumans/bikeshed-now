@@ -163,7 +163,7 @@ Each is a decision with a reason in `docs/architecture/overview.md`, not a gap: 
 | | |
 |---|---|
 | `config/policy.mjs` | the identity gate, rendered four ways |
-| `functions/src/index.ts` | every endpoint; mirrored by `scripts/lib/endpoints.mjs` |
+| `functions/src/index.ts`, `functions/src/endpoints/` | every deployed function, in the module of its area and re-exported from `index.ts`; mirrored by `scripts/lib/endpoints.mjs` |
 | `app/src/viewer/` | the hooks `DocViewer` decomposes into, plus `frameMode.ts` |
 | `app/src/viewer/deck.ts` | what counts as a slide, defined once for the rail, the overview and the keys |
 | `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |

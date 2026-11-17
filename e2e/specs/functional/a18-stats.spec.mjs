@@ -6,7 +6,7 @@
  * touch updatedAt", "stats.apiReads counts automated reads") and §17
  * ("Automated reads must not corrupt human metrics", "Version, edit and view
  * provenance", "The activity panel", "An unlisted document needs its link")
- * state them, measured through POST /view (functions/src/index.ts recordView),
+ * state them, measured through POST /view (functions/src/endpoints/reading.ts recordView),
  * the reading clock (app/src/stats.ts) and the Activity panel
  * (app/src/components/StatsPanel.tsx). Each case has its own accounts and
  * documents:
@@ -137,7 +137,7 @@ function openWindow(ctx, opts, fn, { closeAttempts = 3 } = {}) {
 }
 
 /**
- * The two server clamps recordView applies (functions/src/index.ts), read from
+ * The two server clamps recordView applies (functions/src/endpoints/reading.ts), read from
  * the tree the stack runs: functions/src/config.ts writes them as integer
  * products (`5 * 60 * 1000`, `8 * 60 * 60 * 1000`).
  *   MAX_BEAT_MS     the most one heartbeat may add
@@ -158,7 +158,7 @@ const BEAT_MS = target ? Number(treeConstant(target, "app/src/stats.ts", "BEAT_M
 /** The hint StatsPanel shows anyone who is not the owner or an editor. */
 const DETAIL_HINT = "Only the owner and its editors can see who read this document.";
 
-/** A sessionId the server accepts (/^[A-Za-z0-9_-]{8,64}$/, functions/src/index.ts SESSION_ID_RE). */
+/** A sessionId the server accepts (/^[A-Za-z0-9_-]{8,64}$/, functions/src/endpoints/reading.ts SESSION_ID_RE). */
 const sid = () => `a18-${randomBytes(10).toString("hex")}`;
 
 const beatBody = (docId, sessionId, ms, extra = {}) => ({ docId, versionId: "v1", sessionId, ms, ...extra });
@@ -379,7 +379,7 @@ scenario("A18.3 automated reads count only into stats.apiReads with ms 0: MCP ge
   const mcpTok = await mintToken(owner, { name: "e2e a18 mcp", channel: "mcp" });
   const mcp = ctx.mcp({ token: mcpTok.token, actor: "owner-mcp", timeoutMs: REQ_MS });
   await mcp.initialize();
-  const apiSid = `api-${mcpTok.tokenId}-v1`; // functions/src/mcp/tools.ts recordApiRead
+  const apiSid = `api-${mcpTok.tokenId}-v1`; // functions/src/mcp/tools/shared.ts recordApiRead
   for (const n of [1, 2]) {
     const got = await mcp.ok("get_document", { id: D.docId });
     precondition(got.id === D.docId && got.version === "v1", `get_document ${n}: ${JSON.stringify({ id: got.id, version: got.version })}`);
@@ -617,8 +617,8 @@ async function activityRows(dialog, filter) {
  * human-only or automation-only." The panel lists sessions ordered by
  * `startedAt` (app/src/firestore.ts:317), and a Firestore orderBy leaves out
  * every document without the field; recordApiRead, which records every MCP
- * get_document, never writes it (functions/src/mcp/tools.ts:403-417), while
- * recordView does (functions/src/index.ts:2225). So the owner's Automation
+ * get_document, never writes it (functions/src/mcp/tools/shared.ts), while
+ * recordView does (functions/src/endpoints/reading.ts). So the owner's Automation
  * filter shows a token's POST /view and never an agent's MCP read.
  */
 scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_document under Automation, beside a token's POST /view", { tiers: ["local", "prod"], timeoutMs: 360_000, inconclusiveOnPageStall: true }, async (ctx) => {

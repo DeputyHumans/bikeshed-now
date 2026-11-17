@@ -11,7 +11,7 @@
  *        app's SDK sends it (clientFirestore, lib/firestore-client.mjs:
  *        `Bearer <the actor's ID token>`)                    firestore.rules:216
  *   c7   POST /suggestion {op: create}, with the actor's session (or the
- *        visitor's `k`)                                       index.ts:1385
+ *        visitor's `k`)                              endpoints/workspace.ts
  *   c8   POST /suggestion {op: claim, accept, reject}; the approver once more
  *        with a personal access token
  *   c17  RTDB REST PUT status/{d}/y/{entry} (rtdbAs, lib/rtdb.mjs: the ID
@@ -118,7 +118,7 @@ const PASSAGE_2 = { anchor: { elementId: "e2e-2", exact: "Xenon delta timber", p
 /** An empty Yjs update (0 structs, empty delete set): harmless if anyone ever replays the log. */
 const EMPTY_UPDATE = "AAA=";
 
-/** The product's exact refusal sentences (functions/src/index.ts). */
+/** The product's exact refusal sentences (functions/src/endpoints/workspace.ts, functions/src/lib/acl.ts). */
 const MSG = Object.freeze({
   cannotSuggest: "You can read this document, but not suggest edits to it.",
   notApprover: "Only the owner or an approver can accept or reject a suggestion.",

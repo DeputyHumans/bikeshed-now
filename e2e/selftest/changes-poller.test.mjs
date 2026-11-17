@@ -3,7 +3,7 @@
 
 /**
  * Hermetic. A stand-in for get_changes keeps a log of real firebase-admin
- * Timestamps and answers as functions/src/mcp/tools.ts does: events after
+ * Timestamps and answers as functions/src/mcp/tools/feedback.ts does: events after
  * the cursor's (at, id) in recorded order, a page of PAGE with `more`, the
  * cursor after the last event READ (or the one given, on a quiet poll),
  * encoded as functions/src/lib/events.ts encodeCursor encodes it, each event

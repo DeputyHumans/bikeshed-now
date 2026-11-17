@@ -276,7 +276,7 @@ async function stage(ctx, { name, title, fixture = FIXTURE, body = null, filenam
 
 /**
  * The scripted sample (H) through POST /publish, optionally trusted by its
- * owner. POST /trust sets docs/<id>.trusted (functions/src/index.ts
+ * owner. POST /trust sets docs/<id>.trusted (functions/src/endpoints/sharing.ts
  * trustDoc), the effect looked for before it is sent again.
  */
 async function stageTour(ctx, { name, trusted = false, readers = [] }) {
@@ -1128,7 +1128,7 @@ async function commitV2(ctx, owner, docId, html) {
  * case used to publish v2 that way, and on 0.16.0 that answers 409
  * {editors: 1}. A commit of the draft is not held (spec.md:774-775, "The
  * in-app commit publishes the draft itself and is not held"). POST /commit
- * asks nobody's presence (functions/src/index.ts:1289-1346, commitVersion,
+ * asks nobody's presence (functions/src/endpoints/editing.ts commitVersion,
  * and lib/draft.ts commitDraft, neither of which calls editorsRefusal). So
  * the owner saves a draft and commits it while the editor is in the editor:
  * the two requests a co-editor's Save as new version sends. The editor's

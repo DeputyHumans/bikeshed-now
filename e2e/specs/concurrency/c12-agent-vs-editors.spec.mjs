@@ -87,18 +87,18 @@
  *        are let go and write. Two cases run it, one per mechanism, so that
  *        each fix turns its own case green:
  *          "C12b straddle", own oracle (S14: getDraft's base rule,
- *          functions/src/index.ts:1247-1268, serves docs/{d}/draft/ whatever
+ *          functions/src/endpoints/editing.ts, serves docs/{d}/draft/ whatever
  *          base the draft was written on): GET /draft serves the agent's
  *          version and the next editor sees it. What was left is recorded.
  *          "C12b straddle draft write", own oracle (X-a12-versions-2:
- *          saveDraft checks the base, index.ts:1175-1181, outside any
+ *          saveDraft checks the base (endpoints/editing.ts), outside any
  *          transaction with its write, draft.ts:106-131): no docs/{d}.draft on
  *          v1 and no object under docs/{d}/draft/. What GET /draft serves is
  *          recorded.
  *        The rule for ids, here and in C12c: an oracle keeps a plan
  *        suspect's id only while it fails through a mechanism the plan cites
  *        for that suspect and 0.16.0 still has (S14 cites getDraft,
- *        index.ts:1243-1270); a residual harm through another mechanism takes
+ *        now in endpoints/editing.ts); a residual harm through another mechanism takes
  *        that mechanism's id, an existing one when the ledger tracks it
  *        (X-a12-versions-2) or a new X-c12 one (X-c12-agent-vs-editors-1:
  *        the update clears only a log that existed at its question). S6's
@@ -246,11 +246,11 @@ const AGENT_ID = "c12-agent";
 /** functions/src/lib/presence.ts editorsRefusal: the refusal of a write made outside the editor. */
 const editingRefusal = (editors, doing) =>
   `${editors === 1 ? "Somebody has" : `${editors} people have`} this document open in the editor, where this would be lost, so it was not ${doing}. Try again once they have left it, or ask them to do it there.`;
-/** commitNewVersion's STALE, and update_document's own base check (functions/src/lib/publish.ts, functions/src/mcp/tools.ts). */
+/** commitNewVersion's STALE, and update_document's own base check (functions/src/lib/publish.ts, functions/src/mcp/tools/documents.ts). */
 const STALE_RE = /Somebody published a newer version while this one was uploading|the document is at v\d+ now, not v\d+/;
 /** editorsRefusal's words, whatever the count. */
 const EDITORS_RE = /open in the editor, where this would be lost/;
-/** POST /draft's stale answer (functions/src/index.ts saveDraft). */
+/** POST /draft's stale answer (functions/src/endpoints/editing.ts saveDraft). */
 const DRAFT_STALE = "This document has a newer version. Reload before editing.";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

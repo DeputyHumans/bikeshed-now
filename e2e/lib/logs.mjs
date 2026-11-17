@@ -155,7 +155,7 @@ export function grepLog(pattern, opts = {}) {
 // --- The Functions emulator's runs ----------------------------------------------------------------
 
 /**
- * The product's Firestore triggers (functions/src/index.ts, each built with
+ * The product's Firestore triggers (functions/src/endpoints/triggers.ts, each built with
  * onDocumentCreated or onDocumentWritten): functionRuns' default `triggers`.
  * selftest/function-runs.test.mjs pins it to the source. The scheduled
  * purgeExpiredTrash and applyExpiries are not: the emulator never runs them.

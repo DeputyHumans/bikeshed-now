@@ -660,7 +660,7 @@ export async function forkMcp(mcp, o = {}) {
   return { ...out, docId: made ? out.json.docId : undefined, versionId: made ? out.json.versionId : undefined };
 }
 
-/** add_comment's own bound (functions/src/mcp/tools.ts): a body is trimmed and kept to this many characters. */
+/** add_comment's own bound (functions/src/mcp/tools/feedback.ts): a body is trimmed and kept to this many characters. */
 const COMMENT_BODY_MAX = 5000;
 /** Threads per Admin batch: two writes each (the thread and its first comment), well inside Firestore's 500. */
 const SEED_BATCH_THREADS = 200;

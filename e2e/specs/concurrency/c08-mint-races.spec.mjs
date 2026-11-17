@@ -133,7 +133,7 @@
  *             question while nobody edits and are held at update-before-id;
  *             p1 opens the editor and presses Save, and its commit passes
  *             POST /commit's base check (v1 is current, functions/src/
- *             index.ts:1330) and is held at commit-before-read; the first
+ *             endpoints/editing.ts commitVersion) and is held at commit-before-read; the first
  *             agent is let go alone and its call awaited: it mints v2 and
  *             drops the draft (publish.ts dropReplacedDraft); p1's commit is
  *             let go to read, held at commit-after-read to prove the draft
@@ -249,7 +249,7 @@ const SERVER_DEADLINE_MS = 120_000;
 const CONFLICT_OUTCOME = "conflict";
 /** commitNewVersion's STALE: the update had already uploaded its bytes to v(max+1) as it read it (functions/src/lib/publish.ts). */
 const UPLOADED_STALE_RE = /Somebody published a newer version while this one was uploading/;
-/** update_document's own base check, before anything is uploaded (functions/src/mcp/tools.ts). */
+/** update_document's own base check, before anything is uploaded (functions/src/mcp/tools/documents.ts). */
 const EARLY_STALE_RE = /the document is at v\d+ now, not v\d+/;
 const STALE_RE = new RegExp(`${UPLOADED_STALE_RE.source}|${EARLY_STALE_RE.source}`);
 /** The invocation's measurement file (lib/evidence.mjs measure): one row per C9 race trial. */

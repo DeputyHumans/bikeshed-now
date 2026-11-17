@@ -77,7 +77,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** The token shape tokens.ts mints: bsk_<32 hex id>.<base64url secret>. */
 const TOKEN_RE = /^bsk_([0-9a-f]{32})\.([A-Za-z0-9_-]{20,64})$/;
-/** POST /tokens create's refusal of a missing name (functions/src/index.ts manageTokens). */
+/** POST /tokens create's refusal of a missing name (functions/src/endpoints/account.ts manageTokens). */
 const NAME_REQUIRED = "name is required — an unnamed token cannot be revoked with confidence";
 /** The keys of the account screen's token mirror, users/{uid}/tokens/{id}, before first use (tokens.ts prepareToken). */
 const MIRROR_KEYS = ["channel", "createdAt", "name", "revokedAt", "tokenId"];
@@ -235,7 +235,7 @@ const QUOTE_B = "Xenon delta timber linen orchard";
 
 /**
  * Why a witness: onCommentCreated walks its recipients in order — the owner
- * first, then the thread's earlier participants (functions/src/index.ts) — so
+ * first, then the thread's earlier participants (functions/src/endpoints/triggers.ts) — so
  * when a reply's notice reaches the witness, the same run has already decided
  * the owner's. The owner's silence is then a decision, not a trigger that has
  * not run yet; the 10 s settle after it is only belt and braces.

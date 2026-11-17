@@ -3,7 +3,7 @@
 
 /**
  * The real mcpClient over http.mjs, a fake fetch standing in for POST /mcp.
- * Its add_comment does what the product's does (functions/src/mcp/tools.ts):
+ * Its add_comment does what the product's does (functions/src/mcp/tools/feedback.ts):
  * one batch of the thread and its first comment into an in-memory Firestore
  * stand-in, createdAt the server's time, the body trimmed. seedThreads' Admin
  * path is given that stand-in as `db`, so what it copies is what the "product"

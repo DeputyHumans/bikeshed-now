@@ -245,7 +245,7 @@ const SERVER_DEADLINE_MS = 120_000;
 const MAIL_MS = 90_000;
 const MEASURE = "c17-identity";
 
-/** functions/src/index.ts: the guesses one code allows, read from the tree the stack runs. */
+/** functions/src/endpoints/verification.ts: the guesses one code allows, read from the tree the stack runs. */
 const VERIFY_MAX_ATTEMPTS = target ? Number(treeConstant(target, "functions/src/endpoints/verification.ts", "VERIFY_MAX_ATTEMPTS")) : 5;
 /** C19's burst sizes per N: the catalogue's 50 wrong codes and 10 code requests at N=20 (see SIZES). */
 const WRONG_AT_ONCE = Object.freeze({ 2: 6, 5: 13, 10: 25, 20: 50 });
@@ -1085,7 +1085,7 @@ scenario("C17d anonymous views (SYNC-T): N anonymous readers of an unlisted link
 
 /** The subject notify.ts writes for a verification code. */
 const CODE_SUBJECT = /^\d{6} is your Bikeshed verification code$/;
-/** The product's words (functions/src/index.ts verifyEmail). */
+/** The product's words (functions/src/endpoints/verification.ts verifyEmail). */
 const VERIFY_MSG = Object.freeze({
   notRight: "that code is not right",
   tooMany: "too many attempts; request a new code",

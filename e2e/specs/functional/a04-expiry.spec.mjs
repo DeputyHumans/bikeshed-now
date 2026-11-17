@@ -81,7 +81,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const YEAR = 365 * DAY;
 
-/** The refusal every write on an expired document answers (functions/src/index.ts EXPIRED_WRITE, mcp/tools.ts refuseIfExpired). */
+/** The refusal every write on an expired document answers (functions/src/lib/acl.ts EXPIRED_WRITE, functions/src/mcp/tools/shared.ts refuseIfFrozen). */
 const EXPIRED_RE = /^this document has expired\b/;
 /** SPEC §17: "A date in the past is refused"; "Dates beyond a hundred years are refused" (functions/src/lib/access.ts parseExpiry). */
 const PAST_ERROR = "an expiry must be in the future";
@@ -246,7 +246,7 @@ async function settle(ctx, owner, docId, fields) {
 
 /**
  * LIB-REQUEST: landed-projection. POST /visibility writes the record, THEN
- * brings `public/{id}` into line with it (functions/src/index.ts, batch.commit
+ * brings `public/{id}` into line with it (functions/src/endpoints/sharing.ts, batch.commit
  * then syncPublicProjection), and the sitemap decides expiry from that
  * projection's `expiresAt`. lib's patient setVisibility takes a request the
  * stack did not answer as landed once the record shows it and a projection

@@ -92,7 +92,7 @@ after(() => (target ? closeAdmin(target) : undefined));
 const CODE_SUBJECT = /^\d{6} is your Bikeshed verification code$/;
 /** SESSION_EXPIRES_MS / 1000 (functions/src/config.ts): five days. */
 const SESSION_MAX_AGE = String(5 * 24 * 60 * 60);
-/** The resend gap the product enforces (functions/src/index.ts VERIFY_RESEND_GAP_MS). */
+/** The resend gap the product enforces (functions/src/endpoints/verification.ts VERIFY_RESEND_GAP_MS). */
 const RESEND_GAP_MS = 60_000;
 /**
  * How long a wait for the SERVER's answer may take: a request, a POST /session

@@ -97,7 +97,7 @@ const BAD_DOC_ID = "id may use lowercase letters, digits and hyphens between the
  * not computed, so this is not a copy of the function it checks.
  */
 const BAD_DOC_ID_TOAST = "Id may use lowercase letters, digits and hyphens between them, up to 60 characters.";
-/** functions/src/index.ts organize. */
+/** functions/src/endpoints/workspace.ts organize. */
 const DOC_DELETE_ERROR = 'a document is not deleted: move it to the Trash with op "trash"';
 /** app/src/pages/DocList.tsx docMenu's delete entry. */
 const TRASH_LABEL = "Move to Trash";

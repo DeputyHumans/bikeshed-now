@@ -951,7 +951,7 @@ function wsFrameLog() {
 }
 
 /**
- * What POST /session answers, by its body's `status` (functions/src/index.ts, SPEC §2): signInUi's expectStatus values.
+ * What POST /session answers, by its body's `status` (functions/src/endpoints/session.ts, SPEC §2): signInUi's expectStatus values.
  * `moving` is the fifth outcome and is not one of them: it answers only a body carrying Google's ID token after a
  * Google popup (SPEC §14), which the password form signInUi drives never sends.
  */

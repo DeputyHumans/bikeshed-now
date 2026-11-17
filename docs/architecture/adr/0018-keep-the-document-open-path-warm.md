@@ -8,7 +8,7 @@ A document opened in a new tab waits on three Cloud Run services in turn: `docSh
 
 ## Decision
 
-`docShell`, `session` and `contentProxy` run with `minInstances: 1`, through one `WARM` option set in `functions/src/index.ts`. Nothing else is warm, and `functions/test/wiring.test.js` fails if the set is anything but these three.
+`docShell`, `session` and `contentProxy` run with `minInstances: 1`, through one `WARM` option set in `functions/src/endpoints/runtime.ts`. Nothing else is warm, and `functions/test/wiring.test.js` fails if the set is anything but these three.
 
 ## Consequences
 

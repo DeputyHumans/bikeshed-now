@@ -32,7 +32,7 @@
  *          or Mailpit, each send is the product's logged no-op, and every
  *          operation still answers as it does with email on
  *
- * How a silence is shown. onCommentCreated (functions/src/index.ts) reads the
+ * How a silence is shown. onCommentCreated (functions/src/endpoints/triggers.ts) reads the
  * thread's comments ONCE, when it starts, and then decides its recipients one
  * by one, in a fixed order: the owner, the approvers for a new suggestion,
  * then the comment authors by comment id (the siblings query has no orderBy,

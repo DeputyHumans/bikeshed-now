@@ -225,7 +225,7 @@ const APP = Object.freeze({
   endResolve: "That was the last suggestion. Resolve the open comments, then publish the result with Save as new version.",
   endNothing: "No suggestions are left to review.",
 });
-/** functions/src/lib/review.ts, functions/src/lib/suggestions.ts, functions/src/index.ts. */
+/** functions/src/lib/review.ts, functions/src/lib/suggestions.ts, functions/src/endpoints/workspace.ts. */
 const SERVER = Object.freeze({
   pendingOne:
     "1 suggested edit is waiting for a decision. Only the owner or an approver can accept or reject it, and no new version can be published until then. If it is yours, you may withdraw it.",
@@ -287,7 +287,7 @@ const GRANT_SENDS = 3;
  * stopped between the two writes (functions/src/lib/folders.ts
  * persistDocMembership: the batch, then syncPresenceAccess), so the grant is
  * sent again: the same principal at the same role recomputes the members,
- * writes every member's mirror, and invites nobody (functions/src/index.ts
+ * writes every member's mirror, and invites nobody (functions/src/endpoints/sharing.ts
  * setAccess invites only members new to the record). Still half-made after
  * GRANT_SENDS sends, or past the setup budget, the stack did not make it:
  * the case is INCONCLUSIVE. An answer (a 200) is judged as before.

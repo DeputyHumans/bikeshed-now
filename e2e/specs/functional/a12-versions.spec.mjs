@@ -130,12 +130,12 @@ const STALLS = { inconclusiveOnHttpStall: true, inconclusiveOnRequestStall: true
 
 // --- the product's words --------------------------------------------------------
 
-/** functions/src/index.ts updateFromUpload. */
+/** functions/src/endpoints/workspace.ts updateFromUpload. */
 const UPDATE_KEEPS = "an update keeps the document's address, folder and title";
-/** functions/src/index.ts updateFromUpload and functions/src/mcp/tools.ts update_document, for a stale baseVersion. */
+/** functions/src/endpoints/workspace.ts updateFromUpload and functions/src/mcp/tools/documents.ts update_document, for a stale baseVersion. */
 const staleUpload = (cur, base) => `the document is at ${cur} now, not ${base}: somebody published since you read it. Read it again, then update that`;
 const staleTool = (cur, base) => `the document is at ${cur} now, not ${base}: somebody published since you read it. Read it again with get_document, then update that`;
-/** functions/src/index.ts saveDraft and commitVersion. */
+/** functions/src/endpoints/editing.ts saveDraft and commitVersion. */
 const STALE_DRAFT = "This document has a newer version. Reload before editing.";
 const STALE_COMMIT = "This document has a newer version. Reload before publishing.";
 /** functions/src/lib/review.ts, for a count of one. */
@@ -1118,7 +1118,7 @@ scenario("A12.6 a stale base is refused naming the current version (/publish?upd
  * pressed: DocViewer.tsx's Save flushes and commits, but never cancels the
  * debounced autosave (useInlineEditor.ts), whose POST /draft still names the
  * base the commit is superseding. saveDraft checks that base against
- * currentVersion with a plain read (functions/src/index.ts:1175), and
+ * currentVersion with a plain read (functions/src/endpoints/editing.ts), and
  * writeDraft then uploads the entry to Storage (functions/src/lib/draft.ts:109)
  * and only after that writes the record (:121), outside any transaction. A
  * save whose check comes before the commit's transaction moves the pointer

@@ -183,7 +183,7 @@ const REASON = Object.freeze({
   structure: "A suggestion can only change text, and this includes a line break, list, table or image.",
   figure: "Text inside a figure can’t be edited.",
 });
-/** functions/src/lib/suggestions.ts and functions/src/index.ts. */
+/** functions/src/lib/suggestions.ts and functions/src/endpoints/workspace.ts. */
 const SERVER = Object.freeze({
   oneLine: "a replacement is text on one line: no line breaks, tabs or invisible direction marks",
   same: "the replacement is the same as the text it replaces",
