@@ -56,7 +56,7 @@ test("historical source has no write capabilities and unavailable bytes fail exp
   } }) }) }) });
   try {
     const w = world();
-    const result = await run(w, "get_document", { version: "v1" });
+    const result = await run(w, "get_document", { version: "v1", as: "source" });
     assert.deepEqual([result.version, result.currentVersion, result.isCurrent, result.canEdit, result.canSuggest, result.canComment, result.source],
       ["v1", "v3", false, false, false, false, "<p>old source</p>"]);
     fail = true;

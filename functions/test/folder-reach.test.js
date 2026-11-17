@@ -455,7 +455,10 @@ test("an agent holding a folder's key reads what is beneath it, and is told it c
   const doc = await call("get_document", STRANGER, { id: "memo", k: key });
   assert.equal(doc.viaFolder, true);
   assert.deepEqual([doc.canComment, doc.canEdit, doc.canSuggest, doc.cursor], [false, false, false, null]);
-  assert.match(doc.source, /two weekends/);
+  assert.match(doc.markdown, /two weekends/);
+  // A folder's key opened it, so the reading's own addresses carry that key.
+  assert.ok(doc.original.url.includes(`/content/~${encodeURIComponent(key)}/memo/v1/`), "the original's address carries the key that opened it");
+  assert.ok(doc.markdown.includes(`/content/~${encodeURIComponent(key)}/memo/v1/`), "so does the preamble");
   const listed = await call("list_versions", STRANGER, { id: "memo", k: key });
   assert.equal(listed.id, "memo");
   assert.deepEqual([listed.versions[0].origin, listed.versions[0].automated], ["upload", true], "how it arrived, and that no person did it");

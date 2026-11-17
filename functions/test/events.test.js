@@ -398,7 +398,7 @@ test("every way to change a document records an event, or says why it need not",
     purgeTrash: "deletes the document forever, its log with it: nothing is left to record into, and a watcher's next read finds no document",
     // Schedules
     purgeExpiredTrash: "deletes forever, as purgeTrash does",
-    downloadBundle: "reads", getDraft: "reads", contentProxy: "reads", docShell: "reads",
+    downloadBundle: "reads", getDraft: "reads", contentProxy: "reads", docShell: "reads", docMarkdown: "reads",
     // Tools
     get_document_access: "reads", get_folder_access: "reads",
     set_folder_visibility: "a cascade; a folder's reach is logged on folders/{id}/acl, and get_changes reports a document's own visibility",

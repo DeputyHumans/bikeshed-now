@@ -53,7 +53,7 @@ for (const overlap of [false, true]) test(`MCP automated reads count each reques
   const count = loseFirstTransactionAcknowledgement(w.db, { afterCommit: async () => {
     if (overlap) await w.call("get_document");
   } });
-  const answer = await w.call("get_document");
+  const answer = await w.call("get_document", { as: "source" });
   assert.equal(answer.source, HTML);
   const session = w.store.get("docs/d/views/api-t-v1");
   const expected = overlap ? 2 : 1;

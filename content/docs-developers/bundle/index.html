@@ -885,7 +885,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>list_trash</code></td><td>What is in your Trash, newest first, with when each is deleted forever (<code>deletesAt</code>)</td></tr>
         <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
         <tr><td><code>list_versions</code></td><td>Published history, newest first, with pagination and version-pinned links</td></tr>
-        <tr><td><code>get_document</code></td><td>A document's metadata, address and selected source (current by default); over 200,000 characters it is cut, and says so</td></tr>
+        <tr><td><code>get_document</code></td><td>A document's metadata and address, and its content (current version by default): an HTML document as a Markdown reading made for agents, which opens with front matter saying so and where the original is, or <code>as: "source"</code> for the HTML you revise; a Markdown document as its source. 200,000 characters at a time: <code>truncated</code> says there is more, and <code>offset</code> with <code>nextOffset</code> and the same <code>version</code> reads on</td></tr>
         <tr><td><code>publish_document</code></td><td>Create a document from content you supply; says whether the id you asked for was taken, where it is filed and who can read it there</td></tr>
         <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op. Given the <code>baseVersion</code> you revised, it refuses rather than replace a version somebody published since, and it counts the open threads it leaves behind. Refused while somebody has the document open in the editor</td></tr>
         <tr><td><code>commit_draft</code></td><td>Publish the draft as the next version, as Save as new version does</td></tr>
@@ -923,7 +923,7 @@ bikeshed update storage-migration proposal.md</code></pre>
       <thead><tr><th scope="col">File</th><th scope="col">What happens</th></tr></thead>
       <tbody>
         <tr><td><code>.md</code> <code>.markdown</code></td><td>Rendered to HTML on the server; <code>get_document</code> returns the Markdown</td></tr>
-        <tr><td><code>.html</code> <code>.htm</code></td><td>Stored as written</td></tr>
+        <tr><td><code>.html</code> <code>.htm</code></td><td>Stored as written; <code>get_document</code> reads it to an agent as Markdown, and <code>as: "source"</code> returns the file</td></tr>
         <tr><td><code>.zip</code></td><td>Several files, with <code>index.html</code> or <code>index.md</code> at the root</td></tr>
       </tbody>
     </table>
@@ -965,7 +965,7 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed list</code></td><td>Documents you can read</td></tr>
         <tr><td><code>bikeshed publish &lt;file&gt;</code></td><td>Create a new document (<code>--title</code>, <code>--id</code>, <code>--folder</code>, <code>--watch</code>)</td></tr>
         <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt; [--base &lt;v&gt;]</code></td><td>Publish a new version; with <code>--base</code>, refused if somebody published since the version you revised. Refused while somebody has the document open in the editor</td></tr>
-        <tr><td><code>bikeshed get &lt;id&gt;</code></td><td>Print a document's source</td></tr>
+        <tr><td><code>bikeshed get &lt;id&gt; [--source]</code></td><td>Print a document: an HTML one as its Markdown reading, or with <code>--source</code> the HTML as published, whole however long it is</td></tr>
         <tr><td><code>bikeshed comments &lt;id&gt;</code></td><td>Unresolved feedback, with its anchored text</td></tr>
         <tr><td><code>bikeshed changes &lt;id&gt; --since &lt;cursor&gt; [--wait]</code></td><td>What happened since a cursor, ending with the cursor for next time; <code>--wait</code> keeps checking until something does, and exits 3 on <code>--timeout</code></td></tr>
         <tr><td><code>bikeshed comment &lt;id&gt; &lt;text&gt; --body &lt;comment&gt;</code></td><td>Start a thread on a passage</td></tr>

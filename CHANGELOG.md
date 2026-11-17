@@ -10,6 +10,18 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Breaking
+
+- **`get_document` returns an HTML document as a Markdown reading by default.** Pass `as: "source"` for the HTML as published, which is what you revise. The reading arrives under `markdown`, not `source`, so a client that read `source` for an HTML document now finds it empty; a Markdown document still returns its source under `source`.
+- **`bikeshed get` prints an HTML document as its reading** (in `bikeshed-now` 0.22.0). `bikeshed get <id> --source` prints the HTML, so a script that ran `bikeshed get <id> > index.html` needs `--source` added.
+- **`update_document` refuses content with no HTML tag for an HTML document**, because that is what a reading sent back looks like, and it would have been published as the page. The refusal names `as: "source"`.
+
+### Added
+
+- **Agents read HTML documents as Markdown, and are told so.** An agent used to get the page as authored, stylesheets, scripts and base64 images included. It now gets the page's words as Markdown, made fresh from the current version each time, never stored. Every reading opens with front matter that says it is a reading made for agents, never to be sent back as an update, and quoted by its words. It also gives the version and what was left out (styling and layout, then how many scripts, figures drawn in code, embedded frames, inline images, hidden elements and form controls), and where the original is. It warns when a script builds the page, so the reading may be missing most of it, and when the page was too long to read whole. Images and video keep absolute addresses, with an unlisted document's key only when the key is what opened it.
+- **A long document can be read to its end over MCP.** `get_document` takes `offset` and answers `total` and `nextOffset`, for readings and sources alike. Every page comes from one version: `offset` without `version` is refused. Before, MCP stopped at 200,000 characters. `bikeshed get` reads every page for you.
+- **`/d/<id>.md`**, and `/d/<id>/<version>.md`, answer the same reading to an agent that has only a document's address, as `text/markdown`, behind exactly the access, refusals and caching of `/content`. A public or unlisted document's page names it in `<link rel="alternate" type="text/markdown">`. ADR 0030 records why it is a reading made on read and not a file an author ships.
+
 ### Fixed
 
 - **A date that has passed no longer blocks every other change in Share.** The dialog sent the stored date back with each change of level or open editing, and the server refuses a date in the past, so until the date was cleared every change failed with "an expiry must be in the future". The dialog now sends a date only when you change the date, and `POST /visibility` parses one only when the body names it.

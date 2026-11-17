@@ -431,6 +431,10 @@ async function invoke(handler, { method = "POST", body = {}, headers = {}, path 
       getHeader(k) {
         return this.headers[k.toLowerCase()];
       },
+      removeHeader(k) {
+        delete this.headers[k.toLowerCase()];
+        return this;
+      },
       status(code) {
         this.statusCode = code;
         return this;

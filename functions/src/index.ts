@@ -178,6 +178,7 @@ import {
 } from "./lib/tokens";
 import { renderMarkdown } from "./lib/markdown/render";
 import { htmlToMarkdown } from "./lib/markdown/serialize";
+import { composeReading, contentAddress, readerAddress, readingMarkdown, readingPreamble } from "./lib/markdown/reading";
 import { resolveMarking, type Marking } from "./lib/marking";
 import { HEAD_SCAN_BYTES, readHead } from "./lib/head";
 import {
@@ -3085,6 +3086,97 @@ export const docShell = onRequest(WARM, async (req, res) => {
     noStore(res);
     res.removeHeader("X-Robots-Tag");
     serveGeneric();
+  }
+});
+
+/**
+ * GET /d/:docId.md, GET /d/:docId/:versionId.md — the document as an agent
+ * reads it: a Markdown reading made from the entry, opening with the front
+ * matter that says it is one and where the original is (SPEC §2, §19, ADR 0030).
+ *
+ * For an agent that has only an address. Unlike the shell beside it, this
+ * path authenticates and refuses, because its body IS the document's
+ * content: the same gate, the same single 404 and the same cache policy as
+ * `/content` (SPEC §1.4b, §17). A function of its own rather than a branch
+ * of the warm ones: the conversion is synchronous, and a large page would
+ * stall the instance every document open waits on.
+ */
+export const docMarkdown = onRequest(PLAIN, async (req, res) => {
+  if (rejectMethod(req, res, ["GET", "HEAD"])) return;
+
+  // Uncacheable until something deliberately says otherwise. See noStore().
+  noStore(res);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+
+  const segments = pathSegments(req, "d");
+  const last = segments ? segments[segments.length - 1] : "";
+  if (!segments || segments.length < 1 || segments.length > 2 || !last.endsWith(".md") || last.length <= 3) {
+    res.status(404).end();
+    return;
+  }
+  const [docId, pinnedRaw] = [...segments.slice(0, -1), last.slice(0, -3)];
+  const pinned = segments.length === 2 ? pinnedRaw : null;
+
+  const caller = await resolveCaller(req);
+  const k = strParam(req, "k") || null;
+  const gate = await readGate(caller, docId, k);
+  if (!gate) {
+    res.status(404).end();
+    return;
+  }
+
+  try {
+    const versionId = pinned ?? String((gate.docData as { currentVersion?: unknown }).currentVersion ?? "");
+    const versionSnap = versionId ? await gate.docSnap.ref.collection("versions").doc(versionId).get() : null;
+    const v = versionSnap?.exists ? versionSnap.data() ?? {} : null;
+    const entry = v ? safeRelPath(String(v.entry ?? "index.html")) : null;
+    if (!v || entry === null) {
+      res.status(404).end();
+      return;
+    }
+    // A Markdown document's original is its Markdown; the reading is made
+    // from the HTML either way, so its addresses are absolute.
+    const sourceRel = typeof v.sourceEntry === "string" && safeRelPath(v.sourceEntry) ? v.sourceEntry : entry;
+    const [bytes] = await bucket().file(`${versionStoragePrefix(docId, versionId, v)}/${entry}`).download();
+
+    const keyed = gate.basis === "link" || gate.basis === "folder-link" ? k : null;
+    const origin = publicOrigin();
+    const place = { origin, docId, versionId, entry, k: keyed };
+    const reading = readingMarkdown(bytes.toString("utf8"), place);
+    const documentUrl = readerAddress(origin, docId, pinned, keyed);
+    const original = contentAddress(place, sourceRel);
+    const text = composeReading(
+      readingPreamble({
+        title: String((gate.docData as { title?: unknown }).title ?? docId),
+        document: documentUrl,
+        version: versionId,
+        original,
+        leftOut: reading.leftOut,
+        warnings: reading.warnings,
+      }),
+      reading,
+    );
+
+    // ONLY NOW: the reading exists, so this URL may be cached with it.
+    setContentCache(res, gate);
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader(
+      "Link",
+      `<${documentUrl}>; rel="canonical", <${original}>; rel="alternate"; type="${contentTypeOf(sourceRel).split(";")[0]}"`,
+    );
+    if (reading.cut) res.setHeader("Bikeshed-Cut", "1");
+    res.status(200);
+    if (req.method === "HEAD") res.end();
+    else res.send(text);
+  } catch (err) {
+    // A code or name only: a Storage message names the object path, which
+    // holds the document id.
+    console.warn("docMarkdown: failed", (err as { code?: unknown })?.code ?? (err as Error)?.name);
+    noStore(res);
+    res.removeHeader("X-Robots-Tag");
+    res.removeHeader("Link");
+    res.removeHeader("Bikeshed-Cut");
+    res.status(500).end();
   }
 });
 

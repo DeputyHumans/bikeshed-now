@@ -4,7 +4,9 @@
 /**
  * Shared by the head scanner, which reads a document's title and excerpt, and
  * the quote locator, which finds an agent's quoted text in a version. Neither
- * may load an HTML parser — `functions/` has none, by budget — so both read
+ * loads an HTML parser: the one `functions/` has, inside turndown, builds a
+ * whole tree and is for converting Markdown and readings, not for the paths
+ * every document open and every quote take. So both read
  * HTML as a browser's tokenizer would read text, as far as these three things
  * go, and one copy of each keeps them agreeing.
  */

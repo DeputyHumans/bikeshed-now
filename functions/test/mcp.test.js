@@ -316,9 +316,17 @@ test("get_comments is the tool that earns the surface", () => {
   assert.match(tool.description, /anchored/i);
 });
 
-test("get_document returns source, not rendered HTML", () => {
+test("get_document reads HTML as Markdown, and says how to get the source", () => {
+  // The default is a reading, so the description has to say where the thing
+  // an agent revises is: an agent that only ever saw the reading would send
+  // it back as the document (ADR 0030).
   const tool = toolByName("get_document");
-  assert.match(tool.description, /SOURCE/i);
+  assert.match(tool.description, /Markdown READING/);
+  assert.match(tool.description, /as: "source"/);
+  assert.match(tool.description, /never send it back through update_document/);
+  assert.deepEqual(tool.inputSchema.properties.as.enum, ["markdown", "source"]);
+  assert.equal(tool.inputSchema.properties.offset.type, "integer");
+  assert.match(tool.inputSchema.properties.version.description, /Required with offset/);
 });
 
 test("get_document says a source is cut before the source starts", async () => {
@@ -331,6 +339,7 @@ test("get_document says a source is cut before the source starts", async () => {
   const tool = toolByName("get_document");
   assert.match(tool.description, /200,000 characters/);
   assert.match(tool.description, /update_document/);
+  assert.match(tool.description, /nextOffset/);
 
   const admin = require("firebase-admin");
   const realStorage = Object.getOwnPropertyDescriptor(admin, "storage");
@@ -362,11 +371,15 @@ test("get_document says a source is cut before the source starts", async () => {
     };
     const db = { collection: () => ({ doc: () => ref }) };
 
-    const result = await tool.run({ db, caller, actor: { tokenId: "t1" } }, { id: "big-deck" });
+    const result = await tool.run({ db, caller, actor: { tokenId: "t1" } }, { id: "big-deck", as: "source" });
     assert.equal(result.truncated, true);
     assert.equal(result.source.length, 200_000);
+    assert.equal(result.nextOffset, 200_000);
+    assert.equal(result.total, whole.length);
     const text = JSON.stringify(result);
-    assert.ok(text.indexOf('"truncated"') < text.indexOf('"source"'), "truncated must precede source");
+    for (const flag of ['"truncated":', '"total":', '"nextOffset":']) {
+      assert.ok(text.indexOf(flag) < text.indexOf('"source":'), `${flag} must precede source`);
+    }
   } finally {
     if (realStorage) Object.defineProperty(admin, "storage", realStorage);
     else delete admin.storage;

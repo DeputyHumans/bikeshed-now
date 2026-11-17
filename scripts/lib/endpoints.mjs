@@ -25,6 +25,10 @@
  *             `/folder/{id}` is a client route, so a prefix rule here would
  *             proxy folder deep-links to the emulator and silently break them.
  *   prefix  — the path and everything beneath it (`/content/{doc}/{ver}/...`).
+ *   glob    — a Hosting glob, as written, where `*` is part of one segment
+ *             (`/d/*.md`). Listed after the exact rows and BEFORE the prefix
+ *             rows, because Hosting takes the first rewrite that matches and
+ *             `/d/**` would otherwise swallow it.
  *
  * `devProxy: false` keeps a row out of the Vite dev proxy while Hosting still
  * rewrites it — for a function that serves a client route rather than an API.
@@ -72,6 +76,10 @@ export const ENDPOINTS = [
   { path: "/oauth/token", fn: "oauth", match: "exact" },
   { path: "/oauth/consent", fn: "oauthConsent", match: "exact" },
   { path: "/sitemap.xml", fn: "sitemap", match: "exact" },
+  // A document as an agent reads it, for an agent that has only an address
+  // (SPEC §19, ADR 0030). Not a client route, so the dev proxy carries it.
+  { path: "/d/*.md", fn: "docMarkdown", match: "glob" },
+  { path: "/d/*/*.md", fn: "docMarkdown", match: "glob" },
   { path: "/verify", fn: "verifyEmail", match: "prefix" },
   { path: "/download", fn: "downloadBundle", match: "prefix" },
   { path: "/draft", fn: "getDraft", match: "prefix" },
@@ -120,10 +128,11 @@ export function rewriteSource(endpoint) {
   return endpoint.match === "prefix" ? `${endpoint.path}/**` : endpoint.path;
 }
 
-/** Every rewrite, in the order firebase.json must list them (exact first). */
+/** Every rewrite, in the order firebase.json must list them (exact, then glob, then prefix). */
 export function rewrites() {
   return [
     ...ENDPOINTS.filter((e) => e.match === "exact"),
+    ...ENDPOINTS.filter((e) => e.match === "glob"),
     ...ENDPOINTS.filter((e) => e.match === "prefix"),
   ].map((e) => ({ source: rewriteSource(e), function: e.fn }));
 }
@@ -145,7 +154,9 @@ export function viteProxyKeys() {
       if (!keys.includes(e.path)) keys.push(e.path);
     } else {
       const escaped = e.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      keys.push(`^${escaped}(\\?.*)?$`);
+      // A glob's `*` is the rest of one segment, as Hosting reads it.
+      const pattern = e.match === "glob" ? escaped.replace(/\\\*/g, "[^/]+") : escaped;
+      keys.push(`^${pattern}(\\?.*)?$`);
     }
   }
   return keys;

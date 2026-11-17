@@ -256,6 +256,22 @@ test("k is in the url only for an unlisted document", () => {
   assert.equal(compose({ k: "t" }).noindex, false);
 });
 
+test("a document page names its Markdown reading, at the same version and with the same key (ADR 0030)", () => {
+  const unlisted = { ...DOCUMENT, noindex: true };
+  assert.equal(compose().markdown, `${ORIGIN}/d/plan.md`);
+  assert.equal(compose({ requestedVersion: "v1" }).markdown, `${ORIGIN}/d/plan/v1.md`);
+  assert.equal(compose({ decision: unlisted, k: "t k" }).markdown, `${ORIGIN}/d/plan.md?k=t%20k`);
+  assert.equal(compose({ k: "t" }).markdown, `${ORIGIN}/d/plan.md`, "a public page carries no key a request happened to send");
+});
+
+test("the alternate link is in the head when the page has a reading, and only then", () => {
+  const out = renderShell(TEMPLATE, page({ markdown: `${ORIGIN}/d/plan.md?k=a"b` }));
+  assert.equal(count(out, '<link rel="alternate" type="text/markdown"'), 1);
+  assert.ok(out.includes(`<link rel="alternate" type="text/markdown" href="${ORIGIN}/d/plan.md?k=a&quot;b" />`), "escaped like every injected value");
+  assert.ok(out.indexOf('type="text/markdown"') < out.indexOf("</head>"));
+  assert.equal(count(renderShell(TEMPLATE, page()), 'type="text/markdown"'), 0, "a folder's page has none");
+});
+
 test("the image is resolved inside the version, with k only for an unlisted document", () => {
   const head = { ...NO_HEAD, image: "cover.png" };
   assert.deepEqual(
@@ -288,6 +304,7 @@ function page(over = {}) {
     imageIsDefault: true,
     noindex: false,
     text: null,
+    markdown: null,
     ...over,
   };
 }

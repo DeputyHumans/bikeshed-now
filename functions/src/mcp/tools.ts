@@ -14,8 +14,11 @@
  * Efficiency is a correctness concern here, because agent context is the scarce
  * resource:
  *   - `list_documents` returns metadata only.
- *   - `get_document` returns SOURCE, never rendered HTML with its embedded
- *     stylesheet — the rendering is three kilobytes of CSS the agent cannot use.
+ *   - `get_document` returns an HTML document as a Markdown READING made for
+ *     agents, which says that it is one and where the original is, and a
+ *     Markdown document as its source — never the stylesheets, scripts and
+ *     base64 an agent cannot use. The HTML source is one argument away, for
+ *     revising (ADR 0030).
  *   - `get_comments` returns each thread's quote, section and comments, and
  *     whether a person is waiting on an answer, nothing else.
  *   - Everything is capped, and says when it was.
@@ -90,6 +93,7 @@ import {
 import { forkDocument, lineageFor, type Lineage } from "../lib/fork";
 import { compileBundle, publishNewDocument, reviseDocument } from "../lib/publish";
 import { locateQuote } from "../lib/quote";
+import { composeReading, contentAddress, readerAddress, readingMarkdown, readingPreamble } from "../lib/markdown/reading";
 import { renameDocument } from "../lib/rename";
 import { setThreadResolved } from "../lib/threads";
 import { acceptSuggestion } from "../lib/accept";
@@ -125,11 +129,35 @@ const RETRY_AFTER_SECONDS = 60;
  */
 const FOLDER_LIMIT = 200;
 /**
- * Source is capped so one oversized document cannot consume an agent's context.
- * The CLI prints to a file or a pipe instead, so it reads a cut source whole
- * through /content rather than inheriting this cap.
+ * One page of a document's content, so one oversized document cannot consume
+ * an agent's context. The rest comes by `offset`, page after page from one
+ * version, and the CLI walks the pages itself to print the whole.
  */
 const SOURCE_LIMIT = 200_000;
+
+/** Markup an HTML document's content has to contain: a tag or a doctype. A Markdown reading has neither. */
+const LOOKS_LIKE_HTML = /<(?:!doctype|[a-z][a-z0-9-]*)[\s/>]/i;
+
+/** Where one page starting at `offset` ends, never splitting a surrogate pair. */
+export function pageEnd(text: string, offset: number, limit = SOURCE_LIMIT): number {
+  let end = Math.min(text.length, offset + limit);
+  if (end < text.length && end > offset + 1) {
+    const last = text.charCodeAt(end - 1);
+    if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  }
+  return end;
+}
+
+/** `offset` as given, or a refusal an agent can act on. */
+function offsetOf(args: Record<string, unknown>): number {
+  const raw = args.offset;
+  if (raw === undefined || raw === null) return 0;
+  const n = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : raw;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+    throw new Error("offset must be a whole number of characters, 0 or more: the nextOffset a previous call returned");
+  }
+  return n;
+}
 
 export interface ToolContext {
   db: Db;
@@ -310,7 +338,7 @@ async function loadDocForRead(ctx: ToolContext, slug: string, k: string | null =
   if (isFrozen(data, Date.now()) && !canManageSharing(data, ctx.caller.emailLower)) {
     throw new Error(`no document with id "${slug}"`);
   }
-  return { ref, snap, data, proof, viaFolder: isFolderBasis(access.basis) };
+  return { ref, snap, data, proof, viaFolder: isFolderBasis(access.basis), basis: access.basis };
 }
 
 /**
@@ -663,16 +691,35 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "get_document",
     description:
-      "Fetch a document's metadata and selected published SOURCE (Markdown when the document is Markdown-authored). " +
-      `A source over ${SOURCE_LIMIT.toLocaleString("en-US")} characters is cut, and \`truncated\` says so. ` +
+      "Fetch a document's metadata and its content. An HTML document comes, by default, as a Markdown READING made for agents, under `markdown`: " +
+      "it opens with front matter saying it is a reading, what it left out (styling, scripts, figures drawn in code) and where the original is. " +
+      "Read it to understand or comment on the document; never send it back through update_document. " +
+      'To revise an HTML document, read its source with as: "source", which returns the HTML exactly as published, under `source`. ' +
+      "A Markdown-authored document always returns its Markdown source under `source`. " +
+      `Content comes in pages of ${SOURCE_LIMIT.toLocaleString("en-US")} characters: \`truncated\` says there is more, ` +
+      "and you read the rest by calling again with `offset` set to `nextOffset` and the same `version`. " +
       "Never send a cut source back through update_document: the new version would lose everything after the cut. " +
-      "`bikeshed get` prints the whole source.",
+      "`bikeshed get` prints the whole thing.",
     inputSchema: {
       type: "object",
       required: ["id"],
       properties: {
         id: { type: "string", description: "The document id, as returned by list_documents." },
-        version: { type: "string", description: "A specific version, e.g. v3. Defaults to current." },
+        version: {
+          type: "string",
+          description: "A specific version, e.g. v3. Defaults to current. Required with offset, so every page comes from one version.",
+        },
+        as: {
+          type: "string",
+          enum: ["markdown", "source"],
+          description:
+            'For an HTML document: "markdown" (the default) for a reading made for agents, "source" for the HTML as published, which is what you revise. A Markdown document returns its source either way.',
+        },
+        offset: {
+          type: "integer",
+          minimum: 0,
+          description: "Where to start reading, in characters: the nextOffset a previous call returned. Defaults to 0.",
+        },
         k: {
           type: "string",
           description: READ_KEY_DESCRIPTION,
@@ -680,7 +727,17 @@ export const TOOLS: ToolDefinition[] = [
       },
     },
     async run(ctx, args) {
-      const { ref, data, proof, viaFolder } = await loadDocForRead(ctx, str(args, "id"), str(args, "k"));
+      const asked = str(args, "as");
+      if (asked && asked !== "markdown" && asked !== "source") {
+        throw new Error('as must be "markdown" or "source"');
+      }
+      const offset = offsetOf(args);
+      if (offset > 0 && args.version === undefined) {
+        throw new Error(
+          "pass the version you read first, e.g. v3, together with offset: every page has to come from the same version",
+        );
+      }
+      const { ref, data, proof, viaFolder, basis } = await loadDocForRead(ctx, str(args, "id"), str(args, "k"));
       const versionId = selectedVersion(args.version, data.currentVersion);
       const isCurrent = versionId === data.currentVersion;
       // Read through a folder's key: the reader may do nothing but read.
@@ -688,6 +745,9 @@ export const TOOLS: ToolDefinition[] = [
       const vSnap = await ref.collection("versions").doc(versionId).get();
       if (!vSnap.exists) throw new Error(`no version "${versionId}"`);
       const v = vSnap.data() || {};
+      const format = v.format === "markdown" ? "markdown" : "html";
+      // A Markdown document's source is already what an agent should read.
+      const as = format === "html" && asked !== "source" ? "markdown" : "source";
 
       const sourceRel =
         typeof v.sourceEntry === "string" ? v.sourceEntry : String(v.entry ?? "index.html");
@@ -700,9 +760,47 @@ export const TOOLS: ToolDefinition[] = [
       } catch {
         throw new Error(`could not read source for version "${versionId}"`);
       }
-      const truncated = source.length > SOURCE_LIMIT;
 
-      await recordApiRead(ctx, ref, versionId);
+      // The version's own addresses carry the key only when a key is what
+      // opened the document: a member's reading must not hand one out.
+      const keyed = basis === "link" || basis === "folder-link" ? str(args, "k") || null : null;
+      let body = source;
+      let original: Record<string, unknown> | null = null;
+      if (as === "markdown") {
+        const origin = publicOrigin();
+        const place = { origin, docId: ref.id, versionId, entry: sourceRel, k: keyed };
+        const reading = readingMarkdown(source, place);
+        const files = Array.isArray(v.files) ? v.files.length : 1;
+        const url = contentAddress(place, sourceRel);
+        body = composeReading(
+          readingPreamble({
+            title: String(data.title ?? ref.id),
+            document: readerAddress(origin, ref.id, args.version === undefined ? null : versionId, keyed),
+            version: versionId,
+            original: url,
+            leftOut: reading.leftOut,
+            warnings: reading.warnings,
+          }),
+          reading,
+        );
+        original = {
+          as: "source",
+          url,
+          files,
+          ...(files > 1
+            ? { download: `${origin}/download/${ref.id}/${versionId}${keyed ? `?k=${encodeURIComponent(keyed)}` : ""}` }
+            : {}),
+        };
+      }
+      const total = body.length;
+      if (offset > 0 && offset >= total) {
+        throw new Error(`offset ${offset} is past the end: this ${as === "markdown" ? "reading" : "source"} is ${total} characters`);
+      }
+      const end = pageEnd(body, offset);
+      const truncated = end < total;
+
+      // A walk through the pages is one read, not one per page.
+      if (offset === 0) await recordApiRead(ctx, ref, versionId);
       const folderId = typeof data.folderId === "string" ? data.folderId : null;
       const paths = await filedIn(ctx.db, ctx.caller, [folderId]);
 
@@ -728,11 +826,17 @@ export const TOOLS: ToolDefinition[] = [
         // publish. Saved as "last" only if this credential has none for it.
         // Not for a folder's reader: get_changes reads threads, which are not theirs.
         cursor: viaFolder ? null : await startingCursor(ctx, ref, "ifNone"),
-        // Ahead of the source, not after it: an agent reads this result as JSON
-        // text in key order, and a flag after 200,000 characters of source is a
-        // flag it may never reach.
+        // Ahead of the content, not after it: an agent reads this result as
+        // JSON text in key order, and a flag after 200,000 characters of
+        // content is a flag it may never reach.
+        as,
+        ...(original ? { original } : {}),
         truncated,
-        source: truncated ? source.slice(0, SOURCE_LIMIT) : source,
+        total,
+        ...(truncated ? { nextOffset: end } : {}),
+        // A reading and a source never share a key, so neither can be
+        // mistaken for the other on the way back to update_document.
+        [as === "markdown" ? "markdown" : "source"]: body.slice(offset, end),
       };
     },
   },
@@ -886,6 +990,7 @@ export const TOOLS: ToolDefinition[] = [
       "Publish a new version of an existing document. Identical content is a no-op, so this is safe to retry. " +
       "Pass the `baseVersion` you read and revised: if somebody has published since, the update is refused and names the current version, " +
       "instead of replacing their work. `threadsLeftBehind` counts the open threads that stay on the version this replaces. " +
+      'An HTML document takes HTML: revise what get_document returns with as: "source", never its Markdown reading. ' +
       "Refused while somebody has the document open in the editor.",
     inputSchema: {
       type: "object",
@@ -929,6 +1034,15 @@ export const TOOLS: ToolDefinition[] = [
       const vSnap = await ref.collection("versions").doc(baseVersion).get();
       const format = vSnap.data()?.format === "markdown" ? "markdown" : "html";
       const filename = format === "html" ? "index.html" : "index.md";
+      // The reading get_document hands out by default is Markdown. Sent back
+      // here it would be published AS index.html, the document's whole page
+      // replaced by its own summary, so text without a tag is refused.
+      if (format === "html" && !LOOKS_LIKE_HTML.test(content)) {
+        throw new Error(
+          "this is an HTML document and that content has no HTML in it, so it looks like the Markdown reading get_document returns, which is not the source. " +
+            'Read the source with get_document and as: "source" (or bikeshed get --source), revise that, and send it back',
+        );
+      }
 
       const extracted = extractBundle(Buffer.from(content, "utf8"), filename, MAX_BUNDLE_BYTES);
       if ("error" in extracted) throw new Error(extracted.error);

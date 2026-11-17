@@ -160,7 +160,7 @@ add_comment     → a new thread on a quoted passage, highlighted exactly in the
 reply_to_comment → posts, and is stamped via: "mcp"
 ```
 
-A human's comment reads `via: "web"` beside the agent's `via: "mcp"` in the same thread. `get_document` returns Markdown **source**, never rendered HTML.
+A human's comment reads `via: "web"` beside the agent's `via: "mcp"` in the same thread. `get_document` returns a Markdown document's **source**, and an HTML document as a Markdown **reading** that opens with front matter saying so; `as: "source"` returns the HTML as published, and `curl -s http://127.0.0.1:5050/d/<id>.md` answers the same reading to a public document's address, or `404` to a private one.
 
 Then check the document's stats: the agent's read landed in `stats.apiReads` with `ms: 0`, and `stats.views` and `totalMs` are untouched. Reading *time* is a human concept; a machine fetch has none.
 

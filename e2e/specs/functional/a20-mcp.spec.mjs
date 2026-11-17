@@ -480,19 +480,26 @@ scenario("A20.2.get_document returns the stored source with its metadata and an 
   const [o, x] = await crew(ctx, ["owner", "stranger"]);
   const d = await publishDoc(o, "get");
   const g1 = await ok(o, "get_document", { id: d.id });
-  assert.deepEqual(Object.keys(g1).sort(), ["canComment", "currentVersion", "isCurrent", "canEdit", "canSuggest", "cursor", "expiresAt", "filedIn", "format", "forked", "id", "source", "sourceFile", "title", "truncated", "url", "version", "visibility"].sort(), "the result's keys");
+  assert.deepEqual(Object.keys(g1).sort(), ["as", "canComment", "currentVersion", "isCurrent", "canEdit", "canSuggest", "cursor", "expiresAt", "filedIn", "format", "forked", "id", "markdown", "original", "sourceFile", "title", "total", "truncated", "url", "version", "visibility"].sort(), "the result's keys: an HTML document reads as Markdown by default (ADR 0030)");
+  const { markdown: reading, original, total, ...meta } = g1;
   assert.deepEqual(
-    { ...g1, cursor: typeof g1.cursor },
-    { id: d.id, url: url(d.id), title: d.title, version: "v1", currentVersion: "v1", isCurrent: true, canComment: true, format: "html", sourceFile: "index.html", visibility: "private", expiresAt: null, canEdit: true, canSuggest: true, forked: false, filedIn: null, cursor: "string", truncated: false, source: d.content },
+    { ...meta, cursor: typeof meta.cursor },
+    { id: d.id, url: url(d.id), title: d.title, as: "markdown", version: "v1", currentVersion: "v1", isCurrent: true, canComment: true, format: "html", sourceFile: "index.html", visibility: "private", expiresAt: null, canEdit: true, canSuggest: true, forked: false, filedIn: null, cursor: "string", truncated: false },
     "get_document of v1",
   );
+  assert.deepEqual(
+    { as: original.as, url: original.url.endsWith(`/content/${d.id}/v1/index.html`), files: original.files, total, front: reading.startsWith('---\nreading: "A Markdown reading of this document'), title: reading.includes(`\n# ${d.title}\n`), tags: /<[a-z]/i.test(reading) },
+    { as: "source", url: true, files: 1, total: reading.length, front: true, title: true, tags: false },
+    "the reading says what it is and where the original is, and holds the words without the markup",
+  );
+  assert.equal((await ok(o, "get_document", { id: d.id, as: "source" })).source, d.content, 'as: "source" is the bytes as published');
 
   ctx.step("a second version; `version` names the first");
   const v2 = page(`${d.title} two`);
   const up = await ok(o, "update_document", { id: d.id, content: v2, baseVersion: "v1" });
   precondition(up.versionId === "v2", `update to v2: ${JSON.stringify(up)}`);
-  const cur = await ok(o, "get_document", { id: d.id });
-  const old = await ok(o, "get_document", { id: d.id, version: "v1" });
+  const cur = await ok(o, "get_document", { id: d.id, as: "source" });
+  const old = await ok(o, "get_document", { id: d.id, version: "v1", as: "source" });
   assert.deepEqual({ v: cur.version, src: cur.source === v2 }, { v: "v2", src: true }, "current is v2");
   assert.deepEqual({ v: old.version, src: old.source === d.content }, { v: "v1", src: true }, "version: v1 gives v1's source");
 
@@ -510,11 +517,13 @@ scenario("A20.2.get_document returns the stored source with its metadata and an 
   const gm = await ok(o, "get_document", { id: md.id });
   assert.deepEqual({ format: gm.format, sourceFile: gm.sourceFile, source: gm.source }, { format: "markdown", sourceFile: "index.md", source: md.content }, "Markdown source");
 
-  ctx.step("200,000 characters exactly is whole; 200,001 is cut at 200,000 and says so");
-  const ge = await ok(o, "get_document", { id: de.id });
-  const gv = await ok(o, "get_document", { id: dv.id });
+  ctx.step("200,000 characters exactly is whole; 200,001 is cut at 200,000 and says so; the rest is one offset away");
+  const ge = await ok(o, "get_document", { id: de.id, as: "source" });
+  const gv = await ok(o, "get_document", { id: dv.id, as: "source" });
   assert.deepEqual({ truncated: ge.truncated, length: ge.source.length, same: ge.source === exact }, { truncated: false, length: SOURCE_LIMIT, same: true }, "a source of exactly 200,000 characters is whole");
   assert.deepEqual({ truncated: gv.truncated, length: gv.source.length, prefix: gv.source === over.slice(0, SOURCE_LIMIT) }, { truncated: true, length: SOURCE_LIMIT, prefix: true }, "a source of 200,001 characters is cut at 200,000 and says truncated");
+  const gv2 = await ok(o, "get_document", { id: dv.id, as: "source", version: gv.version, offset: gv.nextOffset });
+  assert.deepEqual({ next: gv.nextOffset, total: gv.total, truncated: gv2.truncated, whole: gv.source + gv2.source === over }, { next: SOURCE_LIMIT, total: SOURCE_LIMIT + 1, truncated: false, whole: true }, "the second page is the rest, and the two are the source");
 
   ctx.step("refused: a stranger and an absent id, word for word; an unknown version");
   await refused(x, "get_document", { id: d.id }, ABSENT(d.id), "stranger get_document");
@@ -587,7 +596,7 @@ scenario("A20.2.fork_document copies a version the caller can read into a privat
     { versionId: "v1", title: ftitle, filedIn: null, access: audienceOf(v.email), url: url(f.docId), cursor: "string", fresh: true },
     "the fork",
   );
-  const g = await ok(v, "get_document", { id: f.docId });
+  const g = await ok(v, "get_document", { id: f.docId, as: "source" });
   assert.deepEqual({ source: g.source === d.content, forked: g.forked, visibility: g.visibility, canEdit: g.canEdit }, { source: true, forked: true, visibility: "private", canEdit: true }, "the fork holds v1's bytes, privately, as the viewer's");
   const row = (await ok(v, "list_documents", {})).documents.find((r) => r.id === f.docId);
   assert.deepEqual({ owner: row?.owner, forked: row?.forked }, { owner: v.email, forked: true }, "the viewer owns it");
@@ -666,7 +675,7 @@ scenario("A20.2.update_document mints the next version from its baseVersion, cou
   );
   const rec = await readDoc(target, `docs/${d.id}/versions/v2`);
   assert.deepEqual({ via: rec?.publishedVia, parent: rec?.parentVersion, by: rec?.publishedByEmail }, { via: "mcp", parent: "v1", by: o.email }, "v2's record: via mcp, from v1, by the owner");
-  assert.equal((await ok(o, "get_document", { id: d.id })).source, v2, "v2 holds the sent content");
+  assert.equal((await ok(o, "get_document", { id: d.id, as: "source" })).source, v2, "v2 holds the sent content");
 
   ctx.step("the same content again: deduped onto v2, nothing left behind");
   const same = await ok(o, "update_document", { id: d.id, content: v2, baseVersion: "v2" });
@@ -706,7 +715,7 @@ scenario("A20.2.commit_draft publishes the draft an accepted suggestion made as 
   ctx.step("commit_draft: v2 with the accepted change");
   const r = await ok(o, "commit_draft", { id: d.id });
   assert.deepEqual({ versionId: r.versionId, deduped: r.deduped, url: r.url }, { versionId: "v2", deduped: false, url: url(d.id) }, "commit_draft");
-  const g = await ok(o, "get_document", { id: d.id });
+  const g = await ok(o, "get_document", { id: d.id, as: "source" });
   assert.equal(g.version, "v2", "current is v2");
   assert.ok(g.source.includes("The quick brown fox jumps over the sleepy cat.") && !g.source.includes("lazy dog"), `v2 holds the accepted change: ${g.source.slice(0, 400)}`);
   const rec = await readDoc(target, `docs/${d.id}/versions/v2`);
@@ -964,7 +973,7 @@ scenario("A20.2.rename_document changes the title and keeps the id and address; 
   const title = `A20 renamed ${tag()}`;
   const r = await ok(o, "rename_document", { id: d.id, title: `  ${title}  ` });
   assert.deepEqual(r, { id: d.id, title, url: url(d.id) }, "rename_document (trimmed)");
-  const g = await ok(v, "get_document", { id: d.id });
+  const g = await ok(v, "get_document", { id: d.id, as: "source" });
   assert.deepEqual({ id: g.id, title: g.title, url: g.url, source: g.source === d.content }, { id: d.id, title, url: url(d.id), source: true }, "the id, the address and the bytes stay");
 
   ctx.step("refused");
@@ -1432,7 +1441,7 @@ scenario("A20.6 a link key opens an unlisted open-editing document to a non-memb
   const wrongK = `${k.slice(0, -2)}${k.endsWith("aa") ? "bb" : "aa"}`;
   let threadId = null;
   const steps = [
-    ["get_document", () => ({ id: d.id }), (r) => r.source === d.content && r.canEdit === true],
+    ["get_document", () => ({ id: d.id, as: "source" }), (r) => r.source === d.content && r.canEdit === true],
     ["get_comments", () => ({ id: d.id }), (r) => Array.isArray(r.threads) && r.version === "v1"],
     ["get_changes", () => ({ id: d.id, since: "all" }), (r) => r.id === d.id && r.state?.canEdit === true],
     ["add_comment", () => ({ id: d.id, exact: "quick brown fox", body: "With the key." }), (r) => typeof (threadId = r.threadId) === "string"],

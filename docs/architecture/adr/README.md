@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Twenty-eight decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Twenty-nine decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
 They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
@@ -36,6 +36,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0027](0027-a-reader-lists-their-own-reading.md) | A reader lists their own reading, across documents | Accepted |
 | [0028](0028-what-a-crawler-can-read.md) | What a crawler can read | Accepted |
 | [0029](0029-expiry-makes-it-private-on-an-hourly-job.md) | Expiry makes it private, on an hourly job | Accepted |
+| [0030](0030-agents-read-a-markdown-reading.md) | Agents read an HTML document as a Markdown reading made on read | Accepted |
 
 ## Format
 

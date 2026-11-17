@@ -7,8 +7,9 @@ import { asciiLower, collapseWhitespace, decodeEntities } from "./htmltext";
  * Shared links unfurl with the uploaded document's own title, description,
  * keywords and image, and its <title> becomes the default workspace title.
  * This module reads those out of the raw HTML of an untrusted upload, at
- * request time, without an HTML parser: there is none in `functions/` and the
- * dependency budget does not admit one.
+ * request time, without an HTML parser: the only one in `functions/` is the
+ * DOM inside turndown, which builds a whole tree, and this runs on every
+ * document open.
  *
  * The scanner is `indexOf`-driven and linear on adversarial input. Every
  * opener is found with `indexOf`, its terminator with `indexOf` from there,

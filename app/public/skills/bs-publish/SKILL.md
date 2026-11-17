@@ -62,7 +62,7 @@ There is no runtime here: no shared state, no viewer identity, no stored assets,
 | Send | Through | What a reader gets |
 |---|---|---|
 | Markdown, `.md` or `.markdown` | `bikeshed publish`, or `publish_document` (its default) | One HTML page rendered on the server. `get_document` returns your Markdown |
-| HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte |
+| HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte. `get_document` reads it to an agent as Markdown, and `as: "source"` returns the file |
 | A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
 
 Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB uncompressed and at most 2,000 files. Markdown is read as UTF-8.
@@ -152,7 +152,7 @@ Over MCP the same two are `publish_document` and `update_document`, and they ret
 
 **An update keeps the document's format, and what it replaces depends on what you send.**
 
-- **One `.md` or `.html` file**, through `bikeshed update` or `update_document`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text from `get_document`'s source and its images and stylesheets stay where they were. Revise the whole source: `get_document` cuts one over 200,000 characters and sets `truncated`, and an update made from a cut source publishes a version missing everything after the cut. `bikeshed get <id> > index.html` writes it whole.
+- **One `.md` or `.html` file**, through `bikeshed update` or `update_document`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text from `get_document`'s source and its images and stylesheets stay where they were. For an HTML document that means `get_document` with `as: "source"`: by default it hands you a Markdown reading made for agents, which opens with front matter saying so, and `update_document` refuses a reading sent back as the page. Revise the whole source: `get_document` returns 200,000 characters at a time and sets `truncated` when there is more, which you read with `offset` set to `nextOffset` and the same `version`, and an update made from a cut source publishes a version missing everything after the cut. `bikeshed get <id> --source > index.html` writes it whole.
 - **A `.zip`**, through `bikeshed update`, replaces the whole bundle. A file the archive leaves out is gone from the new version. This takes somebody the document is shared with as an editor, not open editing.
 
 ```bash

@@ -68,7 +68,8 @@ function world({ rtdb = false, anns = {}, caller = OWNER, doc = {} } = {}) {
         });
       }),
     );
-  return { store, objects, update, upload, doc: () => store.get("docs/d1"), has: (key) => objects.has(key) };
+  const read = (extra = {}) => withFakes(objects, rtdb, () => tool("get_document").run(ctx, { id: "d1", ...extra }));
+  return { store, objects, update, upload, read, doc: () => store.get("docs/d1"), has: (key) => objects.has(key) };
 }
 
 /** Storage and the Realtime Database, in memory, for the length of `fn`. */
@@ -275,4 +276,30 @@ test("a revoked real editor cannot finish a bundle replacement via public open e
   const result = await w.upload(NEXT);
   assert.equal(result.status, 403);
   assert.equal(w.doc().currentVersion, "v1");
+});
+
+test("a reading sent back as an update is refused, and the source it names is what revises", async () => {
+  /**
+   * The sequence an agent performs (ADR 0030): get_document hands it the
+   * Markdown reading by default; an agent that revises THAT and sends it back
+   * would publish the reading as index.html, the page replaced by its own
+   * summary. The refusal names the call that gets the source; the source then
+   * revises as it always has.
+   */
+  const w = world();
+  const reading = await w.read();
+  assert.equal(reading.as, "markdown");
+  assert.equal(reading.source, undefined, "a reading never arrives under the key a source does");
+  assert.match(reading.markdown, /^---\nreading: "A Markdown reading/);
+  assert.match(reading.markdown, /Cut over in two weekends\./);
+
+  await assert.rejects(w.update(reading.markdown, { baseVersion: "v1" }), /no HTML in it[\s\S]*as: "source"/);
+  assert.equal(w.doc().currentVersion, "v1", "nothing was published");
+
+  const source = await w.read({ as: "source" });
+  assert.equal(source.as, "source");
+  assert.equal(source.source, HTML, "the source is the stored bytes, exactly");
+  assert.equal(source.markdown, undefined);
+  await w.update(source.source.replace("two weekends", "one weekend"), { baseVersion: "v1" });
+  assert.equal(w.doc().currentVersion, "v2");
 });

@@ -1,9 +1,9 @@
 --- a/functions/src/mcp/tools.ts
 +++ b/functions/src/mcp/tools.ts
-@@ -631,5 +631,5 @@
-         // flag it may never reach.
-         truncated,
--        source: truncated ? source.slice(0, SOURCE_LIMIT) : source,
-+        source: truncated ? source.slice(0, SOURCE_LIMIT - 1) : source,
+@@ -837,5 +837,5 @@
+         // A reading and a source never share a key, so neither can be
+         // mistaken for the other on the way back to update_document.
+-        [as === "markdown" ? "markdown" : "source"]: body.slice(offset, end),
++        [as === "markdown" ? "markdown" : "source"]: body.slice(offset, truncated ? end - 1 : end),
        };
      },

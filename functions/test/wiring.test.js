@@ -231,7 +231,7 @@ test("every byte-serving endpoint sets a cache header before it can return", () 
   // `mcp`, `oauth` and `oauthConsent` answer refusals — a 401, a 405 — before
   // any handler code runs its own header, and a refusal cached for ten minutes
   // is a sign-in that cannot be retried (SPEC §23).
-  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "recordView", "unlockDoc", "forkDoc", "saveThumbs", "setAccess", "setFolderAccess", "setVisibility", "organize", "mcp", "oauth", "oauthConsent"]) {
+  for (const name of ["contentProxy", "downloadBundle", "getDraft", "docShell", "docMarkdown", "recordView", "unlockDoc", "forkDoc", "saveThumbs", "setAccess", "setFolderAccess", "setVisibility", "organize", "mcp", "oauth", "oauthConsent"]) {
     const start = src.indexOf(`export const ${name} = onRequest(`);
     assert.ok(start > 0, `${name} not found`);
     const body = src.slice(start, start + 1200);

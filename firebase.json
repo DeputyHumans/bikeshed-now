@@ -41,6 +41,8 @@
       { "source": "/oauth/token", "function": "oauth" },
       { "source": "/oauth/consent", "function": "oauthConsent" },
       { "source": "/sitemap.xml", "function": "sitemap" },
+      { "source": "/d/*.md", "function": "docMarkdown" },
+      { "source": "/d/*/*.md", "function": "docMarkdown" },
       { "source": "/verify/**", "function": "verifyEmail" },
       { "source": "/download/**", "function": "downloadBundle" },
       { "source": "/draft/**", "function": "getDraft" },

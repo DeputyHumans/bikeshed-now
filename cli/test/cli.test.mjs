@@ -639,6 +639,59 @@ test("a source that was not cut is printed from the one tool call", async () => 
   assert.equal(requests.length, 1);
 });
 
+// --- A reading, page by page -------------------------------------------------
+
+/** Run `get` against a deployment that answers get_document with a reading in two pages. */
+async function readingAgainst(args) {
+  const pages = ['---\nreading: "A Markdown reading"\n---\n\nFirst — é 漢 ', "second page.\n"];
+  let stdout;
+  let stderr;
+  let seen = [];
+  await withServer(
+    (req, res) => {
+      // `withServer` records each request before answering it.
+      const asked = seen[seen.length - 1].body.params.arguments;
+      const result =
+        asked.as === "source"
+          ? { id: "plan", version: "v3", as: "source", truncated: false, source: "<p>html</p>" }
+          : !asked.offset
+            ? { id: "plan", version: "v3", as: "markdown", truncated: true, total: 99, nextOffset: pages[0].length, markdown: pages[0] }
+            : { id: "plan", version: "v3", as: "markdown", truncated: false, total: 99, markdown: pages[1] };
+      rpcOk(result)(req, res);
+    },
+    async (origin, requests) => {
+      seen = requests;
+      ({ stdout, stderr } = await promisify(execFile)(process.execPath, [join(SRC, "index.mjs"), "get", ...args], {
+        encoding: "utf8",
+        env: { ...process.env, BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" },
+      }));
+    },
+  );
+  return { stdout, stderr, calls: seen.map((c) => c.body.params.arguments), pages };
+}
+
+test("an HTML document prints as its reading, every page of it, from the first page's version", async () => {
+  const { stdout, stderr, calls, pages } = await readingAgainst(["plan"]);
+  assert.equal(stdout, pages.join(""));
+  assert.deepEqual(calls, [{ id: "plan" }, { id: "plan", version: "v3", offset: pages[0].length }]);
+  assert.match(stderr, /A Markdown reading made for agents, not the source\. `bikeshed get plan --source` prints the original\./);
+});
+
+test("--json carries the whole reading, and no longer says there is more", async () => {
+  const { stdout, pages } = await readingAgainst(["plan", "--json"]);
+  const result = JSON.parse(stdout);
+  assert.equal(result.markdown, pages.join(""));
+  assert.equal(result.truncated, false);
+  assert.equal(result.nextOffset, undefined);
+});
+
+test("--source asks for the HTML as published", async () => {
+  const { stdout, calls, stderr } = await readingAgainst(["plan", "--source"]);
+  assert.equal(stdout, "<p>html</p>");
+  assert.deepEqual(calls, [{ id: "plan", as: "source" }]);
+  assert.equal(stderr, "", "a source is not a reading, and says nothing about being one");
+});
+
 test("a link that is not a document is refused rather than sent as an id", () => {
   assert.throws(
     () => run(["get", "https://bikeshed.example/folder/abc"], { BIKESHED_TOKEN: "bsk_a.b" }),

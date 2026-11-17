@@ -10,7 +10,8 @@ import { ENTITY_CHARS, asciiLower, decodeEntity } from "./htmltext";
  * choosing between repeats — so what this has to produce is an anchor that
  * resolver will resolve, and a definite refusal when it would not.
  *
- * `functions/` has no HTML parser, by budget, so this reads the body the way
+ * It loads no HTML parser — the one inside turndown builds a whole tree, and
+ * this runs on every agent's quote — so this reads the body the way
  * a browser's `textContent` does as far as it matters here: tags gone,
  * entities decoded in text and nowhere else, whitespace collapsed. It splits
  * that text at every block and every non-text element, because a suggestion

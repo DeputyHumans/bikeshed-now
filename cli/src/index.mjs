@@ -52,7 +52,9 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
   bikeshed update <id> <file>          publish a new version
   bikeshed fork <id>                   your own copy, which remembers its original
   bikeshed lineage <id>                what it was forked from; for its owner, its forks
-  bikeshed get <id> [--version <v>]    print a published version's source
+  bikeshed get <id> [--version <v>]    print a version: an HTML document as a
+                                       Markdown reading for agents, --source
+                                       for the HTML as published
   bikeshed versions <id>               list published history (--all for every page)
   bikeshed comments <id>               unresolved feedback, with its anchored text
                                        (--version <v> for an earlier version's)
@@ -584,10 +586,28 @@ async function versions(flags, [ref, ...rest]) {
 }
 
 async function get(flags, [ref]) {
-  if (!ref) fail("usage: bikeshed get <id>");
+  if (!ref) fail("usage: bikeshed get <id> [--source]");
   const { origin, token } = resolveAuth(flags);
   const doc = docArgs(ref, flags);
-  const result = await callTool(origin, token, "get_document", doc);
+  const result = await callTool(origin, token, "get_document", { ...doc, ...(flags.source ? { as: "source" } : {}) });
+  if (typeof result.markdown === "string") {
+    // An HTML document's reading, made for agents (ADR 0030). It comes in
+    // pages; every page is asked for at the version the first one came from,
+    // so a publish in between cannot splice two versions into one print.
+    let text = result.markdown;
+    let page = result;
+    while (page.truncated) {
+      if (typeof page.nextOffset !== "number") fail(`${doc.id}: the deployment said there is more and not where it starts. Nothing was printed.`);
+      page = await callTool(origin, token, "get_document", { ...doc, version: result.version, offset: page.nextOffset });
+      text += page.markdown ?? "";
+    }
+    const { nextOffset: _next, ...rest } = result;
+    out(flags.json, { ...rest, truncated: false, markdown: text }, () => {
+      process.stdout.write(text);
+      process.stderr.write(`A Markdown reading made for agents, not the source. \`bikeshed get ${ref} --source\` prints the original.\n`);
+    });
+    return;
+  }
   // The tool cuts a long source at a fixed length. Printed as it came, the cut
   // copy exited 0 and looked complete, and `update` with an edit of it
   // published a version missing everything past the cut. So a cut source is
@@ -1404,6 +1424,7 @@ async function main() {
       suffix: { type: "string" },
       since: { type: "string" },
       wait: { type: "boolean", default: false },
+      source: { type: "boolean", default: false },
       interval: { type: "string" },
       timeout: { type: "string" },
       base: { type: "string" },

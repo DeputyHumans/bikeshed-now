@@ -32,7 +32,7 @@ Over MCP: `get_comments`. It returns only unresolved threads unless you ask for 
 
 Threads come oldest first, at most 50; `truncated` says when there were more.
 
-**The quote is the point.** You do not need to fetch the document to find out what "this paragraph is too strong" refers to. Search your source for the quote, change that passage, leave the rest alone.
+**The quote is the point.** You do not need to fetch the document to find out what "this paragraph is too strong" refers to. Search your source for the quote, change that passage, leave the rest alone. For an HTML document that is the source `get_document` returns with `as: "source"`, not the Markdown reading it returns by default: a reading is for reading, and `update_document` refuses one. A quote you raise yourself is the reading's words without its Markdown marks.
 
 ## Revise, say what you did, then publish
 

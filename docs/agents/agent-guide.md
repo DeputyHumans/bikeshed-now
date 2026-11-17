@@ -100,7 +100,7 @@ If your harness does register servers from a config file, most expand `${VAR}` i
 |---|---|
 | `list_versions` | Published history, paginated newest first, with pinned URLs |
 | `list_documents` | Your documents. Metadata only, with where each is filed (`filedIn`) |
-| `get_document` | Metadata, the address and the current **source**, cut at 200,000 characters with `truncated` set |
+| `get_document` | Metadata, the address and the content: an HTML document as a **Markdown reading** made for agents, or `as: "source"` for the HTML you revise; a Markdown one as its source. In pages of 200,000 characters (see [Reading a document](#reading-a-document)) |
 | `publish_document` | Create a document from content you supply, optionally at an `id` you choose (`idTaken` says if it was taken). Returns where it is filed and who can read it there (`filedIn`, `access`) |
 | `fork_document` | Your own copy of a document you can read, which remembers what it was forked from |
 | `get_lineage` | What a document was forked from, and whether that has changed since; for its owner, its forks |
@@ -144,7 +144,7 @@ bikeshed publish <file> [--title …] [--id …] [--folder …] [--watch]
 bikeshed update <id> <file> [--base …] [--watch]
 bikeshed fork <id> [--version …] [--folder …] [--title …]
 bikeshed lineage <id> [--json]
-bikeshed get <id>
+bikeshed get <id> [--source] [--version …]
 bikeshed comments <id> [--version …] [--all] [--json]
 bikeshed changes <id> --since <cursor|last|all> [--wait] [--interval …] [--timeout …]
 bikeshed comment <id> <text> --body … [--prefix …] [--suffix …]
@@ -179,7 +179,18 @@ export BIKESHED_TOKEN=bsk_...
 
 Every command takes `--json`. `login` signs in through the browser and waits for a person to approve, so run it with a long timeout. The two variables work instead of `login` where no browser will ever open, such as CI. `bikeshed --version` prints which version is installed.
 
-`bikeshed get <id> > index.html` writes the whole source, however long it is. `get_document` cuts a source at 200,000 characters and sets `truncated`. Never send a cut source back as an update: the new version would be missing everything after the cut.
+`bikeshed get <id>` prints an HTML document as its Markdown reading, every page of it, and `bikeshed get <id> --source > index.html` writes the whole source, however long it is. `get_document` returns 200,000 characters at a time and sets `truncated` when there is more. Never send a cut source back as an update: the new version would be missing everything after the cut.
+
+## Reading a document
+
+`get_document` gives you an HTML document as a **reading**: Markdown made from the page for agents, so your context holds its words rather than its stylesheets, scripts and inline images. It is made fresh each time you ask, and it says what it is. It opens with front matter that names it a reading, the `version`, what it `left-out` (styling and layout, and how many scripts, stylesheets, figures drawn in code, embedded frames, inline images, hidden elements and form controls) and the address of the `original`. A `warnings` list says when the reading may be missing most of the page, because a script builds it, or stops early, because the page is too long to read whole. The result says the same outside the text: `as` is `"markdown"`, the text arrives under `markdown` rather than `source`, and `original` names the source's address, how many files the version has and, for more than one, where to download them.
+
+- **To revise, read the source.** `get_document` with `as: "source"`, or `bikeshed get <id> --source`, returns the HTML exactly as published, and that is what `update_document` takes. Sent a reading of an HTML document, it refuses: a reading is not the document.
+- **To comment, quote words, not Markdown.** A reading's text is the page's own, unescaped, so a sentence copied from it is found. `**`, list numbers and link brackets are not in the page, and a quote with them in it is refused.
+- **A long document comes in pages.** `truncated` says there is more and `total` how much. Call again with `offset` set to `nextOffset` and the same `version`, so every page comes from one version even if somebody publishes in between. `bikeshed get` reads every page for you.
+- **With only an address,** add `.md`: `https://<deployment>/d/<id>.md`, or `/d/<id>/<version>.md`, with `?k=` for an unlisted document, answers the same reading as `text/markdown`, behind the same access as the page itself. A document's page names that address in `<link rel="alternate" type="text/markdown">`.
+
+A Markdown document is not converted: `get_document` returns the Markdown that was published, which is also what you revise.
 
 ## Skills
 
@@ -276,7 +287,7 @@ bikeshed suggest storage-migration "a single weekend" \
 
 Over MCP the same is `suggest_edit` with `exact`, `replacement` and `note`.
 
-- **Quote the passage as a reader sees it,** not your source: no Markdown, no HTML. `get_comments` gives you quotes in exactly that form.
+- **Quote the passage as a reader sees it,** not your source: no Markdown, no HTML, and none of a reading's marks. `get_comments` gives you quotes in exactly that form.
 - **One paragraph at a time.** A passage across two paragraphs, or across a line break, is refused; suggest each part on its own.
 - **If it repeats,** you are told how many times. Add a `prefix` or `suffix` of the words around the one you mean.
 - **An empty `replacement` proposes deleting it.**
@@ -352,7 +363,7 @@ A `…` in a path is a folder you cannot see: access flows downward, so a grant 
 | Send | Through | What a reader gets |
 |---|---|---|
 | Markdown, `.md` or `.markdown` | `bikeshed publish`, or `publish_document` (its default) | One HTML page rendered on the server. `get_document` returns your Markdown |
-| HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte |
+| HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte. `get_document` reads it to an agent as Markdown, and `as: "source"` returns the file |
 | A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
 
 Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB uncompressed and at most 2,000 files. Markdown is read as UTF-8.

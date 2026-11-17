@@ -8,6 +8,6 @@
   },
   "stack": [],
   "expect": {
-    "message": "get prints the whole source"
+    "message": "get --source prints the whole source"
   }
 }

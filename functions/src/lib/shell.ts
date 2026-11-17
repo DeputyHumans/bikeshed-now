@@ -139,6 +139,7 @@ export function composeFolderPage(input: {
     imageIsDefault: true,
     noindex: decision.noindex,
     text: null,
+    markdown: null,
   };
 }
 
@@ -211,6 +212,11 @@ export interface ShellPage {
    * sees the frame they load into; null keeps the template's text about the site.
    */
   text: readonly string[] | null;
+  /**
+   * Where an agent reads this page as Markdown (`/d/<id>.md`, ADR 0030), for
+   * an agent that fetched the page itself; null for a page that has none.
+   */
+  markdown: string | null;
 }
 
 /** Everything the shell says about a document, from the decision and the document's own head. */
@@ -233,10 +239,9 @@ export function composePage(input: {
   // The token belongs on an unlisted document's links and nowhere else: a
   // public document's page must not carry whatever `k` a request happened to.
   const token = noindex && k.length > 0 ? k : null;
-  const url =
-    `${origin}/d/${docId}` +
-    (requestedVersion !== null ? `/${requestedVersion}` : "") +
-    (token !== null ? `?k=${encodeURIComponent(token)}` : "");
+  const path = `${origin}/d/${docId}` + (requestedVersion !== null ? `/${requestedVersion}` : "");
+  const query = token !== null ? `?k=${encodeURIComponent(token)}` : "";
+  const url = `${path}${query}`;
   const image = resolveImage(head.image, {
     origin,
     docId,
@@ -257,6 +262,7 @@ export function composePage(input: {
     imageIsDefault: image.isDefault,
     noindex,
     text: blocks.length > 0 ? blocks : null,
+    markdown: `${path}.md${query}`,
   };
 }
 
@@ -318,6 +324,9 @@ export function renderShell(template: string, page: ShellPage): string {
   lines.push(`<meta name="twitter:card" content="summary_large_image" />`);
   if (page.keywords !== null) lines.push(`<meta name="keywords" content="${escapeAttr(page.keywords)}" />`);
   if (page.noindex) lines.push(`<meta name="robots" content="noindex" />`);
+  if (typeof page.markdown === "string") {
+    lines.push(`<link rel="alternate" type="text/markdown" href="${escapeAttr(page.markdown)}" />`);
+  }
 
   // Aligned with `</head>` when it sits on its own line, so the output reads
   // like the template did; otherwise inserted flush against it.

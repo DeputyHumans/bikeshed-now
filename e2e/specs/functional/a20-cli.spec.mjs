@@ -620,15 +620,17 @@ scenario(NAMES.d, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   // One large read at a time: run together they queue in the stack's function
   // emulator, and the last one passed Hosting's 60 s proxy limit (a 504). The
   // source is over get_document's 200,000-character cap (SPEC §19), so each
-  // read is get_document's cut copy plus the rest through /content.
+  // read is get_document's cut copy plus the rest through /content. The
+  // source takes --source: without it an HTML document prints as its
+  // Markdown reading (ADR 0030), which is checked last.
   const [plain, bare, none] = await Promise.all([
-    cli(ctx, o, ["get", up.docId]),
+    cli(ctx, o, ["get", up.docId, "--source"]),
     cli(ctx, stranger, ["get", up.docId, "--json"], { home: cliHome(target) }),
     cli(ctx, stranger, ["get", absent, "--json"], { home: cliHome(target) }),
   ]);
-  assert.equal(plain.code, 0, `get: exit ${plain.code}, stderr ${JSON.stringify(plain.stderr.slice(0, 300))}`);
-  assert.equal(sha(Buffer.from(plain.stdout, "utf8")), sha(bytes), "get prints the whole source, byte for byte, and nothing else");
-  const viaLink = okJson(await cli(ctx, stranger, ["get", link, "--json"]), "get <link> --json");
+  assert.equal(plain.code, 0, `get --source: exit ${plain.code}, stderr ${JSON.stringify(plain.stderr.slice(0, 300))}`);
+  assert.equal(sha(Buffer.from(plain.stdout, "utf8")), sha(bytes), "get --source prints the whole source, byte for byte, and nothing else");
+  const viaLink = okJson(await cli(ctx, stranger, ["get", link, "--source", "--json"]), "get <link> --source --json");
   assert.deepEqual(
     { id: viaLink.id, version: viaLink.version, truncated: viaLink.truncated, canEdit: viaLink.canEdit, length: viaLink.source?.length, cursor: typeof viaLink.cursor },
     { id: up.docId, version: "v1", truncated: false, canEdit: false, length: bytes.length, cursor: "string" },
@@ -638,6 +640,13 @@ scenario(NAMES.d, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   refused(bare, "get <unlisted id> without its key", /^error: no document with id "/);
   refused(none, "get <absent id>", /^error: no document with id "/);
   assert.equal(bare.stderr.replace(up.docId, "<id>"), none.stderr.replace(absent, "<id>"), "the same answer as an id that does not exist (SPEC §17)");
+
+  ctx.step("without --source the same document prints as its Markdown reading, which says so");
+  const reading = await cli(ctx, o, ["get", up.docId]);
+  assert.equal(reading.code, 0, `get: exit ${reading.code}, stderr ${JSON.stringify(reading.stderr.slice(0, 300))}`);
+  assert.match(reading.stdout, /^---\nreading: "A Markdown reading of this document, made by Bikeshed for agents\./, "the reading opens with front matter saying what it is");
+  assert.match(reading.stdout, new RegExp(`\\noriginal: "[^"]*/content/${up.docId}/v1/index\\.html"\\n`), "and where the original is");
+  assert.match(reading.stderr, /`bikeshed get [^`]+ --source` prints the original/, "stderr says it is not the source");
 });
 
 // --- A20.7e update (.html) -------------------------------------------------------
