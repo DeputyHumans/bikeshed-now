@@ -26,26 +26,34 @@ const { setAccess, setFolderAccess, setVisibility, setFolderVisibility } = vi.ho
     }),
   ),
   setFolderAccess: vi.fn(async (): Promise<AccessState> => ({ viewers: [], editors: [], members: [] })),
+  // Each refuses a date in the past, as `parseExpiry` does, so a dialog that
+  // echoes one back fails here the way it fails against the server.
   setVisibility: vi.fn(
     async (
       _id: string,
       visibility: Visibility,
       publicEdit: boolean,
-      expiresAt: number | null,
-    ): Promise<VisibilityState> => ({
-      visibility,
-      publicEdit,
-      linkToken: visibility === "unlisted" ? "tok" : null,
-      expiresAt,
-    }),
+      expiresAt?: number | null,
+    ): Promise<VisibilityState> => {
+      if (typeof expiresAt === "number" && expiresAt <= Date.now()) throw new Error("an expiry must be in the future");
+      return {
+        visibility,
+        publicEdit,
+        linkToken: visibility === "unlisted" ? "tok" : null,
+        expiresAt: expiresAt ?? null,
+      };
+    },
   ),
   setFolderVisibility: vi.fn(
-    async (_id: string, visibility: Visibility, expiresAt: number | null): Promise<VisibilityState> => ({
-      visibility,
-      publicEdit: false,
-      linkToken: visibility === "unlisted" ? "ftok" : null,
-      expiresAt,
-    }),
+    async (_id: string, visibility: Visibility, expiresAt?: number | null): Promise<VisibilityState> => {
+      if (typeof expiresAt === "number" && expiresAt <= Date.now()) throw new Error("an expiry must be in the future");
+      return {
+        visibility,
+        publicEdit: false,
+        linkToken: visibility === "unlisted" ? "ftok" : null,
+        expiresAt: expiresAt ?? null,
+      };
+    },
   ),
 }));
 
@@ -145,7 +153,8 @@ describe("who can see it, inside the share dialog", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: /public/i }));
     await waitFor(() => expect(setFolderVisibility).toHaveBeenCalledTimes(1));
-    expect(setFolderVisibility).toHaveBeenCalledWith("f1", "public", FUTURE);
+    expect(setFolderVisibility.mock.calls[0].slice(0, 2)).toEqual(["f1", "public"]);
+    expect(setFolderVisibility.mock.calls[0][2]).toBeUndefined();
     expect(setVisibility).not.toHaveBeenCalled();
   });
 
@@ -169,21 +178,42 @@ describe("who can see it, inside the share dialog", () => {
     expect(screen.getByText(/1 person, and anyone$/)).toBeTruthy();
   });
 
-  test("changing the level sends the whole triple, with the date untouched", async () => {
-    // The server writes visibility, open editing and expiry together, so a call
-    // that left one out would clear it — ticking a box must not remove a date
-    // somebody set last week.
+  test("changing the level sends open editing as it stands, and no date", async () => {
+    // The server reads a missing open-editing flag as off, so it goes every
+    // time; it keeps a date the body does not name (SPEC §2), so that does not.
     renderShare({ visibility: UNLISTED });
     fireEvent.click(screen.getByRole("radio", { name: /public/i }));
     await waitFor(() => expect(setVisibility).toHaveBeenCalledTimes(1));
-    expect(setVisibility).toHaveBeenCalledWith("d1", "public", true, FUTURE);
+    expect(setVisibility.mock.calls[0].slice(0, 3)).toEqual(["d1", "public", true]);
+    expect(setVisibility.mock.calls[0][3]).toBeUndefined();
   });
 
   test("open editing rides along the same way", async () => {
     renderShare({ visibility: UNLISTED });
     fireEvent.click(screen.getByRole("checkbox", { name: /let anyone with an account edit/i }));
     await waitFor(() => expect(setVisibility).toHaveBeenCalledTimes(1));
-    expect(setVisibility).toHaveBeenCalledWith("d1", "unlisted", false, FUTURE);
+    expect(setVisibility.mock.calls[0].slice(0, 3)).toEqual(["d1", "unlisted", false]);
+    expect(setVisibility.mock.calls[0][3]).toBeUndefined();
+  });
+
+  test("a date that has passed does not stop the level changing", async () => {
+    // The reported failure: the stored date went back with every change, the
+    // server refused it as in the past, and nothing could be changed until the
+    // date was cleared.
+    renderShare({ visibility: { ...UNLISTED, expiresAt: Date.now() - DAY } });
+    fireEvent.click(screen.getByRole("radio", { name: /public/i }));
+    await waitFor(() => expect(setVisibility).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((screen.getByRole("radio", { name: /public/i }) as HTMLInputElement).checked).toBe(true));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  test("a folder's level changes the same way, without its date", async () => {
+    renderShare({ target: { ...DOC, kind: "folder", id: "f1" }, visibility: { ...UNLISTED, publicEdit: false, linkToken: "ftok", expiresAt: Date.now() - DAY } });
+    fireEvent.click(screen.getByRole("radio", { name: /public/i }));
+    await waitFor(() => expect(setFolderVisibility).toHaveBeenCalledTimes(1));
+    expect(setFolderVisibility.mock.calls[0].slice(0, 2)).toEqual(["f1", "public"]);
+    expect(setFolderVisibility.mock.calls[0][2]).toBeUndefined();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   test("a date is sent as the end of that day, and clearing it sends null", async () => {

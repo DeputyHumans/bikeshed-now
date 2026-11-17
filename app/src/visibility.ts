@@ -24,35 +24,36 @@ export function setVisibility(
   visibility: Visibility,
   publicEdit = false,
   /**
-   * Epoch milliseconds, or null for no expiry.
+   * Epoch milliseconds, null to clear the date, or left out to keep it.
    *
-   * Sent on EVERY call, including the ones that only change visibility, because
-   * the server writes the whole triple. Omitting it here would clear the date
-   * as a side effect of ticking a different box — which is the kind of thing
-   * nobody notices until the document is gone.
+   * Sent only when the date itself is being changed. The server keeps a date
+   * the body does not name (SPEC §2) and refuses one in the past, so echoing
+   * back a stored date that had since passed made every other change on the
+   * record fail until the date was cleared. `publicEdit` is different: the
+   * server reads it as false when it is missing, so it goes every time.
    */
-  expiresAt: number | null = null,
+  expiresAt?: number | null,
 ): Promise<VisibilityState> {
   return post<VisibilityState>(
     "/visibility",
-    { docId, visibility, publicEdit, expiresAt },
+    { docId, visibility, publicEdit, ...(expiresAt === undefined ? {} : { expiresAt }) },
     { forbidden: "Only the document owner can change who can see this." },
   );
 }
 
 /**
  * A folder's own level and expiry: what its link or public level opens beneath
- * it, to read (SPEC §17 "A folder's reach"). Both sent every time, as for a
- * document, and there is no open editing to send.
+ * it, to read (SPEC §17 "A folder's reach"). The date is sent only when it is
+ * being changed, as for a document, and there is no open editing to send.
  */
 export function setFolderVisibility(
   folderId: string,
   visibility: Visibility,
-  expiresAt: number | null = null,
+  expiresAt?: number | null,
 ): Promise<VisibilityState> {
   return post<Omit<VisibilityState, "publicEdit">>(
     "/visibility",
-    { folderId, visibility, expiresAt },
+    { folderId, visibility, ...(expiresAt === undefined ? {} : { expiresAt }) },
     { forbidden: "Only the folder's owner can change who can see what is in it." },
   ).then((s) => ({ ...s, publicEdit: false }));
 }

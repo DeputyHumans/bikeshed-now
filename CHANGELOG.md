@@ -8,6 +8,14 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A date that has passed no longer blocks every other change in Share.** The dialog sent the stored date back with each change of level or open editing, and the server refuses a date in the past, so until the date was cleared every change failed with "an expiry must be in the future". The dialog now sends a date only when you change the date, and `POST /visibility` parses one only when the body names it.
+- **Leaving the date out of a folder's `POST /visibility` keeps it**, as SPEC §2 says. The folder branch passed a date whether or not the body named one, so a level change from any client that left it out cleared the folder's date.
+- **`POST /visibility` with no body answers 400.** It answered 500.
+
 ## 0.36.1 — 2026-11-06
 
 ### Fixed

@@ -120,17 +120,19 @@ export function VisibilitySection({
   const [busy, setBusy] = useState(false);
 
   /**
-   * Every change sends the whole triple.
+   * The level and open editing go every time; the date only when it is the
+   * thing being changed.
    *
-   * The server writes visibility, open editing and expiry together, so a call
-   * that left one of them out would clear it. Reading the current value from
-   * `state` for the arguments not being changed is what keeps ticking a
-   * checkbox from quietly removing a date somebody set last week.
+   * The server reads a missing open-editing flag as off, so both of those are
+   * read from `state` when they are not the one changing. The date is the
+   * opposite: a body that names none keeps the stored one (SPEC §2), and a
+   * date that has passed is refused, so echoing it back from `state` would make
+   * every other change fail once the date had gone by.
    */
   const apply = async (
     visibility: Visibility,
     publicEdit: boolean,
-    expiresAt: number | null,
+    expiresAt?: number | null,
   ) => {
     setBusy(true);
     try {
@@ -170,7 +172,7 @@ export function VisibilitySection({
               value={option.value}
               checked={state.visibility === option.value}
               disabled={busy}
-              onChange={() => void apply(option.value, state.publicEdit, state.expiresAt)}
+              onChange={() => void apply(option.value, state.publicEdit)}
             />
             <Icon name={option.icon} />
             <span>
@@ -213,7 +215,7 @@ export function VisibilitySection({
               type="checkbox"
               checked={state.publicEdit}
               disabled={busy}
-              onChange={(e) => void apply(state.visibility, e.target.checked, state.expiresAt)}
+              onChange={(e) => void apply(state.visibility, e.target.checked)}
             />
             <label htmlFor="public-edit">
               <strong>Let anyone with an account edit this</strong>

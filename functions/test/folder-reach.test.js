@@ -488,3 +488,28 @@ test("filing into a shared folder says who beyond its members can now read it", 
   assert.deepEqual(moved.access.throughFolders.map((r) => [r.folderId, r.visibility]), [["top", "public"]]);
   assert.ok(w.store.get("public/loose"), "and it is in the public mirror at once");
 });
+
+// SPEC §2: "Omitting `expiresAt` preserves the current deadline; explicit
+// `null` clears it" — for a folder as for a document. The folder branch passed
+// the parsed value whether or not the body named one, so a level change from
+// any client that left the date out cleared it.
+for (const date of ["future", "past"]) test(`a folder's level changes without its ${date} date when the body names none`, async () => {
+  const at = NOW + (date === "future" ? DAY : -DAY);
+  const w = world();
+  w.store.set("folders/top", { ...w.store.get("folders/top"), visibility: "unlisted", linkToken: "a".repeat(22), expiresAt: Timestamp.fromMillis(at) });
+  const c = caller(w);
+  const changed = await c.post(setVisibility, OWNER, { folderId: "top", visibility: "public" });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.body.visibility, "public");
+  assert.equal(changed.body.expiresAt, at);
+  assert.equal(w.store.get("folders/top").expiresAt.toMillis(), at);
+  const cleared = await c.post(setVisibility, OWNER, { folderId: "top", visibility: "public", expiresAt: null });
+  assert.equal(cleared.status, 200);
+  assert.equal(w.store.get("folders/top").expiresAt, undefined);
+});
+
+test("a visibility request with no body is a 400, not a crash", async () => {
+  const c = caller(world());
+  const response = await c.post(setVisibility, OWNER, null);
+  assert.equal(response.status, 400);
+});

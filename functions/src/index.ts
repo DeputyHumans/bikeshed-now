@@ -922,9 +922,15 @@ export const setAccess = onRequest(MAILING, async (req, res) => {
 });
 
 /**
- * The web form remains a full replacement; MCP uses the shared sparse patch.
- * `{ folderId }` in place of `docId` sets a folder's own level and expiry,
- * which is what its reach opens beneath it (SPEC §13, §17).
+ * A sparse patch for the date, as MCP's is: a body that names no `expiresAt`
+ * leaves the stored one alone, and explicit `null` clears it (SPEC §2). The
+ * level and open editing are still sent whole. `{ folderId }` in place of
+ * `docId` sets a folder's own level and expiry, which is what its reach opens
+ * beneath it (SPEC §13, §17).
+ *
+ * Only a date that is sent is parsed. A past one is refused (`parseExpiry`), so
+ * a dialog that echoed back a date which has since passed could change nothing
+ * else on the record until somebody cleared it.
  */
 export const setVisibility = onRequest(PLAIN, async (req, res) => {
   noStore(res);
@@ -932,13 +938,14 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   const caller = await resolveCaller(req);
   if (!caller) { res.status(401).end(); return; }
   const body = jsonBody(req) as Record<string, unknown> | null;
-  const expiry = parseExpiry(body?.expiresAt);
-  if ("error" in expiry) { badRequest(res, expiry.error); return; }
+  const expiry = body !== null && typeof body === "object" && Object.hasOwn(body, "expiresAt") ? parseExpiry(body.expiresAt) : null;
+  if (expiry && "error" in expiry) { badRequest(res, expiry.error); return; }
+  const datePatch = expiry ? { expiresAt: expiry.value } : {};
   if (body?.docId === undefined && body?.folderId !== undefined) {
     const folderId = typeof body.folderId === "string" ? body.folderId : "";
     try {
       const result = await changeFolderVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, folderId, {
-        visibility: body.visibility, expiresAt: expiry.value,
+        visibility: body.visibility, ...datePatch,
       });
       const { visibility, linkToken, expiresAt } = result;
       res.status(200).json({ visibility, linkToken, expiresAt });
@@ -949,7 +956,7 @@ export const setVisibility = onRequest(PLAIN, async (req, res) => {
   try {
     const result = await changeVisibility({ db: db(), caller, actor: actorFrom(caller, req) }, id, {
       visibility: body?.visibility, publicEdit: body?.publicEdit === true,
-      ...(Object.prototype.hasOwnProperty.call(body, "expiresAt") ? { expiresAt: expiry.value } : {}),
+      ...datePatch,
     });
     const { visibility, publicEdit, linkToken, expiresAt } = result;
     res.status(200).json({ visibility, publicEdit, linkToken, expiresAt });
