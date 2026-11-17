@@ -59,7 +59,7 @@ describe("the expiry on the toolbar", () => {
     expect(version.textContent).toBe("v4");
     const next = version.nextElementSibling as HTMLElement;
     expect(next.classList.contains("expiry-chip")).toBe(true);
-    expect(next.textContent).toBe("Expires in 3 days");
+    expect(next.textContent).toBe("Goes private in 3 days");
   });
 
   test("is absent when the document never expires", () => {
@@ -70,7 +70,7 @@ describe("the expiry on the toolbar", () => {
   test("hands the owner's tap to whoever changes the date", () => {
     const onExpiry = vi.fn();
     renderToolbar({ expiresAt: Date.now() + 3 * DAY + HOUR, onExpiry });
-    fireEvent.click(screen.getByRole("button", { name: "Expires in 3 days" }));
+    fireEvent.click(screen.getByRole("button", { name: "Goes private in 3 days" }));
     expect(onExpiry).toHaveBeenCalledTimes(1);
   });
 });
@@ -236,18 +236,18 @@ describe("on a phone", () => {
   test("the version moves to the menu, and so does a date with time left in it", () => {
     phone(402);
     renderToolbar({ ...owner, expiresAt: Date.now() + 60 * DAY });
-    expect(screen.queryByRole("button", { name: /^Expires/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Goes private/ })).toBeNull();
     openMore();
     expect(screen.getByText("v3 · 4 min").className).toBe("menu-label");
-    expect(screen.getByRole("menuitem", { name: /^Expires/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /^Goes private/ })).toBeTruthy();
   });
 
   test("a date in its last week stays in view, and is not listed twice", () => {
     phone(402);
     renderToolbar({ ...owner, expiresAt: Date.now() + 3 * DAY });
-    expect(screen.getByRole("button", { name: /^Expires/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Goes private/ })).toBeTruthy();
     openMore();
-    expect(screen.queryByRole("menuitem", { name: /^Expires/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /^Goes private/ })).toBeNull();
   });
 
   test("at 320 px Present waits in the menu; at 360 px it has a slot", () => {

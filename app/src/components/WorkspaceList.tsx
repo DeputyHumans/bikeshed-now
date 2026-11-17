@@ -212,7 +212,7 @@ export function DocRow({
             Fork
           </span>
         ) : null}
-        <ExpiryChip expiresAt={doc.expiresAt} onOpen={onShare} />
+        <ExpiryChip expiresAt={doc.expiresAt} onOpen={onShare} level={doc.visibility ?? "private"} />
       </span>
       {location !== undefined ? <span role="cell" data-col="location" title={location}>{location}</span> : null}
       {reason !== undefined ? (

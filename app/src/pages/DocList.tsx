@@ -176,7 +176,7 @@ function DocCard({
             ones: a workspace is where somebody notices that a document goes
             away next Tuesday, and the only place they would without opening
             it. */}
-        <ExpiryChip expiresAt={doc.expiresAt} onOpen={onShare} />
+        <ExpiryChip expiresAt={doc.expiresAt} onOpen={onShare} level={doc.visibility ?? "private"} />
         {doc.stats?.views ? (
           <span className="doc-card-stat numeric">
             <Icon name="eye" size={12} /> {doc.stats.views}

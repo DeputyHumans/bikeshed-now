@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
-// When a document stops being readable, and how that is said (SPEC §17).
+// When a document's date makes it private, and how that is said (SPEC §17).
 
 import type { Timestamp } from "firebase/firestore";
+import type { Visibility } from "./types";
 
 /**
- * Expiry ends access to the CONTENT. It never deletes anything.
+ * A date makes a document PRIVATE. It never deletes anything.
  *
- * This product does not delete documents — that is a decision, stated in
- * docs/architecture/overview.md, not a missing button. So an expiry cannot mean removal,
- * and the interface must not imply it does: the bytes, the versions and the
- * comments all survive, and the owner can move the date or clear it.
+ * When the date passes, an hourly job makes the document private and clears
+ * the date: its link stops working, open editing goes off, and the people it
+ * was shared with by name keep it (ADR 0029). Until the job runs, at most an
+ * hour, it is its owner's alone. "Expire" reads as "delete" to almost
+ * everybody, so the interface never says it: the bytes, the versions and the
+ * comments all survive.
  *
- * The enforcement lives on the server, on the one path every byte takes. What
- * is here is the SAYING of it, in one place, so the workspace chip, the viewer
- * banner and the dialog cannot describe the same moment three different ways.
+ * The enforcement lives on the server. What is here is the SAYING of it, in
+ * one place, so the workspace chip, the viewer's toolbar and the dialog cannot
+ * describe the same moment three different ways. `level` is the document's own
+ * visibility where the caller knows it: on a document already private, a date
+ * changes nothing worth a chip.
  */
 
 /** Firestore hands back a Timestamp; the public projection carries a number. */
@@ -37,26 +42,29 @@ export function isExpired(
 const DAY = 24 * 60 * 60 * 1000;
 
 /**
- * How an expiry reads to a person, or null when there is nothing to say.
+ * How a date reads to a person, or null when there is nothing to say.
  *
  * Deliberately vague past a week and precise inside a day, which is the shape
- * of what somebody actually needs to know. "Expires in 43 days" is noise;
- * "Expires today" changes what they do next.
+ * of what somebody actually needs to know. "Goes private in 43 days" is noise;
+ * "Goes private today" changes what they do next. Past the date it is the
+ * hour before the job runs.
  */
 export function expiryLabel(
   value: Timestamp | number | null | undefined,
   nowMs: number = Date.now(),
+  level?: Visibility | null,
 ): string | null {
   const at = expiryMs(value);
   if (at === null) return null;
-  if (at <= nowMs) return "Expired";
+  if (at <= nowMs) return level === "private" ? "Date passed" : "Going private";
+  if (level === "private") return null;
 
   const left = at - nowMs;
-  if (left < DAY) return "Expires today";
+  if (left < DAY) return "Goes private today";
   const days = Math.floor(left / DAY);
-  if (days === 1) return "Expires tomorrow";
-  if (days < 14) return `Expires in ${days} days`;
-  return `Expires ${formatDay(at)}`;
+  if (days === 1) return "Goes private tomorrow";
+  if (days < 14) return `Goes private in ${days} days`;
+  return `Goes private on ${formatDay(at)}`;
 }
 
 /** A day as the app writes one: "Oct 29, 2026". `timeZone` for a day that is already a UTC date. */
@@ -72,33 +80,39 @@ export function formatDay(at: number, timeZone?: string): string {
 /**
  * The sentence behind the chip: its tooltip, and what a tap says to somebody
  * who cannot change the date. Two things it always does, whatever the state:
- * denies a deletion in those words, and tells the reader whose action this is
- * — the owner is the only person who can open an expired document, so "only
- * you can open it" is flatly untrue for anybody else, and the thing they
- * actually need is who to ask.
+ * denies a deletion in those words, and tells the reader where they stand —
+ * a reader cannot tell whether they hold the link or were named, so the
+ * sentence says what happens to each.
  */
 export function expiryExplanation(
   value: Timestamp | number | null | undefined,
   isOwner: boolean,
   nowMs: number = Date.now(),
+  level?: Visibility | null,
 ): string | null {
   const at = expiryMs(value);
   if (at === null) return null;
   if (at > nowMs) {
+    if (level === "private") return null;
     return isOwner
-      ? `Readable until ${formatDay(at)}. Nothing is deleted then — only you can open it after that, and it cannot be edited until you change or clear the date.`
-      : `Readable until ${formatDay(at)}. Nothing is deleted then — only its owner can open it after that.`;
+      ? `Shared until ${formatDay(at)}. Nothing is deleted then: it becomes private, its link stops working and open editing goes off, and the people you shared it with by name keep it.`
+      : `Shared until ${formatDay(at)}. Nothing is deleted then: it becomes private, a link to it stops working, and the people it is shared with by name keep it.`;
+  }
+  if (level === "private") {
+    return isOwner
+      ? "Its date has passed and is cleared within the hour. Nothing has been deleted. Until then only you can open it; then the people you shared it with have it again."
+      : "Its date has passed. Nothing has been deleted, and you can open it again within the hour.";
   }
   return isOwner
-    ? "This document has expired. Nothing has been deleted — only you can open it now, and it cannot be edited until you change or clear the date."
-    : "This document has expired and is no longer readable. Nothing has been deleted — its owner can restore it by changing the date.";
+    ? "Its date has passed, and it becomes private within the hour. Nothing has been deleted. Until then only you can open it; change or clear the date to keep it shared."
+    : "Its date has passed, and it is becoming private. Nothing has been deleted. If it was shared with you by name, you can open it again within the hour; a link to it has stopped working.";
 }
 
-/** True inside the last week, which is when a chip should start insisting. */
 /**
- * A folder's date, which ends its link and its public level and nothing else
- * (SPEC §17 "A folder's reach"). It must not say "expires": the folder, its
- * documents and everybody it is shared with by name are untouched.
+ * A folder's date, which makes the folder private: its link and its public
+ * level end, and nothing else (SPEC §17 "A folder's reach"). It must not say
+ * "expires": the folder, its documents and everybody it is shared with by name
+ * are untouched.
  */
 export function sharingLabel(
   value: Timestamp | number | null | undefined,
@@ -125,10 +139,10 @@ export function sharingExplanation(
   if (at === null) return null;
   const who = isOwner ? "the people you shared it with" : "everyone it is shared with by name";
   if (at > nowMs) {
-    return `Its link works until ${formatDay(at)}. Nothing is deleted then: the link stops working, and ${who} keep their access.`;
+    return `Its link works until ${formatDay(at)}. Nothing is deleted then: the folder becomes private, the link stops working for good, and ${who} keep their access.`;
   }
   return isOwner
-    ? `Its link stopped working on ${formatDay(at)}. Nothing has been deleted, and ${who} still have access. Change or clear the date to share it again.`
+    ? `Its link stopped working on ${formatDay(at)}, and the folder becomes private within the hour. Nothing has been deleted, and ${who} still have access. Change or clear the date to keep it shared.`
     : `Its link stopped working on ${formatDay(at)}. Nothing has been deleted, and ${who} still have access.`;
 }
 
@@ -147,6 +161,7 @@ export function throughFolderExplanation(
     : "The shared link to this folder has stopped working. Nothing has been deleted. Ask whoever shared it for a new link.";
 }
 
+/** True inside the last week, which is when a chip should start insisting. */
 export function expiringSoon(
   value: Timestamp | number | null | undefined,
   nowMs: number = Date.now(),
@@ -157,10 +172,10 @@ export function expiringSoon(
 
 /**
  * `<input type="date">` speaks "YYYY-MM-DD" and means MIDNIGHT — the instant a
- * day begins. A person choosing the first of October means the document is
- * readable through that day, so the value is the END of it: taking midnight
- * literally would expire it a day early, and the report would be that expiry is
- * off by one rather than that a date input has a convention.
+ * day begins. A person choosing the first of October means the document stays
+ * shared through that day, so the value is the END of it: taking midnight
+ * literally would make it private a day early, and the report would be that
+ * expiry is off by one rather than that a date input has a convention.
  *
  * Local time, because the person picking it is thinking in theirs.
  */

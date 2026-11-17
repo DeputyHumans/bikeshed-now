@@ -46,12 +46,21 @@ describe("reading a stored expiry", () => {
 describe("what it says", () => {
   test("precise inside a day, vague beyond a fortnight", () => {
     expect(expiryLabel(null, NOW)).toBeNull();
-    expect(expiryLabel(NOW - HOUR, NOW)).toBe("Expired");
-    expect(expiryLabel(NOW + HOUR, NOW)).toBe("Expires today");
-    expect(expiryLabel(NOW + DAY + HOUR, NOW)).toBe("Expires tomorrow");
-    expect(expiryLabel(NOW + 5 * DAY, NOW)).toBe("Expires in 5 days");
+    expect(expiryLabel(NOW - HOUR, NOW)).toBe("Going private");
+    expect(expiryLabel(NOW + HOUR, NOW)).toBe("Goes private today");
+    expect(expiryLabel(NOW + DAY + HOUR, NOW)).toBe("Goes private tomorrow");
+    expect(expiryLabel(NOW + 5 * DAY, NOW)).toBe("Goes private in 5 days");
     // Past a fortnight a countdown is noise, so it becomes a date.
-    expect(expiryLabel(NOW + 60 * DAY, NOW)).toMatch(/^Expires \w/);
+    expect(expiryLabel(NOW + 60 * DAY, NOW)).toMatch(/^Goes private on \w/);
+  });
+
+  test("on a document already private, a date to come says nothing, and a passed one says so", () => {
+    // The date only makes it private (SPEC §17): on a private document there
+    // is nothing to warn about, and past the date it waits for the job.
+    expect(expiryLabel(NOW + 5 * DAY, NOW, "private")).toBeNull();
+    expect(expiryLabel(NOW - HOUR, NOW, "private")).toBe("Date passed");
+    expect(expiryLabel(NOW + 5 * DAY, NOW, "unlisted")).toBe("Goes private in 5 days");
+    expect(expiryExplanation(NOW + 5 * DAY, true, NOW, "private")).toBeNull();
   });
 
   test("soon means the last week, and never means already gone", () => {
@@ -75,19 +84,22 @@ describe("what it explains", () => {
 
   test("before the date, says until when — the same day the label shows", () => {
     const at = NOW + 60 * DAY;
-    const day = (expiryLabel(at, NOW) as string).replace(/^Expires /, "");
-    expect(expiryExplanation(at, true, NOW)).toContain(`Readable until ${day}.`);
-    expect(expiryExplanation(at, false, NOW)).toContain(`Readable until ${day}.`);
+    const day = (expiryLabel(at, NOW) as string).replace(/^Goes private on /, "");
+    expect(expiryExplanation(at, true, NOW)).toContain(`Shared until ${day}.`);
+    expect(expiryExplanation(at, false, NOW)).toContain(`Shared until ${day}.`);
   });
 
-  test("tells the owner it is theirs to undo, and a reader who to ask", () => {
-    // The owner is the only person who can open an expired document, so "only
-    // you can open it" is flatly untrue for anybody else — and the thing a
-    // reader actually needs is who can fix it.
-    expect(expiryExplanation(NOW + DAY, true, NOW)).toMatch(/only you can open it/);
-    expect(expiryExplanation(NOW + DAY, false, NOW)).toMatch(/only its owner can open it/);
-    expect(expiryExplanation(NOW - DAY, true, NOW)).toMatch(/only you can open it/i);
-    expect(expiryExplanation(NOW - DAY, false, NOW)).toMatch(/its owner can restore it/);
+  test("says who keeps it, and in the hour before the job, who can open it meanwhile", () => {
+    // It becomes private: the people named keep it, and a link stops. Until
+    // the job runs only the owner can open it, so that is said to the owner
+    // alone; a reader cannot tell whether they were named or hold the link,
+    // so the reader is told what happens to each.
+    expect(expiryExplanation(NOW + DAY, true, NOW)).toMatch(/its link stops working and open editing goes off, and the people you shared it with by name keep it/);
+    expect(expiryExplanation(NOW + DAY, false, NOW)).toMatch(/a link to it stops working, and the people it is shared with by name keep it/);
+    expect(expiryExplanation(NOW - DAY, true, NOW)).toMatch(/within the hour.*only you can open it; change or clear the date/);
+    expect(expiryExplanation(NOW - DAY, false, NOW)).toMatch(/shared with you by name, you can open it again within the hour; a link to it has stopped working/);
+    expect(expiryExplanation(NOW - DAY, true, NOW, "private")).toMatch(/only you can open it; then the people you shared it with have it again/);
+    expect(expiryExplanation(NOW - DAY, false, NOW, "private")).toMatch(/open it again within the hour/);
   });
 
   test("never claims anything was deleted", () => {
@@ -96,9 +108,9 @@ describe("what it explains", () => {
     // all survive. Every sentence has to say so, or it teaches the wrong
     // model. The one permitted use of the word is the denial, so it is
     // removed before checking that nothing else claims a removal.
-    for (const at of [NOW + DAY, NOW - DAY]) {
+    for (const [at, level] of [[NOW + DAY, "public"], [NOW - DAY, "unlisted"], [NOW - DAY, "private"]] as const) {
       for (const isOwner of [true, false]) {
-        const text = expiryExplanation(at, isOwner, NOW) as string;
+        const text = expiryExplanation(at, isOwner, NOW, level) as string;
         expect(text).toMatch(/nothing (is|has been) deleted/i);
         const rest = text.replace(/nothing (is|has been) deleted/i, "");
         expect(rest).not.toMatch(/deleted|removed|gone/i);

@@ -149,6 +149,7 @@ export function VisibilitySection({
   };
 
   const link = isFolder ? folderShareUrl(target.id, state) : shareUrl(target.id, state);
+  const openFolders = inheritedReach.filter((r) => r.expiresAt === null || !isExpired(r.expiresAt));
 
   return (
     <section aria-labelledby="visibility-heading" className="visibility-section">
@@ -243,22 +244,22 @@ export function VisibilitySection({
 
       {!isFolder ? <ReachNote reach={inheritedReach} /> : null}
 
-      {/* Expiry applies at every visibility, which is why it sits outside the
-          branches above: a private document shared with six reviewers is
-          exactly the kind that should stop being readable after the review. */}
-      {/* A folder's date ends only what its level opens, so it means nothing
-          on a private folder — unless one is already set and needs clearing. */}
-      {!isFolder || state.visibility !== "private" || state.expiresAt !== null ? (
+      {/* A date makes a shared document or folder private (SPEC §17), so on
+          one that is private already it does nothing worth setting — unless
+          one is set and needs clearing. */}
+      {state.visibility !== "private" || state.expiresAt !== null ? (
       <div className="expiry-row">
         <label htmlFor="expires-on">
-          <strong>{isFolder ? "Stop sharing the link after" : "Stop being readable after"}</strong>
+          <strong>Make private after</strong>
           <span className="field-hint" style={{ display: "block" }}>
             {/* The single most important sentence in this dialog. "Expire"
                 reads as "delete" to almost everybody, and this product does not
                 delete documents at all. */}
-            {isFolder
-              ? "Nothing is deleted. After this date the link stops working and the folder stops being public. The people you shared it with keep their access."
-              : "Nothing is deleted. After this date only you can open it, and it cannot be edited until you change or clear the date."}
+            {state.visibility === "private"
+              ? "It is private already, so this date does nothing useful. Clear it."
+              : isFolder
+                ? "Nothing is deleted. On this date the folder becomes private: its link stops working for good and it stops being public. The people you shared it with keep their access, and the date is cleared."
+                : "Nothing is deleted. On this date it becomes private: its link stops working for good and open editing goes off. The people you shared it with by name keep it, and the date is cleared."}
           </span>
         </label>
         <div className="link-row">
@@ -287,8 +288,15 @@ export function VisibilitySection({
             </button>
           ) : null}
         </div>
-        {state.expiresAt !== null ? (
-          <p className="field-hint">{isFolder ? sharingLabel(state.expiresAt) : expiryLabel(state.expiresAt)}</p>
+        {state.expiresAt !== null && (isFolder ? sharingLabel(state.expiresAt) : expiryLabel(state.expiresAt, Date.now(), state.visibility)) ? (
+          <p className="field-hint">{isFolder ? sharingLabel(state.expiresAt) : expiryLabel(state.expiresAt, Date.now(), state.visibility)}</p>
+        ) : null}
+        {/* Private on its own is not private through a shared folder above it
+            (ADR 0019), and a date that only makes it private leaves that. */}
+        {!isFolder && state.expiresAt !== null && openFolders.length > 0 ? (
+          <p className="field-hint" data-reach-warning="">
+            Private still leaves it readable through {openFolders.map((r) => `“${r.path}”`).join(", ")}. Change that on the folder.
+          </p>
         ) : null}
       </div>
       ) : null}

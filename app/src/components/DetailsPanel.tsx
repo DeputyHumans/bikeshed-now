@@ -108,7 +108,7 @@ export function DetailsPanel({
 
         {expiresAt !== null ? (
           <>
-            <dt>{isExpired(expiresAt) ? "Expired" : "Expires"}</dt>
+            <dt>{isExpired(expiresAt) ? "Date passed" : "Goes private"}</dt>
             <dd>{formatDay(expiresAt)}</dd>
           </>
         ) : null}

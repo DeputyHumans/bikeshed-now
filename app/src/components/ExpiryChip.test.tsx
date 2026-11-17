@@ -13,7 +13,7 @@ const DAY = 24 * HOUR;
 // cannot round "3 days" down to "2 days".
 const IN_3_DAYS = () => Date.now() + 3 * DAY + HOUR;
 
-function renderChip(props: { expiresAt: number | null; onOpen?: () => void }) {
+function renderChip(props: { expiresAt: number | null; onOpen?: () => void; level?: "private" | "unlisted" | "public" }) {
   return render(
     <ToastProvider>
       <ExpiryChip {...props} />
@@ -32,7 +32,7 @@ describe("the expiry chip", () => {
     // label carries the same fact in words.
     const { container, rerender } = renderChip({ expiresAt: IN_3_DAYS() });
     const chip = () => container.querySelector(".expiry-chip") as HTMLElement;
-    expect(chip().textContent).toBe("Expires in 3 days");
+    expect(chip().textContent).toBe("Goes private in 3 days");
     expect(chip().hasAttribute("data-soon")).toBe(true);
     expect(chip().hasAttribute("data-expired")).toBe(false);
 
@@ -41,7 +41,7 @@ describe("the expiry chip", () => {
         <ExpiryChip expiresAt={Date.now() + 30 * DAY} />
       </ToastProvider>,
     );
-    expect(chip().textContent).toMatch(/^Expires /);
+    expect(chip().textContent).toMatch(/^Goes private on /);
     expect(chip().hasAttribute("data-soon")).toBe(false);
 
     rerender(
@@ -49,15 +49,27 @@ describe("the expiry chip", () => {
         <ExpiryChip expiresAt={Date.now() - DAY} />
       </ToastProvider>,
     );
-    expect(chip().textContent).toBe("Expired");
+    expect(chip().textContent).toBe("Going private");
     expect(chip().hasAttribute("data-expired")).toBe(true);
+  });
+
+  test("on a document already private, says nothing until the date passes", () => {
+    // Its date only makes it private, so a date to come changes nothing.
+    const { container, rerender } = renderChip({ expiresAt: IN_3_DAYS(), level: "private" });
+    expect(container.querySelector(".expiry-chip")).toBeNull();
+    rerender(
+      <ToastProvider>
+        <ExpiryChip expiresAt={Date.now() - HOUR} level="private" />
+      </ToastProvider>,
+    );
+    expect((container.querySelector(".expiry-chip") as HTMLElement).textContent).toBe("Date passed");
   });
 
   test("is a button named by its label, with the explanation on hover", () => {
     // The label is hidden on the narrowest screens; the accessible name is not.
     const at = IN_3_DAYS();
     renderChip({ expiresAt: at });
-    const chip = screen.getByRole("button", { name: "Expires in 3 days" });
+    const chip = screen.getByRole("button", { name: "Goes private in 3 days" });
     expect(chip.getAttribute("title")).toBe(expiryExplanation(at, false));
   });
 
@@ -65,7 +77,7 @@ describe("the expiry chip", () => {
     const at = IN_3_DAYS();
     const onOpen = vi.fn();
     renderChip({ expiresAt: at, onOpen });
-    const chip = screen.getByRole("button", { name: "Expires in 3 days" });
+    const chip = screen.getByRole("button", { name: "Goes private in 3 days" });
     // Handed the dialog, so the explanation is the owner's.
     expect(chip.getAttribute("title")).toBe(expiryExplanation(at, true));
     fireEvent.click(chip);
@@ -78,7 +90,7 @@ describe("the expiry chip", () => {
     // empty frame needs is that nothing was deleted and who can restore it.
     const at = Date.now() - DAY;
     renderChip({ expiresAt: at });
-    fireEvent.click(screen.getByRole("button", { name: "Expired" }));
+    fireEvent.click(screen.getByRole("button", { name: "Going private" }));
     expect(screen.getByRole("status").textContent).toContain(expiryExplanation(at, false));
   });
 });

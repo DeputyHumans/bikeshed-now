@@ -149,7 +149,7 @@ describe("who can see it, inside the share dialog", () => {
     expect(screen.getByText(/documents other people filed here, and anything filed here later/i)).toBeTruthy();
     expect((screen.getByLabelText("Share link") as HTMLInputElement).value).toBe(folderShareUrl("f1", FOLDER_LINK));
     expect(folderShareUrl("f1", FOLDER_LINK)).toContain("/folder/f1?k=ftok");
-    expect(screen.getByText(/the link stops working and the folder stops being public/i)).toBeTruthy();
+    expect(screen.getByText(/the folder becomes private: its link stops working for good/i)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: /public/i }));
     await waitFor(() => expect(setFolderVisibility).toHaveBeenCalledTimes(1));
@@ -245,15 +245,33 @@ describe("who can see it, inside the share dialog", () => {
     expect(screen.getByRole("status").textContent).toContain("Link copied");
   });
 
-  test("a private document still has the date, and nothing that only a link needs", () => {
-    // Expiry applies at every level: a private document shared with six
-    // reviewers is exactly the kind that should stop being readable after
-    // the review.
+  test("a private document has no date to set, and nothing that only a link needs", () => {
+    // A date makes it private (SPEC §17), and it is private already.
     renderShare({ visibility: PRIVATE });
-    expect(document.querySelector("#expires-on")).toBeTruthy();
+    expect(document.querySelector("#expires-on")).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByLabelText("Share link")).toBeNull();
     expect(screen.queryByText(/takes up to five minutes/i)).toBeNull();
+  });
+
+  test("a private document with a date left on it says so, and offers to clear it", () => {
+    renderShare({ visibility: { ...PRIVATE, expiresAt: FUTURE } });
+    expect(document.querySelector("#expires-on")).toBeTruthy();
+    expect(screen.getByText(/it is private already, so this date does nothing useful/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+  });
+
+  test("a shared document's date says what it does, and who keeps it", () => {
+    renderShare({ visibility: UNLISTED });
+    expect(screen.getByText("Make private after")).toBeTruthy();
+    expect(screen.getByText(/on this date it becomes private: its link stops working for good and open editing goes off\. the people you shared it with by name keep it/i)).toBeTruthy();
+  });
+
+  test("a date on a document a shared folder reaches says the folder still reaches it", async () => {
+    // Private on its own is not private through a folder above (ADR 0019).
+    inheritedAccess.mockResolvedValueOnce({ grants: [], reach: [{ folderId: "eng", path: "Engineering", visibility: "public", expiresAt: null }] });
+    renderShare({ visibility: UNLISTED });
+    expect(await screen.findByText(/private still leaves it readable through “Engineering”/i)).toBeTruthy();
   });
 
   test("the count of people widens to whoever else the level lets in", async () => {

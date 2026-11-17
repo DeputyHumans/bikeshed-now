@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// When a document stops being readable, said as a chip (SPEC §17).
+// When a document's date makes it private, said as a chip (SPEC §17).
 
 import { Icon } from "./Icon";
 import { useToast } from "./Toast";
@@ -12,7 +12,7 @@ import {
   sharingLabel,
   throughFolderExplanation,
 } from "../expiry";
-import type { DocMeta } from "../types";
+import type { DocMeta, Visibility } from "../types";
 
 /**
  * One chip for the workspace card and the viewer's toolbar.
@@ -36,15 +36,18 @@ export function expiryWords(
   expiresAt: Parameters<typeof expiryLabel>[0],
   of: "document" | "folder" | "folder-link",
   canChange: boolean,
+  /** The document's own level, where known: on a private one a date to come says nothing. */
+  level?: Visibility | null,
 ): { label: string; explanation: string } | null {
-  const label = of === "document" ? expiryLabel(expiresAt) : sharingLabel(expiresAt);
+  const now = Date.now();
+  const label = of === "document" ? expiryLabel(expiresAt, now, level) : sharingLabel(expiresAt, now);
   if (!label) return null;
   const explanation = (
     of === "folder"
-      ? sharingExplanation(expiresAt, canChange)
+      ? sharingExplanation(expiresAt, canChange, now)
       : of === "folder-link"
-        ? throughFolderExplanation(expiresAt)
-        : expiryExplanation(expiresAt, canChange)
+        ? throughFolderExplanation(expiresAt, now)
+        : expiryExplanation(expiresAt, canChange, now, level)
   ) as string;
   return { label, explanation };
 }
@@ -53,6 +56,7 @@ export function ExpiryChip({
   expiresAt,
   onOpen,
   of = "document",
+  level,
 }: {
   expiresAt: DocMeta["expiresAt"] | number | null;
   /** The owner's tap. Only an owner is handed the dialog, so this also decides the wording. */
@@ -63,9 +67,11 @@ export function ExpiryChip({
    * link is told when THEIR link stops (SPEC §17 "A folder's reach").
    */
   of?: "document" | "folder" | "folder-link";
+  /** The document's own level, where the caller knows it. */
+  level?: Visibility | null;
 }) {
   const toast = useToast();
-  const words = expiryWords(expiresAt, of, onOpen !== undefined);
+  const words = expiryWords(expiresAt, of, onOpen !== undefined, level);
   if (!words) return null;
   const { label, explanation } = words;
 

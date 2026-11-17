@@ -1116,6 +1116,7 @@ export function DocViewer() {
           // carries the date for (SPEC §17).
           expiresAt={doc.meta?.expiresAt ?? doc.publicDoc?.expiresAt ?? null}
           expiryOf={throughFolder ? "folder-link" : "document"}
+          expiryLevel={doc.meta ? doc.meta.visibility ?? "private" : doc.publicDoc?.visibility ?? null}
           onExpiry={isOwner ? () => setDialog("share") : undefined}
           peers={presence.peers}
           following={presence.following}

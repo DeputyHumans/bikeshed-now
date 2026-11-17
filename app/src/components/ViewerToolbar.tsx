@@ -17,7 +17,7 @@ import { useToast } from "./Toast";
 import type { MenuEntry } from "./Menu";
 import type { Lineage } from "../forks";
 import type { Peer } from "../presence";
-import type { DocMeta, FolderMeta } from "../types";
+import type { DocMeta, FolderMeta, Visibility } from "../types";
 
 export type PhoneAction = "edit" | "share" | "fork" | "slides" | "present";
 
@@ -104,6 +104,7 @@ export function ViewerToolbar({
   onDetails,
   expiresAt,
   expiryOf = "document",
+  expiryLevel,
   onExpiry,
   peers,
   following,
@@ -147,6 +148,8 @@ export function ViewerToolbar({
   expiresAt?: DocMeta["expiresAt"] | number | null;
   /** Whose date that is: the document's, or the folder link this reader came through. */
   expiryOf?: "document" | "folder-link";
+  /** The document's own level, which decides what its date will do. */
+  expiryLevel?: Visibility | null;
   /** The owner's tap on the expiry chip. The toolbar does not know which dialog it opens. */
   onExpiry?: () => void;
   peers: Peer[];
@@ -256,7 +259,7 @@ export function ViewerToolbar({
       slides: slidesAction,
       present: presentAction,
     };
-    const expiry = expiryWords(expiresAt ?? null, expiryOf, onExpiry !== undefined);
+    const expiry = expiryWords(expiresAt ?? null, expiryOf, onExpiry !== undefined, expiryLevel);
     const urgent = isExpired(expiresAt ?? null) || expiringSoon(expiresAt ?? null);
     const onMenu: Partial<Record<PhoneAction, MenuEntry>> = {
       edit: { id: "m-edit", label: editing ? "Stop editing" : "Edit", onSelect: onToggleEdit },
@@ -307,7 +310,7 @@ export function ViewerToolbar({
           <Breadcrumb folderId={folderId} folders={folders} current={title} rootTo={rootTo} />
         </div>
         {/* The one chip that stays: a date in its last week is worth the room. */}
-        {urgent ? <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} of={expiryOf} /> : null}
+        {urgent ? <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} of={expiryOf} level={expiryLevel} /> : null}
         <div className="viewer-account">
           <AccountMenu extra={goTo} />
         </div>
@@ -348,7 +351,7 @@ export function ViewerToolbar({
       {/* Beside the version rather than a banner above the document: a date
           is a fact about this document, and for most of its life not an
           urgent one. */}
-      <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} of={expiryOf} />
+      <ExpiryChip expiresAt={expiresAt ?? null} onOpen={onExpiry} of={expiryOf} level={expiryLevel} />
       {onOpenForks ? (
         <ForkChip
           forked={forked === true}
