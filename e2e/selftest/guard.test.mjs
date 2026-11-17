@@ -28,9 +28,13 @@ import { DEFAULT_POLICY, EMAIL_ROUTES, TRIGGER_COVERAGE, UNKNOWN_TOOL_PREFIX, cr
 import { createHttp } from "../lib/http.mjs";
 import { runCli } from "../lib/cli.mjs";
 import { tempDir } from "./helpers/tmp.mjs";
+import { endpointSource, toolSource } from "./helpers/sources.mjs";
 
-const INDEX_TS = readFileSync(join(REPO_ROOT, "functions", "src", "index.ts"), "utf8");
-const TOOLS_TS = ["tools.ts", "management.ts"].map(name => readFileSync(join(REPO_ROOT, "functions", "src", "mcp", name), "utf8")).join("\n");
+// Every endpoint module and every tool module, never one file by name: a parse
+// that misses the file a function moved to finds fewer functions, and the gaps
+// it would have reported for them close without a word.
+const INDEX_TS = endpointSource();
+const TOOLS_TS = toolSource();
 const FIREBASE_JSON = JSON.parse(readFileSync(join(REPO_ROOT, "firebase.json"), "utf8"));
 
 const EMAIL_HELPERS = ["sendInvitations", "sendCommentNotice", "sendVerificationCode", "sendEmail"];
@@ -59,6 +63,15 @@ function blocks(text) {
 
 const calls = (text, names) => names.some((n) => new RegExp(`\\b${n}\\s*[(<]`).test(text));
 
+/**
+ * A helper is any declaration that is not itself a deployed function (or, for
+ * the tools, not a tool table). Exported or not: a constant like MAILING, or a
+ * helper two endpoint modules share, is exported from where it lives, and
+ * dropping it would drop every function that reaches email only through it.
+ */
+const deployed = (b) => /^export const \w+ = on(?:Request|Document\w+|Schedule)\(/.test(b.text);
+const toolTable = (b) => /\n  \{\n    name: "/.test(b.text);
+
 /** Names that transitively reach `seeds` (calls) or match `re`, through local functions. */
 function closure(all, seeds, re) {
   const reach = new Set(seeds);
@@ -78,8 +91,8 @@ function closure(all, seeds, re) {
 
 function mailingFunctions() {
   const all = blocks(INDEX_TS);
-  const secretConsts = all.filter((b) => !b.exported && /RESEND_API_KEY/.test(b.text)).map((b) => b.name);
-  const reach = closure(all.filter((b) => !b.exported), EMAIL_HELPERS);
+  const secretConsts = all.filter((b) => !deployed(b) && /RESEND_API_KEY/.test(b.text)).map((b) => b.name);
+  const reach = closure(all.filter((b) => !deployed(b)), EMAIL_HELPERS);
   return all
     .filter((b) => b.exported && /\bon(Request|Document\w+)\(/.test(b.text))
     .filter((b) => /RESEND_API_KEY/.test(b.text) || secretConsts.some((c) => new RegExp(`\\b${c}\\b`).test(b.text)) || calls(b.text, [...reach]))
@@ -88,7 +101,7 @@ function mailingFunctions() {
 
 function commentWritingEndpoints() {
   const all = blocks(INDEX_TS);
-  const reach = closure(all.filter((b) => !b.exported), COMMENT_WRITERS, COMMENT_WRITE_RE);
+  const reach = closure(all.filter((b) => !deployed(b)), COMMENT_WRITERS, COMMENT_WRITE_RE);
   return all.filter((b) => b.exported && /\bonRequest\(/.test(b.text) && (calls(b.text, [...reach]) || COMMENT_WRITE_RE.test(b.text))).map((b) => b.name);
 }
 
@@ -99,7 +112,7 @@ function toolBlocks() {
 }
 
 function commentWritingTools() {
-  const helpers = closure(blocks(TOOLS_TS).filter((b) => !b.exported), COMMENT_WRITERS, COMMENT_WRITE_RE);
+  const helpers = closure(blocks(TOOLS_TS).filter((b) => !toolTable(b)), COMMENT_WRITERS, COMMENT_WRITE_RE);
   return toolBlocks().filter((t) => calls(t.text, [...helpers]) || COMMENT_WRITE_RE.test(t.text)).map((t) => t.name);
 }
 
@@ -164,16 +177,20 @@ async function parity(policy) {
 }
 
 test("the parsers find what is really there (a parser that finds nothing would pass vacuously)", () => {
-  const mailing = mailingFunctions().map((f) => f.name).sort();
-  for (const known of ["setAccess", "setFolderAccess", "verifyEmail", "manageTeamMembers", "onCommentCreated"]) {
-    assert.ok(mailing.includes(known), `${known} found as email-capable (found: ${mailing.join(", ")})`);
-  }
+  // Exactly, not "at least these": a set that shrinks is a guard that stopped
+  // looking, and parity cannot report a gap for a function it never found.
+  // purgeTrash and mcp reach email only through MAILING. A new email-capable
+  // function belongs here, and in the policy, on purpose.
+  assert.deepEqual(
+    mailingFunctions().map((f) => f.name).sort(),
+    ["manageTeamMembers", "mcp", "onCommentCreated", "purgeTrash", "setAccess", "setFolderAccess", "verifyEmail"],
+  );
   assert.equal(toolBlocks().length, 36, "36 tool blocks across the MCP modules");
-  const writers = commentWritingTools().sort();
-  for (const known of ["add_comment", "reply_to_comment", "resolve_thread", "reopen_thread", "suggest_edit", "revise_suggestion", "withdraw_suggestion", "accept_suggestion", "reject_suggestion"]) {
-    assert.ok(writers.includes(known), `${known} found as comment-writing (found: ${writers.join(", ")})`);
-  }
-  assert.ok(!writers.includes("get_comments") && !writers.includes("publish_document"), "readers and publishers are not comment writers");
+  assert.deepEqual(
+    commentWritingTools().sort(),
+    ["accept_suggestion", "add_comment", "reject_suggestion", "reopen_thread", "reply_to_comment", "resolve_thread", "revise_suggestion", "suggest_edit", "withdraw_suggestion"],
+    "readers and publishers are not comment writers",
+  );
   assert.deepEqual(commentWritingEndpoints(), ["manageSuggestion"]);
 });
 

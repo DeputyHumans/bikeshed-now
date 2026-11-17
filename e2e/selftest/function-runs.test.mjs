@@ -19,7 +19,8 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FIRESTORE_TRIGGERS, caseFunctionRuns, functionRuns, logFile, logMark } from "../lib/logs.mjs";
-import { E2E_DIR, E2E_TMP, OUT_DIR, REPO_ROOT, ensureDir } from "../lib/paths.mjs";
+import { E2E_DIR, E2E_TMP, OUT_DIR, ensureDir } from "../lib/paths.mjs";
+import { endpointSource } from "./helpers/sources.mjs";
 
 const WRITER = join(E2E_DIR, "selftest", "helpers", "fn-runs-writer.mjs");
 const runId = `selftest-fnruns-${process.pid}`;
@@ -289,8 +290,8 @@ test("caseFunctionRuns is exact on a window that began with nothing in flight, t
   assert.deepEqual([empty.runs, empty.peakAny, empty.exact], [{}, 0, true]);
 });
 
-test("FIRESTORE_TRIGGERS is every Firestore trigger of functions/src/index.ts, and every other function there answers HTTP or runs on a schedule", () => {
-  const src = readFileSync(join(REPO_ROOT, "functions", "src", "index.ts"), "utf8");
+test("FIRESTORE_TRIGGERS is every Firestore trigger of the endpoint sources, and every other function there answers HTTP or runs on a schedule", () => {
+  const src = endpointSource();
   const kinds = [...src.matchAll(/^export const (\w+) = (\w+)\(/gm)].map(([, name, kind]) => ({ name, kind }));
   assert.ok(kinds.length >= 30, `the exports were read (${kinds.length})`);
   const triggers = kinds.filter((k) => /^onDocument(Created|Written|Updated|Deleted)$/.test(k.kind)).map((k) => k.name).sort();

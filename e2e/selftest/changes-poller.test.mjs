@@ -23,6 +23,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { CURSOR_VERSION, EVENTS_SOURCE, POLL_FINISH_MS, POLL_INTERVAL_MS, compareRecorded, cursorPosition, eventAt, feedAt, feedToLogIds, logAfter, startPoller } from "../lib/changes.mjs";
 import { checkI15 } from "../lib/invariants.mjs";
 import { REPO_ROOT } from "../lib/paths.mjs";
+import { toolSource } from "./helpers/sources.mjs";
 
 const DOC = "e2e-0poll-doc-abcd";
 const TARGET = Object.freeze({ kind: "local", runId: "2610130900-poll" });
@@ -144,7 +145,7 @@ test("pinned to the product: encodeCursor's fields and version, decodeCursor's s
   assert.match(feed, /\.\.\.\(v\.version \? \{ version: v\.version \} : \{\}\),\s*\.\.\.\(v\.threadId \? \{ threadId: v\.threadId \} : \{\}\),/);
   assert.match(feed, /Object\.assign\(item, \{ commentId: v\.commentId, by: c\.authorEmail, body: c\.body \}\);/);
   assert.match(feed, /const at = \(v\.at as admin\.firestore\.Timestamp \| undefined\)\?\.toDate\?\.\(\)\.toISOString\(\) \?\? null;/);
-  const tools = readFileSync(join(REPO_ROOT, "functions/src/mcp/tools.ts"), "utf8");
+  const tools = toolSource();
   assert.match(tools, /const events = await describeEvents\(ctx\.db, ref, ctx\.caller, visible, read\);/, "get_changes renders through the shared feed");
   assert.match(tools, /const cursor = encodeCursor\(last \? \{ docId: ref\.id, at: last\.data\(\)\.at, id: last\.id \} : from\);/, "a quiet poll gives back the cursor it was given");
   assert.deepEqual([POLL_INTERVAL_MS, POLL_FINISH_MS], [400, 60_000]);
