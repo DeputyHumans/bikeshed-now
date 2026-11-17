@@ -51,6 +51,8 @@ Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash
 
 A document of several files is a `.zip` with `index.html` or `index.md` at its root. `update` with a `.zip` replaces every file; `update` with one `.md` or `.html` replaces the entry and keeps the images and stylesheets beside it.
 
+`bikeshed get <id>` prints a document. A Markdown document comes as its source. An HTML one, from `bikeshed-now` 0.22.0, comes as a Markdown reading made for agents: the page's words without its stylesheets, scripts or inline images, opening with a note that says it is a reading. Read and quote it, but never send it back. To revise, `bikeshed get <id> --source > index.html` writes the HTML as published, however long it is, and that is what `update` takes. A script that saved `get`'s output as a page needs `--source` added.
+
 The address comes from the title. To choose it, pass `--id`:
 
 ```bash
