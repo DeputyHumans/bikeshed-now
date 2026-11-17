@@ -75,7 +75,10 @@ test("every collection named `viewers` is docs/{docId}/viewers", () => {
 });
 
 test("the writer's parent is the docs collection", () => {
-  const source = readFileSync(join(ROOT, "functions/src/index.ts"), "utf8");
+  // Found by what it writes, not by file name, so the check follows recordView.
+  const writers = [...sources("functions/src")].filter((f) => readFileSync(join(ROOT, f), "utf8").includes('docRef.collection("viewers")'));
+  assert.equal(writers.length, 1, `one source writes docs/{docId}/viewers (found ${writers.join(", ") || "none"})`);
+  const source = readFileSync(join(ROOT, writers[0]), "utf8");
   const writer = source.indexOf('docRef.collection("viewers")');
   const parent = source.lastIndexOf('const docRef = db().collection("docs").doc(docId);', writer);
   assert.ok(writer > 0 && parent > 0 && writer - parent < 4000, "recordView's viewers rows live under docs/{docId}");
