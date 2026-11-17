@@ -1,9 +1,11 @@
---- a/functions/src/mcp/tools/documents.ts
-+++ b/functions/src/mcp/tools/documents.ts
-@@ -472,5 +472,5 @@
+--- a/functions/src/mcp/tools/folders.ts
++++ b/functions/src/mcp/tools/folders.ts
+@@ -164,7 +164,7 @@
+       "Moving it changes who can read it, so only its owner may, and the result says who can now (`access`).",
      inputSchema: {
        type: "object",
 -      required: ["id"],
 +      required: ["id", "folder"],
        properties: {
          id: { type: "string", description: "The document id." },
+         folder: {

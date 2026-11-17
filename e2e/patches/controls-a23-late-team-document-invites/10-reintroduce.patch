@@ -1,14 +1,26 @@
 --- a/functions/src/endpoints/account.ts
 +++ b/functions/src/endpoints/account.ts
-@@ -403,5 +403,11 @@
+@@ -31,7 +31,7 @@
+ import { normalizeEmail } from "../lib/access";
+ import { resolveCaller } from "../lib/actor";
+ import { refanTeam, slugify } from "../lib/folders";
+-import { computeTeamMembers } from "../lib/teams";
++import { computeTeamMembers, findGrantsForTeam } from "../lib/teams";
+ import {
+   bearerFrom,
+   isTokenShaped,
+@@ -403,5 +403,14 @@
      });
    }
  
-+  for (const id of (await findGrantsForTeam(db(), teamId)).docIds) {
-+    const document = await db().collection("docs").doc(id).get();
-+    await sendInvitations(caller.emailLower, invitees, {
-+      title: String(document.get("title")), kind: "document", url: `${publicOrigin()}/d/${id}`,
-+    });
++  if (invitees.length > 0) {
++    const { sendInvitations } = await import("../email/notify");
++    for (const id of (await findGrantsForTeam(db(), teamId)).docIds) {
++      const document = await db().collection("docs").doc(id).get();
++      await sendInvitations(caller.emailLower, invitees, {
++        title: String(document.get("title")), kind: "document", url: `${publicOrigin()}/d/${id}`,
++      });
++    }
 +  }
    res.status(200).json({ members, admins, affected });
  });

@@ -68,7 +68,7 @@ scenario("A20.7a MCP add_comment acknowledges one committed thread after native 
 
 scenario("A20.7b overlapping MCP get_document calls count each committed read once after native transaction acknowledgement loss", CASE, async ctx => {
   const s = await setup(ctx), viewPath = `docs/${s.docId}/views/api-${s.tokenId}-v1`;
-  const { responses, committed } = await loseAcks(ctx, s.docId, "mcp-read", () => s.mcp.call("get_document", { id: s.docId }), async () => {
+  const { responses, committed } = await loseAcks(ctx, s.docId, "mcp-read", () => s.mcp.call("get_document", { id: s.docId, as: "source" }), async () => {
     const view = await readDoc(target, viewPath), doc = await readDoc(target, `docs/${s.docId}`);
     precondition(view.reads === 2 && doc.stats.apiReads === 2, "MCP ACK two independent reads are committed before either acknowledgement is lost");
     precondition(Object.keys(view.transactionReceipts ?? {}).length === 2, "MCP ACK each in-flight fetch has its own durable receipt");

@@ -248,7 +248,7 @@ scenario("smoke: MCP with a minted token: initialize, exactly 36 tools, get_docu
   for (const n of names) assert.doesNotMatch(n, /delete_document|manage_team|trust/, "document deletion, team administration and trust tools stay absent");
 
   ctx.step("get_document on the published document");
-  const doc = await mcp.ok("get_document", { id: up.docId });
+  const doc = await mcp.ok("get_document", { id: up.docId, as: "source" });
   assert.deepEqual(
     { id: doc.id, title: doc.title, version: doc.version, format: doc.format, canEdit: doc.canEdit, truncated: doc.truncated },
     { id: up.docId, title, version: "v1", format: "html", canEdit: true, truncated: false },
