@@ -364,11 +364,11 @@ Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB uncompresse
 
 An update cannot switch a document between Markdown and HTML. Publish a new document for that.
 
-## A document can have an expiry
+## A document can have a date
 
-`list_documents` and `get_document` report `expiresAt` — epoch milliseconds, or null. After that moment the document is **read-only, and readable only by its owner**: every tool here answers as though it does not exist, and the write tools refuse it.
+`list_documents` and `get_document` report `expiresAt` — epoch milliseconds, or null. When that moment passes, the document **becomes private and the date is cleared**, within the hour: its link stops working, open editing goes off, and the people it was shared with by name keep it. In that hour only its owner can read it: every tool here answers as though it does not exist, and the write tools refuse it. After it, it answers again to the people shared with by name.
 
-Nothing has been deleted. The versions, the comments and the bytes all survive, and the owner can move the date or clear it. If you need an expired document, ask them — do not republish its content as a new one and leave two documents where there was one.
+Nothing has been deleted. The versions, the comments and the bytes all survive. If you need a document that went private, ask its owner — do not republish its content as a new one and leave two documents where there was one.
 
 ## An unlisted document needs its link
 
@@ -497,9 +497,9 @@ bikeshed visibility proposal --expires none
 
 Over MCP: `set_document_visibility`, with `id` and any of `visibility` (`private`, `unlisted`, `public`), `publicEdit` (boolean), `expiresAt` (future epoch milliseconds, or null to clear). Omitted settings stay unchanged. CLI timestamps require a timezone. Private disables open editing. Remaining unlisted preserves the existing key; returning to private revokes that key.
 
-A folder has the same levels and expiry, through `set_folder_visibility` (`id`, `visibility`, `expiresAt`), or `bikeshed visibility folder <id> …`. It has no open editing. **A folder's link or public level opens everything beneath it to read, without an account:** its subfolders, documents filed there later, and documents other people own or that are private on their own. Say so, and name the folder, before you widen one. Its expiry ends only the link or the public level. The people it is shared with keep their access, and nothing beneath it is frozen. Every document's `get_document_access` lists the folders that reach it (`inheritedReach`), and filing into such a folder says so in `access.throughFolders`.
+A folder has the same levels and expiry, through `set_folder_visibility` (`id`, `visibility`, `expiresAt`), or `bikeshed visibility folder <id> …`. It has no open editing. **A folder's link or public level opens everything beneath it to read, without an account:** its subfolders, documents filed there later, and documents other people own or that are private on their own. Say so, and name the folder, before you widen one. Its date makes the folder private when it passes, which ends only the link and the public level, and is then cleared. The people it is shared with keep their access, and nothing beneath it is frozen. Every document's `get_document_access` lists the folders that reach it (`inheritedReach`), and filing into such a folder says so in `access.throughFolders`.
 
-Owners may change settings on expired documents, so clear or extend expiry when authorized instead of copying the document. Content editing stays frozen while expired. Public content already cached may remain readable for up to five minutes after revocation (SPEC §17).
+A date makes the document private when it passes: within the hour its level goes to private, open editing goes off, its link stops working for good, and the date is cleared. The people it is shared with by name, directly or through a folder, keep it. Say that when you set one: it is not a deletion date, and it does not remove anybody named. In the hour before it is private the document is frozen and its owner's alone; owners may still change settings then, so clear or extend the date when authorized instead of copying the document. Public content already cached may remain readable for up to five minutes after revocation (SPEC §17).
 
 Return the server's usable URL and settings. Public/unlisted visibility is separate from direct and inherited membership; making a document private does not revoke its explicit or inherited members.
 

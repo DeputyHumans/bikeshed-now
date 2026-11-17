@@ -40,7 +40,7 @@ bikeshed visibility proposal --expires none
 
 Over MCP: `set_document_visibility`, with `id` and any of `visibility` (`private`, `unlisted`, `public`), `publicEdit` (boolean), `expiresAt` (future epoch milliseconds, or null to clear). Omitted settings stay unchanged. CLI timestamps require a timezone. Private disables open editing. Remaining unlisted preserves the existing key; returning to private revokes that key.
 
-Owners may change settings on expired documents, so clear or extend expiry when authorized instead of copying the document. Content editing stays frozen while expired. Public content already cached may remain readable for up to five minutes after revocation (SPEC §17).
+A date makes the document private when it passes: within the hour its level goes to private, open editing goes off, its link stops working for good, and the date is cleared. The people it is shared with by name, directly or through a folder, keep it. Say that when you set one: it is not a deletion date, and it does not remove anybody named. In the hour before it is private the document is frozen and its owner's alone; owners may still change settings then, so clear or extend the date when authorized instead of copying the document. Public content already cached may remain readable for up to five minutes after revocation (SPEC §17).
 
 Return the server's usable URL and settings. Public/unlisted visibility is separate from direct and inherited membership; making a document private does not revoke its explicit or inherited members.
 
@@ -48,7 +48,7 @@ Return the server's usable URL and settings. Public/unlisted visibility is separ
 
 `set_folder_visibility`, with `id` and any of `visibility` and `expiresAt`, or `bikeshed visibility folder <id> [private|unlisted|public] [--expires …]`. There is no open editing on a folder.
 
-It opens **everything beneath the folder, to read, without an account**: its subfolders, documents filed there later, and documents that are private on their own or owned by someone else. Before you widen a folder, tell the person that, and name anything they might not expect to be in it. Its expiry ends the link or public level only: members keep their access, and nothing is frozen. Making it private and then unlisted again revokes every old link. Report the returned `url`. `get_folder_access` reports the folder's settings, and `get_document_access` reports `inheritedReach`: every folder above a document whose link or public level lets more people read it.
+It opens **everything beneath the folder, to read, without an account**: its subfolders, documents filed there later, and documents that are private on their own or owned by someone else. Before you widen a folder, tell the person that, and name anything they might not expect to be in it. Its date makes the folder private when it passes, which ends the link and public level only, and is then cleared: members keep their access, and nothing is frozen. Making it private and then unlisted again revokes every old link. Report the returned `url`. `get_folder_access` reports the folder's settings, and `get_document_access` reports `inheritedReach`: every folder above a document whose link or public level lets more people read it.
 
 Folder rename, move and the Trash are covered by `bs-folder`.
 

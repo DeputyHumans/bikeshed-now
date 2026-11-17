@@ -196,13 +196,13 @@ From a shell, `bikeshed folders` shows how many can read each folder, and `bikes
 
 `--folder` on `publish`, or `publish_document`'s `folder`, files it in one call. The `bs-folder` skill has the rest.
 
-## A document may expire
+## A document may have a date
 
-`list_documents` and `get_document` report `expiresAt` — epoch milliseconds, or null for a document that does not expire. After that moment it is **read-only, and readable only by its owner**: it will answer you as though it does not exist, and `update_document` will refuse it.
+`list_documents` and `get_document` report `expiresAt` — epoch milliseconds, or null for a document with no date. When that moment passes, the document **becomes private and the date is cleared**, within the hour: its link stops working, open editing goes off, and the people it was shared with by name keep it. In that hour it is readable only by its owner: it will answer you as though it does not exist, and `update_document` will refuse it. After it, it answers you again if you were shared with by name, and not if you came by its link.
 
-Nothing has been deleted when that happens. The versions, the comments and the bytes all survive, and the owner can move the date or clear it — so if you need an expired document, ask, rather than republishing its content as a new one and leaving two documents where there was one.
+Nothing has been deleted when that happens. The versions, the comments and the bytes all survive. If you need a document that went private, ask its owner, rather than republishing its content as a new one and leaving two documents where there was one.
 
-Owners can set, extend or clear expiry with `set_document_visibility`; see `bs-share`. Omitted settings stay unchanged.
+Owners can set, extend or clear the date with `set_document_visibility`; see `bs-share`. Omitted settings stay unchanged.
 
 ## Scripts run only if somebody vouched for them
 

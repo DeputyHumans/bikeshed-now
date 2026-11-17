@@ -56,15 +56,12 @@ export interface ReaderDoc {
   marking: Marking;
   /**
    * Epoch milliseconds, or null. Carried so an anonymous reader is TOLD the
-   * document expired rather than shown an empty frame.
+   * document is becoming private rather than shown an empty frame.
    *
-   * Nothing deletes this projection when the moment arrives — expiry is
-   * decided when something is read, by decision, and the one scheduled job
-   * here, the Trash's, does not touch it — so the projection describes an
-   * expiry rather than disappearing at one, and `contentProxy` is what actually
-   * stops serving the bytes. A title outliving its content is the honest cost
-   * of expiry having no job, and it is stated in SPEC §17 rather than
-   * discovered.
+   * The moment itself deletes nothing: `contentProxy` stops serving the bytes
+   * when the date passes, and this projection describes the date for the hour
+   * until the expiry job makes the document private, which removes it unless a
+   * public folder above still reaches the document (SPEC §17, ADR 0029).
    */
   expiresAt: number | null;
   /**

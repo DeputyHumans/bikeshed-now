@@ -42,7 +42,7 @@ export const MANAGEMENT_TOOLS: ToolDefinition[] = [
   },
   {
     name: "set_document_visibility",
-    description: "Owner-only: change visibility, open editing and/or expiry, including on an expired document. Omitted fields stay unchanged; expiresAt null clears expiry. Private disables open editing. Returns the usable sharing URL, including an unlisted key. Provide at least one setting.",
+    description: "Owner-only: change visibility, open editing and/or expiry, including on a document past its date. Omitted fields stay unchanged; expiresAt null clears expiry. Private disables open editing. When the date passes the document becomes private within the hour and the date is cleared: its link stops working, open editing goes off, and the people shared with by name keep it; nothing is deleted. Returns the usable sharing URL, including an unlisted key. Provide at least one setting.",
     inputSchema: { type: "object", required: ["id"], properties: {
       id, visibility: { type: "string", enum: ["private", "unlisted", "public"] },
       publicEdit: { type: "boolean" }, expiresAt: { type: ["number", "null"], description: "Future epoch milliseconds, or null to clear." },
@@ -51,7 +51,7 @@ export const MANAGEMENT_TOOLS: ToolDefinition[] = [
   },
   {
     name: "set_folder_visibility",
-    description: "Owner-only: change a folder's visibility and/or expiry. A folder's link or public level opens EVERYTHING beneath it to read, without an account: its subfolders, documents filed there later, and documents other people own or that are private on their own. Tell the person that before you widen it. Expiry ends only the link or public level: members keep their access and nothing is frozen. Omitted fields stay unchanged; expiresAt null clears it; making it private and then unlisted again revokes every old link. Returns the sharing URL, including an unlisted key. Provide at least one setting.",
+    description: "Owner-only: change a folder's visibility and/or expiry. A folder's link or public level opens EVERYTHING beneath it to read, without an account: its subfolders, documents filed there later, and documents other people own or that are private on their own. Tell the person that before you widen it. When its date passes the folder becomes private within the hour and the date is cleared, which ends only the link or public level: members keep their access and nothing is frozen. Omitted fields stay unchanged; expiresAt null clears it; making it private and then unlisted again revokes every old link. Returns the sharing URL, including an unlisted key. Provide at least one setting.",
     inputSchema: { type: "object", required: ["id"], properties: {
       id, visibility: { type: "string", enum: ["private", "unlisted", "public"] },
       expiresAt: { type: ["number", "null"], description: "Future epoch milliseconds, or null to clear." },

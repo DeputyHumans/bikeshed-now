@@ -1531,7 +1531,7 @@ export const TOOLS: ToolDefinition[] = [
     name: "get_changes",
     description:
       "What happened on a document since a cursor, in the order it was recorded: comments, threads opened, resolved and reopened, " +
-      "suggestions opened, revised and decided, versions published and withdrawn, and changes to its title, folder, visibility, expiry, trust and sharing. " +
+      "suggestions opened, revised and decided, versions published and withdrawn, and changes to its title, folder, visibility, expiry, trust and sharing, including doc.expired when its date made it private. " +
       "`since` is REQUIRED: a cursor from an earlier result, \"last\" for the one this credential was last given for this document, or \"all\". " +
       "Replace the cursor you hold with the one this returns, and with no other result's. `more: true` means call again now. " +
       "Events you caused are left out unless includeMine. `needsReply` names the threads a person is waiting on; `state` is the document as it is now.",
