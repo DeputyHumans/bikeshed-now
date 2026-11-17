@@ -1,152 +1,145 @@
-# Bikeshed
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.svg">
+    <img src="docs/assets/readme/hero-light.svg" alt="bikeshed.now: Everyone has an opinion. Including your agent." width="880">
+  </picture>
+</h1>
 
-**Publish a document. Collect comments anchored to the exact passage they are about. Revise, and publish again.**
+<p align="center"><b>Publish a document. Review it with your team and your agent. Every comment stays on the words it is about.</b></p>
 
-People publish self-contained HTML bundles or Markdown, share them with named reviewers, teams, or the public, and collect threaded comments attached to highlighted text. Documents are immutable versions. Agents publish and read feedback through the same interface people do, and are visibly marked as agents.
+<p align="center">
+  <a href="https://bikeshed.now"><b>Try it at bikeshed.now</b></a> &nbsp;·&nbsp;
+  <a href="#see-how-it-works">Watch the explainer</a> &nbsp;·&nbsp;
+  <a href="https://bikeshed.now/docs">Read the guide</a> &nbsp;·&nbsp;
+  <a href="#run-your-own">Run your own</a>
+</p>
 
-Self-hosted on Firebase. Apache-2.0.
+<br>
 
-Needs Node 24 (`.nvmrc`), the Firebase CLI (`npm i -g firebase-tools`) and a JRE — the emulators are a Java process, not a Node one.
+## See how it works
 
-```bash
-npm run install:all
-npm run build:policy
-cp app/.env.example app/.env.local   # already points at the emulators
-npm run emulators                    # one terminal
-npm --prefix app run dev             # another → http://localhost:5173
-```
+<p align="center">
+  <a href="https://bikeshed.now"><img src="docs/assets/readme/explainer.png" alt="Watch how it works, 1 minute 48 seconds. A frame from the explainer: a comment on a passage of a migration plan, and a suggested edit from two weeks to three weeks." width="880"></a>
+</p>
 
-That costs nothing and needs no Firebase account: `demo-` prefixed project ids are emulator-only, and Firebase refuses to point one at a real backend.
+<p align="center"><sub>The explainer plays on the bikeshed.now home page while you're signed out.</sub></p>
 
----
+You send a draft round. The feedback comes back by email, in chat and in meetings, and someone writes "the third paragraph" about a paragraph that has moved since. Bikeshed keeps each comment attached to the passage it is about, through every version, whether a person wrote it or an agent did.
+
+It is for anything written for other people to read carefully: a plan, a spec, a report, a deck. Bring your HTML or Markdown.
+
+## How it works
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/loop-dark.svg">
+    <img src="docs/assets/readme/loop-light.svg" alt="The loop: publish, share, review, revise, then publish the next version, which goes back for review." width="880">
+  </picture>
+</p>
+
+1. **Publish.** Upload a web page, a Markdown file or a zip, or ask your agent to publish it for you.
+2. **Share.** A new document is private. Add people by email address, even before they have an account, or share it with a team or by link.
+3. **Review.** Readers select the words they mean and comment, or suggest a change. Each comment is tied to that passage.
+4. **Revise.** You, or any agent you connect, answer each comment and publish the next version. Earlier versions stay readable, each with its own comments.
+
+## What it looks like
+
+**A comment on the exact words, and an agent's answer.** Dana asks which teams. The owner's agent replies in the same thread, and its reply is marked as an agent's.
+
+<img src="docs/assets/readme/comment-thread.png" alt="A storage migration plan with two marked passages. In the side panel, Dana asks which teams, and an agent replying for the owner, marked with an agent badge, says it changed the wording in the draft." width="880">
+
+**A suggested edit, waiting for a decision.** Sam can suggest but not edit. The owner steps through each suggestion and accepts or rejects it.
+
+<img src="docs/assets/readme/suggestion-review.png" alt="Review mode on the same plan: a bar reads 1 of 1, sam@example.com, two weeks changed to three weeks, with Accept and Reject buttons." width="880">
+
+**A deck stays a deck.** Upload it as it is. If each slide is about a screen tall, you get a slide list, an overview and Present.
+
+<img src="docs/assets/readme/deck.png" alt="A quarter review deck open in Bikeshed, with numbered slide thumbnails down the left and a bar chart slide in view." width="880">
+
+## Where it helps
+
+| When | What happens |
+|---|---|
+| **Your agent wrote the draft** | It publishes the draft here, not to a file left on your disk. Your team comments on passages. The agent picks up every comment with the words it is about, answers in each thread, and publishes the next version. |
+| **A decision needs sign-off** | Give reviewers *Can suggest*. Whoever can approve accepts or rejects each change, in the app or through an agent connected as them. While a suggestion is waiting, no new version can be published. |
+| **You're presenting** | Upload the deck you already have. Comment slide by slide, present it full screen, print it or save it as a PDF. |
+| **The readers aren't on your team** | Share it with anyone who has the link, no account needed, and kept out of search engines. Or make it public. |
 
 ## What makes it different
 
-**Comments are attached to text, not to a document.** A comment that says "this overstates the case" is only useful while you both remember which paragraph. Anchored to the passage, it is still useful in a month, in a different version, and to somebody who was not in the conversation.
+**Comments belong to words, not to the whole document.** "This overstates the case" only helps while everyone remembers which paragraph. Tied to the passage, it still makes sense a month later, in a later version, to someone who wasn't there. If the text around it changes, Bikeshed still finds the words. If they are gone, the comment says so rather than pointing at the wrong ones.
 
-**It edits the document you wrote.** Not a normalized model of it. A deck with inline SVG, a folded tree and a scroll observer survives a round trip through the editor, because the editor works on the authored markup rather than importing it into a schema.
+**It edits the document you wrote.** Not a simplified copy of it. A deck with diagrams, folding sections and a bit of script comes out of the editor the way it went in.
 
-**Agents are first-class, and visibly agents.** Paste the deployment's `/mcp` address into Claude, ChatGPT, Cursor or VS Code and sign in; or mint a personal access token for a script. Thirty-six MCP tools, a terminal client that signs in through the browser, and four packaged skills a deployment serves to whatever agent asks for them. In Claude, [all four install as one plugin](#install-the-claude-plugin). Everything an agent does is stamped with the channel it came through — derived from the credential, not claimed — so a reviewer can always tell which feedback came from a person. Agent reads are counted separately so they do not distort anybody's statistics.
+**Agents take part, and you can always tell which comments are theirs.** Connect Claude, ChatGPT, Cursor or VS Code and it can publish, read the comments, reply, suggest and revise. Everything it does carries an agent badge. It can do only what you can, and it can't delete anything for good.
 
-**Publishing the same thing twice is a no-op.** The bundle is hashed; identical bytes mint no version. Safe in a loop, in CI, and in front of an agent that cannot remember what it already did.
+**Versions are never rewritten.** Every publish is a new, numbered version, and the old one keeps its discussion. Publishing the same content twice changes nothing, so an agent can't pile up duplicates.
 
----
+**You decide who reads it.** Documents start private, and only the owner opens them wider.
+
+## Bring your agent
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/agents-dark.svg">
+    <img src="docs/assets/readme/agents-light.svg" alt="Agents such as Claude, ChatGPT, Cursor, VS Code or a terminal connect to Bikeshed. Your team reads, comments and suggests in the browser. A person's comment and an agent's labelled reply sit on the same passage." width="880">
+  </picture>
+</p>
+
+Add `https://bikeshed.now/mcp` to your agent as a connector and approve it once in your browser. Or give it this and let it work out the rest:
+
+```text
+Read https://bikeshed.now/llms.txt, then publish my draft there and tell me the link.
+```
 
 ## Install the Claude plugin
 
-The plugin teaches Claude how Bikeshed works: publishing, answering comments, filing and sharing. It holds instructions only, so connect Bikeshed too, with the deployment's `/mcp` address. Use one route, not several, or an agent finds each skill twice.
+The plugin teaches Claude how Bikeshed works: publishing, answering comments, filing and sharing. It holds instructions only, so connect `https://bikeshed.now/mcp` too. Pick one way, not several, or Claude finds each skill twice.
 
-| Where | How |
+| Where you use Claude | What to do |
 |---|---|
-| claude.ai, Claude Desktop | Download the plugin from the deployment's Account page, or `https://<deployment>/skills/bikeshed-plugin.zip`, then go to Customize > Plugins > Add > Upload plugin. An uploaded plugin doesn't update itself, so upload a new download to get changes |
-| claude.ai, Claude Desktop, on bikeshed.now only | Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, choose Sync, then choose Add beside Bikeshed. It keeps itself up to date |
-| Claude Code, on bikeshed.now only | `claude plugin marketplace add DeputyHumans/bikeshed-now`, then `claude plugin install bikeshed@bikeshed` |
-| Claude Code, on any deployment | `npx -y bikeshed-now skills install .claude/skills --origin https://<deployment>` |
-| Claude's Free plan | Plugins need a paid plan, so download each skill from the Account page, or `https://<deployment>/skills/<name>.zip`, then go to Customize > Skills |
-| Codex, Gemini CLI, Cursor, Copilot and others | `npx -y bikeshed-now skills install .agents/skills --origin https://<deployment>` |
+| claude.ai or Claude Desktop | Go to Customize > Plugins > Add > Add marketplace, enter `DeputyHumans/bikeshed-now`, choose Sync, then choose Add beside Bikeshed. It keeps itself up to date, and it serves bikeshed.now only. Or download the plugin from your Account page and go to Customize > Plugins > Add > Upload plugin |
+| Claude's Free plan | Plugins need a paid plan, so download each skill from your Account page and add it under Customize > Skills |
+| Claude Code | Run `claude plugin marketplace add DeputyHumans/bikeshed-now`, then `claude plugin install bikeshed@bikeshed`, for bikeshed.now only. Or, in your project, run `npx -y bikeshed-now skills install .claude/skills --origin https://bikeshed.now` |
+| Codex, Gemini CLI, Cursor, Copilot and others | In your project, run `npx -y bikeshed-now skills install .agents/skills --origin https://bikeshed.now` |
 
-**The marketplace is for bikeshed.now only.** Its skills name that address, and the CLI sends its stored token to whichever address is set. [`claude-plugin/README.md`](claude-plugin/README.md) has the detail.
+Running your own Bikeshed? Its Account page gives these steps with its own address, and [`claude-plugin/README.md`](claude-plugin/README.md) lists every way to install.
 
----
+## Who sees it
 
-## How it fits together
-
-```
-        browser / CLI / agent
-                 │
-         Cloud Functions ──── Firestore          metadata, ACL, comments
-                 │                               Realtime Database   presence
-                 └────────── Storage             document bytes, private
-```
-
-The bucket is private and has public access prevented. **One function is the only path bytes take to a browser**: it authenticates the caller, checks an ACL, and streams. The browser renders them in a **same-origin iframe**, which is what makes highlight-anchored commenting possible without injecting anything into your document — and is why an untrusted document's scripts are blocked until somebody vouches for them.
-
-`docs/architecture/overview.md` explains the five decisions everything else follows from, and spends most of its length on **what this is not**.
-
----
-
-## Documentation
-
-| | |
+| Who can see it | Means |
 |---|---|
-| [`docs/architecture/spec.md`](docs/architecture/spec.md) | Normative. Supersedes every other document, including this one |
-| [`docs/architecture/overview.md`](docs/architecture/overview.md) | Why it is shaped this way, and what it deliberately is not |
-| [`docs/architecture/threat-model.md`](docs/architecture/threat-model.md) | What it protects, from whom, and where it stops |
-| [`docs/operations/overview.md`](docs/operations/overview.md) | Deploying and running one |
-| [`docs/development/authoring-bundles.md`](docs/development/authoring-bundles.md) | Writing a document that works well here |
-| [`docs/operations/config.md`](docs/operations/config.md) | Every setting, and what it changes |
-| [`docs/development/verification.md`](docs/development/verification.md) | The emulator walkthrough: what to observe, and what it proves |
-| [`docs/architecture/adr/`](docs/architecture/adr/) | Twenty-seven decisions, ~30 lines each, so nobody re-argues them in a pull request |
-| [`docs/agents/agent-guide.md`](docs/agents/agent-guide.md) | Using a deployment from an agent. Served as `/llms.txt` |
-| [`claude-plugin/README.md`](claude-plugin/README.md) | The skills and the Claude plugin: what each is for, and every way to install them |
-| [`CLAUDE.md`](CLAUDE.md) | Changing this source. Mirrored to `AGENTS.md` |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | The verification table and the eight house rules |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | How people here are expected to treat each other |
-| [`CHANGELOG.md`](CHANGELOG.md) | What changed, and what counts as a breaking change |
+| **Private** (the default) | Only you and the people you share it with |
+| **Anyone with the link** | Readable without an account by anyone holding the link. Not indexed by search engines |
+| **Public** | Readable by anyone and listed in the sitemap. Search engines may index it, and AI crawlers may read it |
 
----
+| Role | Read and comment | Suggest edits | Edit and publish | Accept or reject suggestions |
+|---|:-:|:-:|:-:|:-:|
+| Can read | ✓ | | | |
+| Can suggest | ✓ | ✓ | | |
+| Can edit | ✓ | ✓ | ✓ | |
+| Can approve | ✓ | ✓ | ✓ | ✓ |
 
-## Two command-line tools, and they are not the same
+Readers without an account can read and do nothing else. A document filed in a shared folder is shared with that folder's people too.
 
-Conflating them is how somebody runs a teardown against production, so they are named differently and say so in their own help.
+## Who it's for
 
-| | `scripts/*.mjs` | `bikeshed` |
-|---|---|---|
-| Who | whoever owns the deployment | any signed-up user |
-| Credential | Admin SDK, `--account` required on every real run | a personal access token, from `bikeshed login` in the browser |
-| Talks to | Firestore and Storage directly | the deployment over HTTPS |
-| Purpose | provision, publish, withdraw, tear down | publish and revise documents |
+Small teams who want a document read carefully. If you need directory sync, search across every document or per-character blame, you want a different product.
 
-```bash
-# operator
-node scripts/setup.mjs --account you@example.com --dry-run
-node scripts/publish.mjs --doc bikeshed-tour --dry-run
+Not to be confused with [`speced/bikeshed`](https://github.com/speced/bikeshed), the W3C and WHATWG specification preprocessor. Same word, different tool: that one builds specifications from source, and this one collects comments on documents you already have. That's why this project calls itself `bikeshed.now` in its wordmark and package names.
 
-# user or agent
-bikeshed login
-bikeshed publish proposal.md --title "Storage migration"
-bikeshed comments storage-migration
-```
+## Run your own
 
-`setup`, `teardown`, `publish` and `set-access` all have a `--dry-run` that needs **no credentials at all**, because firebase-admin is initialized lazily. That is what makes "run the dry run first" advice anybody can actually follow.
+Bikeshed is open source and runs on your own Firebase project. Running it locally takes five commands and no Firebase account: [`CONTRIBUTING.md`](CONTRIBUTING.md) has them. [`docs/operations/overview.md`](docs/operations/overview.md) covers deploying one, [`CLAUDE.md`](CLAUDE.md) covers changing the source, and [`docs/README.md`](docs/README.md) lists every document.
 
-`delete-version` is the exception, and deliberately so: its dry run reads Firestore and Storage, because a destructive preview that cannot show you what it would destroy is worthless. It still performs no writes.
+It comes with two command-line tools that are easy to confuse: `bikeshed` is for anyone with an account, and the scripts in `scripts/` are for whoever runs the deployment.
 
----
-
-## Deliberately not built
-
-Each of these is a decision with a reason in `docs/architecture/overview.md`, not a gap:
-
-no operational transform · no plugin system · no theming engine · no i18n · no multi-tenancy · no SSO or SCIM · no search index · no mobile app · no admin console · no rate limiter · no deletion without a way back first · no scopes on the agent surface · no service accounts · no unique-visitor tracking
-
-If you need directory sync, cross-document search or per-character blame, you need a different product. This one is for small teams who want a document read carefully.
-
----
-
-## Not to be confused with
-
-**`speced/bikeshed`**, the W3C and WHATWG specification preprocessor. Same word, adjacent field, entirely different tool: that one generates specification documents from source, this one collects comments on documents you already have. This project is `bikeshed.now` throughout, which is why the domain form is used in the title, the wordmark and the package names.
-
----
-
-## Status
-
-Each release is tagged `vX.Y.Z` (the CLI `cli-vX.Y.Z`) and listed in [`CHANGELOG.md`](CHANGELOG.md). Working, tested and deployable. The rough edges are honest ones:
-
-- A membership change fans out one write per affected document. Bounded and batched, fine for a small team, and stated in `docs/architecture/overview.md` so nobody is surprised at ten thousand documents.
-- Presence needs a Realtime Database. Without one it degrades to a clean no-op — no peer cursors, everything else unchanged.
-- Email needs a Resend key. Without one every send is a logged no-op, which is the path CI exercises.
+Releases are tagged and listed in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Security
 
-See [`SECURITY.md`](SECURITY.md). Please do not open a public issue for anything that lets somebody read a document they should not.
+See [`SECURITY.md`](SECURITY.md). Please don't open a public issue for anything that lets somebody read a document they shouldn't.
 
 ## Licence
 
-[Apache-2.0](LICENSE). Two kinds of third-party material ship in the tree, both recorded in [`NOTICE`](NOTICE):
-
-- `app/public/fonts/*.woff2` is a renamed subset of an upstream typeface under the SIL Open Font License 1.1. The OFL covers the font files and nothing else.
-- `docs/acf/**` and `.claude/scripts/status-line.py` are copies of [ACF Tools](https://github.com/fib7/acf-tools) files, © Fibonacci Seven, LLC, also under Apache-2.0. They are agent-workflow documentation; no build step and no runtime reads them.
-
-Dependency licences, and the CI gate that hard-fails anything outside the permissive allowlist, are in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+[Apache-2.0](LICENSE). The typeface and some workflow documents are third-party, as [`NOTICE`](NOTICE) records, and dependency licences are in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).

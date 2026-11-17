@@ -156,7 +156,11 @@ app/public/brand/icon-192.png
 app/public/brand/icon-512.png
 app/public/brand/og-default.png
 app/public/fonts/bikeshed-sans-var.woff2
-claude-plugin/.claude-plugin/icon.png"
+claude-plugin/.claude-plugin/icon.png
+docs/assets/readme/comment-thread.png
+docs/assets/readme/deck.png
+docs/assets/readme/explainer.png
+docs/assets/readme/suggestion-review.png"
 
 ACTUAL_BINARIES="$(git ls-files | while IFS= read -r f; do
   case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico|*.woff|*.woff2|*.ttf|*.otf|*.pdf|*.zip) printf '%s\n' "$f" ;; esac
