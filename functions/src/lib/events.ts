@@ -49,6 +49,7 @@ export type EventType =
   | "comment.added"
   | "doc.renamed"
   | "doc.expiry"
+  | "doc.expired"
   | "doc.moved"
   | "doc.visibility"
   | "doc.trust"
@@ -92,6 +93,13 @@ export function eventActor(actor: Partial<Actor> | null | undefined): EventActor
 
 /** Who withdraws a version: only scripts/delete-version.mjs does, as nobody. */
 const OPERATOR: EventActor = { uid: null, channel: "operator", via: viaLabel("operator") };
+
+/**
+ * Who made a document private when its date passed: nobody. The hourly job
+ * acts on a date its owner set, so the change is the date's, not a person's
+ * or an agent's (SPEC §17, ADR 0029).
+ */
+export const SYSTEM: EventActor = { uid: null, channel: "system", via: viaLabel("system") };
 
 /**
  * Whether a reader may see an event: the audience it was written for, said once

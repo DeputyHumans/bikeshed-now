@@ -13,6 +13,7 @@ const OLD_CHANNEL_WORDS: Record<string, string> = {
   api: "the API",
   app: "a connected app",
   operator: "an operator script",
+  system: "its end date",
 };
 
 export interface Acted {

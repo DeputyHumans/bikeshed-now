@@ -32,14 +32,16 @@ export interface Actor {
   /**
    * The acting account.
    *
-   * Null in exactly one case: the OPERATOR scripts, which authenticate with
-   * Admin credentials rather than as an account, so there is no uid to record.
-   * They say so: `channel: "operator"`, with an `email` from the required
-   * `--account` flag and no `tokenId`.
+   * Null in exactly two cases. The OPERATOR scripts authenticate with Admin
+   * credentials rather than as an account, so there is no uid to record; they
+   * say so with `channel: "operator"`, an `email` from the required `--account`
+   * flag and no `tokenId`. And the SYSTEM, `channel: "system"`, is the hourly
+   * job that makes a document private when its date passes: nobody acted, the
+   * date did (SPEC §17). It writes events only, never a stamp with an email.
    */
   uid: string | null;
   email: string;
-  channel: "web" | "cli" | "mcp" | "api" | "app" | "operator";
+  channel: "web" | "cli" | "mcp" | "api" | "app" | "operator" | "system";
   tokenId?: string;
   /**
    * The credential in words, as it was when it acted: "CLI on mbp",
@@ -75,6 +77,8 @@ export function viaLabel(channel: Actor["channel"], name?: string): string | und
       return n ? `“${n}” (connected app)` : "a connected app";
     case "operator":
       return "an operator script";
+    case "system":
+      return "its end date";
   }
 }
 
@@ -139,6 +143,7 @@ const OLDER_RECORD_WORDS: Record<string, string> = {
   api: "the API",
   app: "a connected app",
   operator: "an operator script",
+  system: "its end date",
 };
 
 /**

@@ -58,6 +58,26 @@ describe("each row in words", () => {
     expect(describeActivity(row({ type: "doc.restored" }))).toBe("restored it from the Trash");
   });
 
+  it("says a date passed and what that did, with the date as its subject", () => {
+    // The hourly job made it private (SPEC §17): nobody did, so the row must
+    // not read as a person or as an agent.
+    const expired = (extra: Partial<ActivityItem>) =>
+      row({ type: "doc.expired", channel: "system", via: "its end date", automated: true, expiresAt: 1_900_000_000_000, ...extra });
+    const line = (item: ActivityItem) => `${subjectOf(item)} ${describeActivity(item)}`;
+    expect(line(expired({ from: "public" }))).toBe("Its end date passed: it is now private");
+    expect(line(expired({ from: "unlisted" }))).toBe("Its end date passed: it is now private, and its link stopped working");
+    expect(line(expired({ from: "public", endedOpenEditing: true }))).toBe("Its end date passed: it is now private, and open editing is off");
+    expect(line(expired({ from: "unlisted", endedOpenEditing: true }))).toBe(
+      "Its end date passed: it is now private, its link stopped working, and open editing is off",
+    );
+    expect(line(expired({ from: "private" }))).toBe("Its end date passed, and was cleared");
+  });
+
+  it("says what setting a date will do", () => {
+    expect(describeActivity(row({ type: "doc.expiry", to: Date.UTC(2031, 2, 4, 12) }))).toMatch(/^set it to go private on /);
+    expect(describeActivity(row({ type: "doc.expiry", to: null }))).toBe("removed its end date");
+  });
+
   it("counts an agent's repeated reads, and says who read without an account", () => {
     expect(describeActivity(row({ type: "read", automated: true, reads: 3 }))).toBe("read it 3 times");
     expect(subjectOf(row({ type: "read", by: null }))).toBe("Somebody without an account");

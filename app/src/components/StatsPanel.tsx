@@ -37,6 +37,7 @@ const ICON: Record<string, IconName> = {
   "doc.moved": "folder",
   "doc.visibility": "globe",
   "doc.expiry": "clock",
+  "doc.expired": "clock",
   "doc.trust": "shield",
   "doc.trashed": "trash",
   "doc.restored": "trash",
@@ -62,7 +63,8 @@ function ViewerRows({ viewers }: { viewers: ViewerStat[] }) {
 }
 
 function ActivityRow({ item, docId }: { item: ActivityItem; docId: string }) {
-  const via = viaOf(item);
+  // The date's own change says so in its subject; an "agent" badge would be wrong.
+  const via = item.channel === "system" ? null : viaOf(item);
   const ms = item.at ? Date.parse(item.at) : NaN;
   // A fork is sent as its day alone (SPEC §21), a UTC date, so it is shown as
   // that date rather than as the hour before midnight west of Greenwich.

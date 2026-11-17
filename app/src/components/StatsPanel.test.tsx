@@ -77,6 +77,16 @@ describe("the Activity feed", () => {
     expect(rows()).toEqual([expect.stringContaining("published a version from the editor")]);
   });
 
+  it("says a date made it private as the date's own doing, with no agent badge", async () => {
+    fetchActivity.mockImplementation(async () => ({
+      items: [{ id: "x1", type: "doc.expired", at: at(7), by: null, channel: "system", via: "its end date", automated: true, from: "unlisted", expiresAt: Date.parse(at(7)) }],
+      next: null,
+    }));
+    await open();
+    expect(rows()).toEqual([expect.stringContaining("Its end datepassed: it is now private, and its link stopped working")]);
+    expect(how(0)).toBeNull();
+  });
+
   it("shows earlier activity on request, from where the last page ended", async () => {
     await open();
     await act(async () => {

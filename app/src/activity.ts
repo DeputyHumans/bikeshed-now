@@ -29,6 +29,10 @@ export interface ActivityItem {
   reason?: string;
   trusted?: boolean;
   publicEdit?: boolean;
+  /** `doc.expired`: the date that passed, in epoch milliseconds. */
+  expiresAt?: number;
+  /** `doc.expired`: open editing was on until then. */
+  endedOpenEditing?: boolean;
   /** A document that went to the Trash with a folder: that folder, as it was named then. */
   with?: { folderId?: string; name?: string } | null;
 }
@@ -98,8 +102,18 @@ export function describeActivity(item: ActivityItem): string {
       return `made it ${LEVEL[String(item.to)] ?? String(item.to)}${item.publicEdit ? ", open for anyone to edit" : ""}`;
     case "doc.expiry":
       return typeof item.to === "number"
-        ? `set it to stop being readable on ${formatDay(item.to)}`
+        ? `set it to go private on ${formatDay(item.to)}`
         : "removed its end date";
+    case "doc.expired": {
+      // Its subject is "Its end date" (subjectOf): nobody did this, the date did.
+      if (item.from === "private" && !item.endedOpenEditing) return "passed, and was cleared";
+      const also = [
+        ...(item.from === "unlisted" ? ["its link stopped working"] : []),
+        ...(item.endedOpenEditing ? ["open editing is off"] : []),
+      ];
+      if (also.length === 0) return "passed: it is now private";
+      return `passed: it is now private, ${also.length === 2 ? `${also[0]}, and ${also[1]}` : `and ${also[0]}`}`;
+    }
     case "doc.trust":
       return item.trusted ? "let its scripts run for everyone" : "stopped its scripts running for everyone";
     case "doc.trashed":
@@ -123,6 +137,7 @@ export function describeActivity(item: ActivityItem): string {
 /** Who the row is about, as its subject. */
 export function subjectOf(item: ActivityItem): string {
   if (item.type === "fork.created") return "Someone";
+  if (item.channel === "system") return "Its end date";
   // Only an operator script withdraws a version, and one withdrawn before its
   // actor was stored carries no channel to say so.
   if (item.channel === "operator" || item.type === "version.withdrawn") return "An operator";

@@ -20,7 +20,7 @@ export interface Actor {
    * acts, an app connected by signing in reads "app", and firestore.rules pins
    * "web" on the direct client write path.
    */
-  channel: "web" | "cli" | "mcp" | "api" | "app" | "operator";
+  channel: "web" | "cli" | "mcp" | "api" | "app" | "operator" | "system";
   /** Which personal access token or app grant, when the channel is not "web". */
   tokenId?: string;
   /** SERVER-DERIVED. The credential in words, as it was when it acted (provenance.ts). */

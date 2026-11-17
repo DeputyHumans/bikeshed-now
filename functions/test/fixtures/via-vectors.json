@@ -10,6 +10,8 @@
     { "name": "an older API record", "actor": { "channel": "api" }, "via": "the API" },
     { "name": "an older app record", "actor": { "channel": "app" }, "via": "a connected app" },
     { "name": "an operator script", "actor": { "channel": "operator" }, "via": "an operator script" },
+    { "name": "a document's date, when it made the document private", "actor": { "channel": "system", "via": "its end date" }, "via": "its end date" },
+    { "name": "the date's change, stored without its words", "actor": { "channel": "system" }, "via": "its end date" },
     { "name": "empty stored words fall back", "actor": { "channel": "mcp", "via": "" }, "via": "MCP" },
     { "name": "a channel neither side knows names itself", "actor": { "channel": "pager" }, "via": "pager" }
   ]
