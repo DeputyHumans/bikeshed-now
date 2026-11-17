@@ -113,6 +113,7 @@ Hosting rewrites → Cloud Functions v2, region **`us-central1`** (FIXED; Hostin
 | `/thumb/**` | `contentProxy` |
 | `/d/**` | `docShell` |
 | `/folder/**` | `docShell` |
+| `/embed/**` | `docShell` |
 | — (Firestore trigger) | `onCommentCreated` |
 | — (Firestore trigger) | `recordVersionEvent` |
 | — (Firestore trigger) | `recordThreadEvent` |
@@ -121,13 +122,13 @@ Hosting rewrites → Cloud Functions v2, region **`us-central1`** (FIXED; Hostin
 | — (daily schedule) | `purgeExpiredTrash` |
 | — (hourly schedule) | `applyExpiries` |
 
-Rewrite order matters: exact paths precede wildcards, which precede the SPA catch-all. The two `.md` globs, whose `*` is part of one segment, come before every `/**` prefix, or `/d/**` would take them. `/folder` is an exact rewrite to `createFolder`, which the `/folder/**` glob does not match. `/d/**` and `/folder/**` are the two rewrites that serve a **client route**: `docShell` answers with the app shell itself, not an API (§17 "Link previews").
+Rewrite order matters: exact paths precede wildcards, which precede the SPA catch-all. The two `.md` globs, whose `*` is part of one segment, come before every `/**` prefix, or `/d/**` would take them. `/folder` is an exact rewrite to `createFolder`, which the `/folder/**` glob does not match. `/d/**` and `/folder/**` are the two rewrites that serve a **client route**: `docShell` answers with the app shell itself, not an API (§17 "Link previews"). `/embed/**` goes to the same function and is not a client route: it is the embed page, which is not the app (`GET /embed/…` below).
 
 **`/docs` and `/docs/developers` are redirects, not rewrites.** Hosting answers `/docs` and `/docs/` with `302` to `/d/docs`, and `/docs/developers` with `302` to `/d/docs-developers`; redirects are applied before static files and rewrites. Each guide is an ordinary published document whose source is `content/<id>/bundle/index.html`, so it is read in the viewer and takes comments like any other. The user guide names no command; the developer guide holds the command line, the agent tools and the loop an agent runs. Temporary rather than `301`, because a browser keeps a `301` for good. A deployment that has not published a guide answers its shortcut with the document page's "Not here", and under Vite dev there is no redirect at all.
 
 **`Cache-Control` for `/content/**` and `/thumb/**` is set by the function, not by Hosting.** A Hosting `headers` entry would override the function and force one policy on both gated and public content; §17 needs them to differ.
 
-Every endpoint is **auth-first**: authentication is checked before anything that could reveal whether a document exists. The one exception is `GET /d/**`, which never authenticates at all, apart from its `.md` addresses, which are `docMarkdown` and authenticate like `/content/**`: it decides from the document record and `k` alone, and answers a private slug and an absent one with the same bytes (§17 "Link previews"). `GET /folder/**` is the same function, deciding from the folder record and `k`.
+Every endpoint is **auth-first**: authentication is checked before anything that could reveal whether a document exists. The one exception is `GET /d/**`, which never authenticates at all, apart from its `.md` addresses, which are `docMarkdown` and authenticate like `/content/**`: it decides from the document record and `k` alone, and answers a private slug and an absent one with the same bytes (§17 "Link previews"). `GET /folder/**` is the same function, deciding from the folder record and `k`, and so is `GET /embed/**`, deciding as `/d/**` does.
 
 ### `POST /session`
 Body `{ idToken }`. Verifies with `verifyIdToken(idToken, true)` and applies §1. Mints a session cookie (`createSessionCookie`, 5 days) and sets `__session` — the only cookie Firebase Hosting forwards to functions — as `HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=<expiresIn s>`. It also merges `{ uid, email }` into `users/{uid}`, the record every email finds a person by (§14), so an account whose address arrived verified has one from its first sign-in; a preference already saved there is kept, and a failed write is logged rather than refusing the sign-in.
@@ -161,9 +162,9 @@ After the key may come `!run`, the **run variant**: the only address at which a 
 
 Headers: `Content-Type` from the extension; `X-Content-Type-Options: nosniff`; `Cache-Control: private, no-store` for a member's or a grant's read, `public, max-age=300` for a read the URL alone decides — public, or unlisted with `k` — because a grant's URL carries no key and a shared cache keys on the URL; `X-Robots-Tag: noindex` when visibility is `unlisted`.
 
-**The script lock** (`lib/scriptlock.ts`). Every response carries `Content-Security-Policy: sandbox allow-same-origin`, whatever the document's trust, unless its type is one a browser never renders as a scripted document: raster pictures, sound, video, fonts, CSS, JavaScript, JSON, plain text, CSV, Markdown, PDF, zip, wasm and `application/octet-stream`. Every HTML and every XML type is locked (a browser may render a `+xml` type as an XML document, where an element in the XHTML namespace runs: WebKit does with `.atom` and `.rss`), and so is any type not on that list. The list is of what is harmless because a list of what is dangerous has to be complete to be safe: until 0.32.0 it named five types, and `.atom` and `.rss` ran on this origin in Safari and every browser on iOS, with about a hundred more `+xml` types left unlocked. A lock on a subresource is ignored, so it costs nothing there. So a document's bytes opened any way but the app's frame (a pasted address, a popup, an `<object>`) render inert. Inside the frame it is the frame's own sandbox, and changes nothing. The run variant lifts it only for the document's current version, and only when the document is globally trusted or the caller's own `docs/{docId}/trust/{uid}` exists; a scriptable answer there is always `private, no-store`, because it depends on who asked, and the run variant always carries `frame-ancestors 'self'`. A request carrying `Service-Worker: script` is a `404`: a worker would outlive the page and serve without the lock.
+**The script lock** (`lib/scriptlock.ts`). Every response carries `Content-Security-Policy: sandbox allow-same-origin`, whatever the document's trust, unless its type is one a browser never renders as a scripted document: raster pictures, sound, video, fonts, CSS, JavaScript, JSON, plain text, CSV, Markdown, PDF, zip, wasm and `application/octet-stream`. Every HTML and every XML type is locked (a browser may render a `+xml` type as an XML document, where an element in the XHTML namespace runs: WebKit does with `.atom` and `.rss`), and so is any type not on that list. The list is of what is harmless because a list of what is dangerous has to be complete to be safe: until 0.32.0 it named five types, and `.atom` and `.rss` ran on this origin in Safari and every browser on iOS, with about a hundred more `+xml` types left unlocked. A lock on a subresource is ignored, so it costs nothing there. So a document's bytes opened any way but the app's frame (a pasted address, a popup, an `<object>`, another site's frame) render inert. Inside the frame it is the frame's own sandbox, and changes nothing. The run variant lifts it only for the document's current version, and only when the document is globally trusted or the caller's own `docs/{docId}/trust/{uid}` exists; a scriptable answer there is always `private, no-store`, because it depends on who asked, and the run variant always carries `frame-ancestors 'self'`. A request carrying `Service-Worker: script` is a `404`: a worker would outlive the page and serve without the lock.
 
-Never send `X-Frame-Options`, nor `frame-ancestors` other than the run variant's `'self'` — the content must embed same-origin in the app's iframe.
+Never send `X-Frame-Options`, nor `frame-ancestors` other than the run variant's `'self'` — the content must embed same-origin in the app's iframe, and in the embed page's (`GET /embed/…`). Another site may frame this address directly too; nothing stops it, and nothing counts it. The embed page is the supported way ([ADR 0031](adr/0031-a-document-can-be-embedded-in-another-site.md)).
 
 Streamed with `file.createReadStream()`; large files are never buffered whole.
 
@@ -184,6 +185,18 @@ The document as an agent with only its address reads it: the Markdown **reading*
 
 ### `GET /folder/:folderId`
 The same shell, from the same function, for a folder's page. When the folder's own public level, or its key in `?k=`, opens it and its reach has not ended (§17 "A folder's reach"), the head says the folder's name with the default card, and nothing read from inside it; `public, max-age=min(300, seconds to the reach's end)`, plus `X-Robots-Tag: noindex` and the meta form when a key opened it. Every other folder, absent and private alike, is the generic shell with `private, no-store`. A member's workspace at the same URL is the client's; the shell does not authenticate.
+
+### `GET /embed/:docId[/:versionId]`
+The **embed page**: what another site puts in an `<iframe>` to show a document ([ADR 0031](adr/0031-a-document-can-be-embedded-in-another-site.md)). Served by `docShell`, from the template `app/embed.html` that Hosting serves at `/embed.html`, fetched and adopted as the app shell is (§17 "Link previews"). It is **not the app**: its bundle holds no router, no sign-in and no Firestore, and a test holds its imports to that, because the app shell's reason for refusing to be framed is the routes to sign-up and consent it can reach without another request (§23).
+
+- **The decision is `decideShell`'s**, anonymous, exactly as `/d/**`: public, unlisted with the exact `?k=`, or a folder's reach, and not expired or in the Trash. The version is the one the path pins, else `currentVersion`, and it must exist. The session cookie is `SameSite=Strict`, so another site's frame presents no caller in any case.
+- **A document** is `200`, the template with the document's title and a frame of `/content/[~<k>/]<docId>/<versionId>/<entry>` with the reading sandbox (§6), and a link to `/d/<docId>` that opens in a new tab. `Cache-Control: public, max-age=min(300, seconds to expiry)` and always `X-Robots-Tag: noindex`, because the page repeats one a crawler is meant to cite at `/d/`. The key, when one opened it, is in the frame's path and the link, as on `/d/`.
+- **Every other answer** is one neutral page that says the document is not available here, with the same link: `404`, `private, no-store`, `noindex`. A private document and an absent one get the same bytes (§1.4b). So does a malformed path.
+- **No `X-Frame-Options` and no `frame-ancestors`**, on either answer: any site may frame it. `nosniff`. Every answer sets `Cache-Control` itself, because Hosting gives a function response that sets none `max-age=600`.
+- **The prefix is matched without regard to case.** Whatever Hosting rewrites here is answered by the embed page or its refusal, never the app shell, so no casing of `/embed` can become a frameable copy of the app (§23).
+- `405` for a method other than `GET`/`HEAD`, and `503` when no template has ever been adopted.
+
+The page's script frames nothing itself. It opens a link that leaves the document in a new tab, as the viewer does (§6), runs the reading clock with `surface: "embed"` (§4), and asks for analytics consent in the embed (§15 "Consent"). The address `/content/…` a site may also frame directly does none of this.
 
 ### `POST /unlock`
 Body `{ docId, k? }`. What a reader who is not a member may know about a document, and the one place an unlisted document's key is exchanged for access.
@@ -237,7 +250,7 @@ Every change to a suggested edit (§22), `{ op, docId, versionId, k?, … }`, an
 - **`POST /trust`** — global trust (§6c): lifting the sandbox takes a superadmin owner in the browser's session, and a token is refused (`403`) whoever holds it; any owner, by any credential, may restore the sandbox.
 - **`POST /marking`** — owner-only export marking (§20).
 - **`POST /visibility`** — owner-only `{ docId, visibility, publicEdit?, expiresAt? }` (§17). `{ folderId, visibility, expiresAt? }` sets a folder's own level and expiry, recomputes its subtree, and answers `{ visibility, linkToken, expiresAt }`; a folder has no open editing. Omitting `expiresAt` preserves the current deadline; explicit `null` clears it. Only a date that is sent is parsed, so a level change that leaves out a stored date which has since passed is not refused for it; the Share dialog sends a date only when the date is what changed.
-- **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the body for an unlisted document; without a read basis it is the `404` an absent id gets, and nothing is counted. A beat that reports no new time is answered and moves no read time.
+- **`POST /view` (`recordView`)** — reading heartbeat; see §4. Carries `k` in the body for an unlisted document, and `surface: "embed"` from the embed page (`400` for any other `surface`); without a read basis it is the `404` an absent id gets, and nothing is counted. A beat that reports no new time is answered and moves no read time.
 - **`GET /activity?docId=…&before=…` (`recordView`)** — one page of a document's Activity panel, newest first: `{ items, next }`, editors only, `private, no-store`. See §17.
 - **`GET /download/:docId/:versionId`** — `canRead`-gated zip of the version; accepts `?k=` as `/content/**` does.
 
@@ -329,9 +342,11 @@ A saved cursor, `users/{uid}/cursors/{tokenId}~{docId}`, is `{ cursor, docId, to
 
 **`stats`** is the denormalized usage rollup, so the workspace list renders counts with no extra reads and any member can see the AGGREGATE. Written only by the Admin SDK, always as a nested map under `set(..., { merge: true })` so the view writer and the edit writer never clobber each other. Reading identities never appear in this member-readable map. They live only in the editor-gated `views` and `viewers` collections; `lastViewedAt` is an anonymous aggregate timestamp. The one exception is a person's own rows: they may list their own `viewers` rows across documents, and nobody else's (§5 "Your own reading"). Read writers delete the legacy `stats.lastViewedByEmail` field. An existing installation must also run `scripts/redact-reader-stats.mjs` to erase it from documents nobody reads again. `recordView` deliberately does NOT touch `updatedAt` — that field means "the record changed", and a read must not masquerade as a change.
 
-**A read is time on screen.** The client's clock (`app/src/stats.ts`) opens a session once a tab has been on screen for two seconds, and counts while the tab is on screen and its reader has scrolled, clicked or typed in the last five minutes. Bringing the tab forward counts as doing something. Focus is not asked for, because a document beside another window is being read. A hidden or idle tab sends no beat, a tab opened in the background and never shown sends nothing at all, so it is neither a view nor a read, and a stretch on screen under two seconds counts for nothing. `lastViewedAt`, on `stats` and on `viewers/{uid}`, moves only for a new session, a new row, or a beat reporting more time than the session holds. So the beat a tab still running an older client sends each minute while hidden is no read, and that tab stops lifting its document as soon as the server has this rule, without a reload. A session past `MAX_SESSION_MS` adds no more time, and its beats still move the read, because its reader is still there.
+**A read is time on screen.** The client's clock (`app/src/stats.ts`) opens a session once a tab has been on screen for two seconds, and counts while the tab is on screen and its reader has scrolled, clicked or typed in the last five minutes. Bringing the tab forward counts as doing something. Focus is not asked for, because a document beside another window is being read. A hidden or idle tab sends no beat, a tab opened in the background and never shown sends nothing at all, so it is neither a view nor a read, and a stretch on screen under two seconds counts for nothing. In the embed page, on screen also means inside the host page's viewport: an embed the reader has not scrolled to, or has scrolled past, counts as a hidden tab. `lastViewedAt`, on `stats` and on `viewers/{uid}`, moves only for a new session, a new row, or a beat reporting more time than the session holds. So the beat a tab still running an older client sends each minute while hidden is no read, and that tab stops lifting its document as soon as the server has this rule, without a reload. A session past `MAX_SESSION_MS` adds no more time, and its beats still move the read, because its reader is still there.
 
 **`thumb`** is `{ versionId, rev?, cover?, slides?: { key, count } }`: which version's thumbnails are stored, by which capture revision (absent is the first), and under which keys (§2 `POST /thumb`). Storage holds them at `docs/{docId}/thumbs/{versionId}/{key}/{cover|s<n>}.jpg` — beside the version's prefix, never under it, because everything that reads a version (the next commit's content hash, a fork, the download) takes every object under `docs/{docId}/bundles/{attempt}/`, selected by `DocVersion.storagePrefix`; legacy records use `docs/{docId}/{versionId}/`. Written only by the Admin SDK, never with `updatedAt`: a captured image is not a publish. It may name an older version than `currentVersion` until an editor next opens the document, and the workspace shows that cover meanwhile.
+
+`stats.embeds` counts the sessions that came through the embed page (`GET /embed/…`). They are already in `stats.views` and `stats.totalMs`, so it says how many of those visits were embedded, not a further count; the session row carries `embedded: true`.
 
 `stats.apiReads` counts automated reads. They never enter `stats.views` or `stats.totalMs`: reading *time* is a human concept and an agent fetching a document forty times would otherwise turn both into noise (§17).
 
@@ -520,7 +535,7 @@ Presentation mode hides app chrome with a class on `<body>` and requests fullscr
 app/src/
   main.tsx App.tsx
   brand/{tokens.ts,dom.ts,fonts.ts,Wordmark.tsx,Mark.tsx}
-  styles/*.css                      (14 files, @layer tokens,base,primitives,layout,feature)
+  styles/*.css                      (14 imported by index.css, @layer tokens,base,primitives,layout,feature; embed.css is the embed page's own)
   generated/policy.ts               (GENERATED)
   config.ts firebase.ts auth.tsx analytics.ts
   firestore.ts access.ts folders.ts teams.ts upload.ts edit.ts trust.ts
@@ -529,6 +544,7 @@ app/src/
   wysiwyg/{EditToolbar.tsx,placeholders.ts}
   export/{labels.ts,html.ts,pdf.ts,image.ts}
   viewer/{useDocFrame.ts,useAnnotationLayer.ts,useInlineEditor.ts,...}
+  embed/{main.ts,embed.ts,embed.css}  (the embed page's own entry, app/embed.html; never imports the app)
   workspace/{tree.ts,prefs.ts}
   pages/{DocList.tsx,DocViewer.tsx,SharedFolder.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
   components/*.tsx
@@ -576,7 +592,7 @@ functions/src/
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,trash,expire,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
-  lib/{head,html,htmltext,http,health,marking,thumbs,shell,sitemap,scriptlock,transaction-receipts,mcp-transport}.ts
+  lib/{head,html,htmltext,http,health,marking,thumbs,shell,embed,sitemap,scriptlock,transaction-receipts,mcp-transport}.ts
   lib/{versions,latest,publish,draft,causal,storage,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
   lib/accountmove.ts
@@ -603,6 +619,7 @@ functions/src/
 - `lib/html.ts` — escaping for markup the functions emit into the app shell; separate from the Markdown renderer's escaper, whose bytes are part of the content hash.
 - `lib/scriptlock.ts` — whether a document's own script may run in a response: the lock every scriptable content and draft response carries, the run variant that alone can lift it, and who may trust a document for everyone (§2, §6c; ADR 0021).
 - `lib/shell.ts` — the `docShell` decision, the page composed from it, the splice into the shell template, and the runtime fetch of the shell from Hosting; the handler in `index.ts` is glue.
+- `lib/embed.ts` — the embed page `docShell` serves at `/embed/**`: the frame and link spliced into its template, and the one neutral refusal (§2 `GET /embed/…`).
 - `lib/sitemap.ts` — what `/sitemap.xml` says, given the public documents the handler read.
 - Bucket name: `BIKESHED_BUCKET` → `config/deploy.json` → `${projectId}-content`. **The Firebase default bucket is never assumed** (§14 of the risk register: `${projectId}.appspot.com` is wrong for post-2024 projects and `.firebasestorage.app` is wrong for pre-2024 ones).
 - Never leak whether a document exists to a caller who may not read it: 401/404 before 403 on read-only byte paths (§1.4b).
@@ -891,7 +908,7 @@ Three things that are easy to get wrong:
 
 **No document id, title, slug, folder name or email is ever sent to Analytics.** An assertion in the event-builder test enforces it.
 
-Eleven events, enum and count parameters only: `page_view`, `login`, `sign_up`, `doc_publish`, `doc_open`, `annotation_create`, `comment_create`, `version_commit`, `export`, `share_grant`, `trust_grant`.
+Eleven events, enum and count parameters only: `page_view`, `login`, `sign_up`, `doc_publish`, `doc_open`, `annotation_create`, `comment_create`, `version_commit`, `export`, `share_grant`, `trust_grant`. The embed page sends two of them: `page_view` with the pattern `/embed/:docId` or `/embed/:docId/:versionId`, and `doc_open` with `embedded: true`.
 
 This is **not** the product's first-party reading stats (§4). Those answer "who read this document and for how long" and live in the owner's own Firestore; Analytics answers "how is the product used" in aggregate. Neither grows to cover the other's job.
 
@@ -907,6 +924,8 @@ So consent is now a **per-visitor** decision, held per-visitor in `localStorage`
 - A corrupted or unreadable store reads as unanswered. Silence is never a yes.
 - The banner appears only when a measurement id is configured. A deployment without analytics never asks, because there would be nothing to consent to.
 - The **session cookie is out of scope and needs no consent** — it is strictly necessary to serve a document to the person who asked for one, and asking permission for the thing that makes the page work teaches people to click Accept without reading.
+
+**The embed page asks again, in the embed.** A browser keeps an embedded page's storage apart for each site that frames it, so the answer a visitor gave on this deployment is not readable there, and the embed shows its own one-line bar with the same two answers, kept in the same key of that partitioned store. Nothing is fetched before Allow. No account is known inside an embed, so consent is its only gate: the account opt-out below cannot reach it. Analytics will undercount embedded reads, and §4's statistics are the ones that count them all.
 
 Account-level opt-out (`users/{uid}.analyticsOptOut` → `setAnalyticsCollectionEnabled(false)`) remains, and answers a different question: it is per-account and travels across devices, where consent is per-device. Both must be satisfied, and an account opt-out cannot re-enable what consent denied, because there is no instance to enable.
 
@@ -1094,7 +1113,7 @@ An anonymous reader who selects text and tries to comment gets the sign-in sheet
 
 ### Caching
 
-Gated content: `private, no-store`. Non-private content on the immutable `/content/{docId}/{versionId}/…` path: `public, max-age=300`. Versions are immutable so the bytes can never be stale; the real exposure is **revocation latency — making a document private again takes up to five minutes to propagate**, documented in `operations.md` beside the purge steps.
+Gated content: `private, no-store`. Non-private content on the immutable `/content/{docId}/{versionId}/…` path: `public, max-age=300`. The embed page names the current version, so a revision reaches an embed, and a document made private leaves one, within the same window. Versions are immutable so the bytes can never be stale; the real exposure is **revocation latency — making a document private again takes up to five minutes to propagate**, documented in `operations.md` beside the purge steps.
 
 Stored thumbnails (§2 `GET /thumb`) are the one gated response a browser may keep: `private, max-age` of at most a day, capped at expiry, and `immutable` because their URL names a key that is never reused. A member's workspace then costs no function call per card on every visit. `private` keeps them out of every shared cache; what the window concedes is that someone removed from a document keeps, for up to a day, the images their own browser already held.
 
@@ -1173,7 +1192,7 @@ Where a mutable operation needs a receipt rather than an existing immutable resu
 - `origin` is how the content arrived, kept apart from who sent it: `upload` (bytes sent, from the upload dialog, `bikeshed publish` or `update`, or `publish_document` / `update_document`), `edit` (a draft committed, from the browser or by `commit_draft`, suggestions accepted into it included) or `fork`. A version written before `origin` existed has none; readers derive it from `publishedVia` (`fork` → fork, `editor` → edit, anything else → upload).
 - `publishedVia` is the older single field, still written, and derived from `origin` and the channel so it can no longer disagree with them: `fork` for a fork, the channel (`cli`, `mcp`, `api`, `app`, `operator`) for anything automated, else `upload` or `editor`. Before `origin`, the CLI's first publish read `upload` while its updates read `cli` or `mcp` depending on the file type. `"duplicate"` marks copies made before §21, which record no lineage.
 - `editSessions` on a version committed from a draft lists every credential that saved into that draft, in order: one entry per person and token, with the first and last save time, capped at 50. Two agents of one person on two tokens are two entries. It answers which people and agents wrote into a version, not which characters each wrote: per-character attribution is still deliberately not built ([ADR 0010](adr/0010-crdt-for-shared-document-state.md)). The draft's own `lastEditedByEmail` names only the last.
-- Views record `via: "app" | "unlisted" | "public"`. Anonymous sessions record `uid: null`, count toward `stats.views` and `stats.totalMs`, and are **never** rolled into `viewers/{uid}` — there is no identity to roll into. The owner sees "142 views · 38 identified".
+- Views record `via: "app" | "unlisted" | "public"`, and `embedded: true` when the embed page sent them. The Activity panel says such a read was "in an embed", and the stats panel says how many visits were. Anonymous sessions record `uid: null`, count toward `stats.views` and `stats.totalMs`, and are **never** rolled into `viewers/{uid}` — there is no identity to roll into. The owner sees "142 views · 38 identified".
 
 **No IP, no fingerprint, no unique-visitor estimation for anonymous traffic.** Sessions are counted; people are not. A deliberate privacy floor.
 
@@ -1659,7 +1678,7 @@ The Node HTTP request-start hook pins these two headers before the runtime's lis
 - **What the page refuses:**
   - it does not render inside a frame
   - Approve stays disabled until the page has had focus for a second and a pointer or key event
-- **Every app-shell entry path sends** `frame-ancestors 'none'` and `X-Frame-Options: DENY`, including case variants, encoded aliases, trailing slashes and unknown paths that the client redirects. An app-shell page can navigate to signup and consent without another Hosting request, so protecting only `/signup` and `/connect` is insufficient. The `/content/**`, `/draft/**` and `/thumb/**` byte routes remain embeddable in the app's iframe (§2).
+- **Every app-shell entry path sends** `frame-ancestors 'none'` and `X-Frame-Options: DENY`, including case variants, encoded aliases, trailing slashes and unknown paths that the client redirects. An app-shell page can navigate to signup and consent without another Hosting request, so protecting only `/signup` and `/connect` is insufficient. The `/content/**`, `/draft/**` and `/thumb/**` byte routes remain embeddable in the app's iframe (§2). `/embed/**` is the one page any site may frame, because it is not the app shell and reaches no other route (§2 `GET /embed/…`).
 - **Approve** writes `oauthCodes/{sha256(code)}`, valid for two minutes. Every authorization response carries `iss` (RFC 9207).
 
 ### Tokens

@@ -174,6 +174,11 @@ export interface ViewStats {
    * machine fetch (SPEC §17).
    */
   apiReads?: number;
+  /**
+   * How many of `views` came through the embed page another site framed
+   * (SPEC §4). A part of `views`, never added to it.
+   */
+  embeds?: number;
   /** Forks made from this document, those in the Trash included; one deleted forever takes itself off (SPEC §21). */
   forks?: number;
 }

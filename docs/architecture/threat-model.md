@@ -217,6 +217,19 @@ Clickjacking, including the double-click variant, where a window opens beneath t
 
 A trusted document runs unsandboxed on this origin and could post to `/oauth/consent` as it can post to `/tokens`. It would need the account's ID token, which lives in the app's storage, so this is the session-theft case at the top of this file, not a new one.
 
+### Another site frames a document
+
+Any site may frame the embed page, `/embed/<id>`, and that is the point of it ([ADR 0031](adr/0031-a-document-can-be-embedded-in-another-site.md)). The attacks are the framing ones: borrowing a click, or using the frame as a way into the app.
+
+**Mitigation.**
+- **The embed page is not the app.** Its bundle has no router, no sign-in and no Firestore, and a test pins what it imports. There is no route from it to `/signup` or `/connect`, which is the reason every app-shell path refuses to be framed (SPEC §23).
+- **It has nothing to click that changes anything.** A link to the document opens a new tab, and the consent bar only decides whether analytics loads inside that embed.
+- **It presents no caller.** The session cookie is `SameSite=Strict`, so a framing page on another site makes every request anonymous. The decision is anonymous anyway (`decideShell`), and a private document and an absent one get the same neutral page.
+- **The document's bytes stay locked.** They carry their own sandbox (`sandbox allow-same-origin`), and the run variant that alone lifts it may only be framed by this origin. A trusted document's script does not run in an embed.
+- **No casing of `/embed` serves the app shell.** The function matches its prefix without regard to case, and every other path keeps `DENY`.
+
+**Residual, accepted.** A framing page can crop the document, size it, and lay its own content over it, so a reader may be shown less than the document says, or something that is not in it. A framing page can also load an embed many times to inflate a public document's view count; that is no different from loading its public link, and App Check is the named hook. Whether real Hosting applies `DENY` to every path but `/embed/**` and the byte routes can only be checked on a deployment, because its glob handling differs from the emulator's.
+
 ### The authorization server is made to fetch something internal
 
 A client metadata document's URL is chosen by whoever asks, and the server fetches it. That is SSRF by design.

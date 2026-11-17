@@ -7,6 +7,7 @@ import { defineConfig, type ViteUserConfig } from "vitest/config";
 import type { ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { viteProxyKeys } from "../scripts/lib/endpoints.mjs";
 import { deploymentStamp } from "../tools/stamp-deployment.mjs";
 
@@ -103,7 +104,24 @@ export default defineConfig({
   plugins: [react(), utf8Text(), deploymentStamp()],
   define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   server: { port: 5173, proxy: devProxy() },
-  build: { outDir: "dist", sourcemap: true },
+  build: {
+    outDir: "dist",
+    sourcemap: true,
+    /**
+     * Two pages. The app, and the embed page another site frames (SPEC §2
+     * "GET /embed/…"), whose template docShell fetches from /embed.html. The
+     * embed has its own entry so it never loads the app: no router to reach
+     * sign-up or consent through, and no Auth or Firestore SDK.
+     */
+    rollupOptions: {
+      input: {
+        // Named `index`, so the app's assets keep the `index-<hash>` names
+        // .github/workflows/deploy.yml looks for after a deploy.
+        index: fileURLToPath(new URL("./index.html", import.meta.url)),
+        embed: fileURLToPath(new URL("./embed.html", import.meta.url)),
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,

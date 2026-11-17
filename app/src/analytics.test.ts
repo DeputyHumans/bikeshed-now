@@ -24,6 +24,7 @@ const EVERY_EVENT: AnalyticsEvent[] = [
   { name: "sign_up", params: { method: "github" } },
   { name: "doc_publish", params: { source: "upload", format: "markdown" } },
   { name: "doc_open", params: { format: "html", sandboxed: true } },
+  { name: "doc_open", params: { format: "markdown", sandboxed: true, embedded: true } },
   { name: "annotation_create", params: {} },
   { name: "comment_create", params: {} },
   { name: "version_commit", params: { format: "html" } },
@@ -42,6 +43,12 @@ describe("routePattern", () => {
      */
     expect(routePattern("/d/q3-acquisition-memo")).toBe("/d/:docId");
     expect(routePattern("/d/q3-acquisition-memo/v3")).toBe("/d/:docId/:versionId");
+  });
+
+  it("reduces an embed page's URL to its pattern", () => {
+    // Another site's frame carries the same slug the viewer's address does.
+    expect(routePattern("/embed/q3-acquisition-memo")).toBe("/embed/:docId");
+    expect(routePattern("/embed/q3-acquisition-memo/v3")).toBe("/embed/:docId/:versionId");
   });
 
   it("reduces a folder URL to its pattern", () => {
@@ -154,7 +161,7 @@ describe("the tag's own events", () => {
     writeConsent("granted");
     const initializeAnalytics = vi.fn(() => ({}) as never);
     vi.doMock("./config", () => ({ MEASUREMENT_ID: "measurement-id-for-tests", USE_EMULATORS: false }));
-    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/app", () => ({ getApps: () => [{}], initializeApp: () => ({}) }));
     vi.doMock("firebase/analytics", () => ({
       initializeAnalytics,
       isSupported: async () => true,
@@ -183,7 +190,7 @@ describe("restoring the account opt-out", () => {
     const log = vi.fn();
     const enabled = vi.fn();
     vi.doMock("./config", () => ({ MEASUREMENT_ID: "measurement-id-for-tests", USE_EMULATORS: false }));
-    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/app", () => ({ getApps: () => [{}], initializeApp: () => ({}) }));
     vi.doMock("firebase/analytics", () => ({ initializeAnalytics, isSupported: async () => true, logEvent: log, setAnalyticsCollectionEnabled: enabled }));
     const analytics = await import("./analytics");
     analytics.initAnalytics();
@@ -213,7 +220,7 @@ describe("restoring the account opt-out", () => {
     const log = vi.fn();
     const initializeAnalytics = vi.fn(() => ({}) as never);
     vi.doMock("./config", () => ({ MEASUREMENT_ID: "measurement-id-for-tests", USE_EMULATORS: false }));
-    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/app", () => ({ getApps: () => [{}], initializeApp: () => ({}) }));
     vi.doMock("firebase/analytics", () => ({ initializeAnalytics, isSupported: () => supported, logEvent: log, setAnalyticsCollectionEnabled: vi.fn() }));
     const analytics = await import("./analytics");
     const enable = analytics.setAnalyticsOptOut(false);

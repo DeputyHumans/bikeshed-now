@@ -159,8 +159,12 @@ export function StatsPanel({
           {/* Sessions are counted; people are not. An anonymous reader has no
               identity to roll up, and no IP or fingerprint is collected to
               invent one. Saying both numbers is more honest than saying one. */}
+          {/* Embedded visits are a part of the visits, not more of them: the
+              embed page runs the same clock (SPEC §4). An aggregate, so any
+              member sees it, as they see the visits. */}
           <div className="stat-label">
             visits{canSeeDetail && identified ? ` · ${identified} identified` : ""}
+            {stats?.embeds ? ` · ${stats.embeds} in embeds` : ""}
           </div>
         </div>
         <div className="stat-tile">

@@ -1,0 +1,92 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * The embed page: a frame, a link to the document, and a consent bar (SPEC §2 "GET /embed/…", §15).
+ *
+ * Its own entry, imported by src/embed/main.ts and never by index.css: the
+ * embed page is not the app, and carries only the tokens, the reset and the
+ * button it uses. The host page decides how big the embed is; this fills it.
+ */
+
+@layer tokens, base, primitives, feature;
+
+@import "./tokens.css" layer(tokens);
+@import "./base.css" layer(base);
+@import "./primitives.css" layer(primitives);
+
+@layer feature {
+  html,
+  body {
+    height: 100%;
+  }
+
+  html {
+    /* base.css reserves a scrollbar gutter for dialogs; this page has none,
+       and would show a blank strip down its side. The document scrolls inside
+       its own frame. */
+    scrollbar-gutter: auto;
+    overflow: hidden;
+  }
+
+  #embed {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  #embed-frame {
+    display: block;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    background: var(--color-bg);
+  }
+
+  #embed-open {
+    flex: none;
+    align-self: flex-end;
+    padding: var(--s-1) var(--s-2);
+    font-size: var(--fs-caption);
+    color: var(--color-ink-muted);
+  }
+
+  #embed-gone {
+    margin: auto;
+    padding: var(--s-4);
+    text-align: center;
+    color: var(--color-ink-muted);
+  }
+
+  #embed-gone + #embed-open {
+    align-self: center;
+  }
+
+  /* Above the document, at its foot, and gone for good after one answer. */
+  .embed-consent {
+    position: absolute;
+    inset-inline: var(--s-2);
+    bottom: var(--s-2);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    font-size: var(--fs-small);
+    /* base.css turns every property into a 0.01ms transition under reduced
+       motion, which a script-shown bar would read as stale for a moment. */
+    transition: none;
+  }
+
+  .embed-consent-text {
+    flex: 1 1 16rem;
+    margin: 0;
+  }
+
+  .embed-consent-actions {
+    display: flex;
+    gap: var(--s-2);
+  }
+}

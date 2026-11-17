@@ -197,6 +197,8 @@ function describeRead(s: Snapshot): Record<string, unknown> {
     // The session's own flag answers for one stored without an actor.
     automated: v.automated === true || isAutomated(actor),
     ...(typeof v.versionId === "string" ? { version: v.versionId } : {}),
+    // Read through the embed page another site framed (SPEC §17).
+    ...(v.embedded === true ? { embedded: true } : {}),
     ms: typeof v.ms === "number" ? v.ms : 0,
     ...(typeof v.reads === "number" ? { reads: v.reads } : {}),
   };

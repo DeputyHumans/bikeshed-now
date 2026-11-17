@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Bikeshed</title>
+    <!--
+      SPDX-License-Identifier: Apache-2.0
+      The embed page's template (SPEC §2 "GET /embed/…", ADR 0031). Hosting
+      serves it at /embed.html, and docShell fetches it from there and writes
+      the document's frame, or the refusal, where the slot comment is. The
+      id on <main> is how docShell knows it has this page and not another.
+
+      Not the app: its script is src/embed/main.ts, which imports no router and
+      no sign-in, so a site that frames this page cannot reach the app.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
+    <script type="module" src="/src/embed/main.ts"></script>
+  </head>
+  <body>
+    <main id="embed"><!--embed--></main>
+  </body>
+</html>

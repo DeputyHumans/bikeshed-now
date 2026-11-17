@@ -171,3 +171,25 @@ export function watchFocus(doc: Document, onFocus: (el: Element) => void): () =>
 export function refusesListeners(doc: Document | null): boolean {
   return doc !== null && !deliversEvents(doc);
 }
+
+/**
+ * Call `mark` whenever the reader does something to `doc`: a gesture where the
+ * frame delivers one, and otherwise what can be seen of it, a scroll or a
+ * selection. The reading clock's activity signal, for the viewer and the
+ * embed page alike (SPEC §4). Returns the detach.
+ */
+export function watchActivity(doc: Document, mark: () => void): () => void {
+  if (refusesListeners(doc)) {
+    const stops = [watchScroll(doc, mark), watchSelection(doc, mark)];
+    return () => {
+      for (const stop of stops) stop();
+    };
+  }
+  const events = ["pointerdown", "keydown", "scroll", "wheel"] as const;
+  for (const type of events) {
+    doc.addEventListener(type, mark, { passive: true });
+  }
+  return () => {
+    for (const type of events) doc.removeEventListener(type, mark);
+  };
+}

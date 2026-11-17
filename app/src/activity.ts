@@ -22,6 +22,8 @@ export interface ActivityItem {
   origin?: "upload" | "edit" | "fork";
   ms?: number;
   reads?: number;
+  /** A read through the embed page another site framed (SPEC §17). */
+  embedded?: boolean;
   from?: unknown;
   to?: unknown;
   added?: string[];
@@ -67,7 +69,8 @@ const place = (p: unknown) => (p && typeof p === "object" && "path" in p ? Strin
 export function describeActivity(item: ActivityItem): string {
   switch (item.type) {
     case "read":
-      return item.automated && item.reads && item.reads > 1 ? `read it ${item.reads} times` : "read it";
+      if (item.automated && item.reads && item.reads > 1) return `read it ${item.reads} times`;
+      return item.embedded ? "read it in an embed" : "read it";
     case "version.published":
       return item.origin === "edit"
         ? "published a version from the editor"

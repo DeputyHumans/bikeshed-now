@@ -201,6 +201,14 @@ import {
 } from "./lib/shell";
 import { sitemapXml } from "./lib/sitemap";
 import {
+  EMBED_MARKER,
+  EMBED_TEMPLATE_PATH,
+  embedPage,
+  embedSegments,
+  renderEmbed,
+  renderEmbedRefusal,
+} from "./lib/embed";
+import {
   badRequest,
   contentPath,
   jsonBody,
@@ -2103,6 +2111,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     sessionId?: unknown;
     ms?: unknown;
     k?: unknown;
+    surface?: unknown;
   } | null;
   const docId = typeof body?.docId === "string" ? body.docId : "";
   const versionId = typeof body?.versionId === "string" ? body.versionId : "";
@@ -2119,6 +2128,13 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
     badRequest(res, "invalid or missing sessionId");
     return;
   }
+  // The embed page says it is one; the viewer says nothing (SPEC §4). Any
+  // other value is a client this server does not know.
+  if (body?.surface !== undefined && body.surface !== "embed") {
+    badRequest(res, "invalid surface");
+    return;
+  }
+  const embedded = body?.surface === "embed";
 
   const docRef = db().collection("docs").doc(docId);
   const docSnap = await docRef.get();
@@ -2187,6 +2203,7 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
         ms: sessionMs,
         via,
         automated,
+        ...(embedded ? { embedded: true } : {}),
         ...(actor ? { actor } : {}),
         ...(isNewSession ? { startedAt: now() } : {}),
         lastBeatAt: now(),
@@ -2222,6 +2239,9 @@ export const recordView = onRequest(PLAIN, async (req, res) => {
               views: FieldValue.increment(isNewSession ? 1 : 0),
               viewers: FieldValue.increment(isNewViewer ? 1 : 0),
               totalMs: FieldValue.increment(delta),
+              // How many of those visits came through an embed: a part of
+              // `views`, never added to it.
+              ...(embedded ? { embeds: FieldValue.increment(isNewSession ? 1 : 0) } : {}),
               ...(read ? { lastViewedAt: now() } : {}),
             }),
         },
@@ -2965,6 +2985,87 @@ async function serveFolderShell(
  * built, so a throw before then falls back to a generic shell that is still
  * uncacheable — never a broken page pinned at a public URL for the window.
  */
+/**
+ * GET /embed/:docId[/:versionId] — the page another site frames (SPEC §2
+ * "GET /embed/…", ADR 0031). Never authenticates, and decides as `/d/**` does:
+ * `decideShell`, anonymous. A document is its frame and a link, cacheable at
+ * this URL for the content window; every other answer is the one neutral
+ * refusal, `private, no-store`. No answer carries a frame header: framing is
+ * what this page is for.
+ */
+async function serveEmbed(
+  req: Request,
+  res: import("express").Response,
+  segments: string[],
+): Promise<void> {
+  // Always: the page repeats one a crawler is meant to cite at /d/.
+  res.setHeader("X-Robots-Tag", "noindex");
+  const template = await loadShell({ origin: publicOrigin(), path: EMBED_TEMPLATE_PATH, marker: EMBED_MARKER }).catch(
+    (err: unknown) => {
+      console.warn("docShell: no embed template to serve:", (err as { reason?: unknown })?.reason ?? (err as Error)?.name);
+      return null;
+    },
+  );
+  if (template === null) {
+    res.status(503).end();
+    return;
+  }
+  const isHead = req.method === "HEAD";
+  const send = (status: number, body: string): void => {
+    res.status(status);
+    if (isHead) res.end();
+    else res.send(body);
+  };
+  const refuse = (docId: string | null): void => {
+    noStore(res);
+    send(404, renderEmbedRefusal(template, docId));
+  };
+
+  if (segments.length < 1 || segments.length > 2 || !segments.every(safeSegment)) {
+    refuse(null);
+    return;
+  }
+  const [docId] = segments;
+  const pinned = segments.length === 2 ? segments[1] : null;
+  const k = strParam(req, "k");
+
+  try {
+    const docSnap = await db().collection("docs").doc(docId).get();
+    const doc = docSnap.exists ? (docSnap.data() as ShellDoc) : null;
+    // The folder is read only when the document's own level has said no.
+    const folder = doc && readBasis(doc, null, { k }) === null ? await folderOfDoc(db(), doc) : null;
+    const decision = decideShell({ doc, folder, k, versionId: pinned, now: Date.now() });
+    if (decision.kind === "generic") {
+      refuse(docId);
+      return;
+    }
+    const versionSnap = await docSnap.ref.collection("versions").doc(decision.versionId).get();
+    const data = versionSnap.exists ? versionSnap.data() || {} : null;
+    const entry = data === null ? null : safeRelPath(String(data.entry ?? "index.html"));
+    if (data === null || entry === null) {
+      refuse(docId);
+      return;
+    }
+    const page = embedPage({
+      docId,
+      requestedVersion: pinned,
+      decision,
+      entry,
+      docTitle: typeof doc?.title === "string" ? doc.title : "Untitled",
+      format: data.format,
+      k,
+    });
+    const html = renderEmbed(template, page);
+    // ONLY NOW: the page exists, so this URL may be cached with it.
+    res.setHeader("Cache-Control", `public, max-age=${decision.maxAge}`);
+    send(200, html);
+  } catch (err) {
+    // A code or a name only: a Firestore message can name the document path.
+    console.warn("docShell: embed refused on error", (err as { code?: unknown })?.code ?? (err as Error)?.name);
+    refuse(docId);
+  }
+}
+
 export const docShell = onRequest(WARM, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
 
@@ -2972,6 +3073,14 @@ export const docShell = onRequest(WARM, async (req, res) => {
   noStore(res);
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("X-Content-Type-Options", "nosniff");
+
+  // Before anything that could serve the app shell: under no spelling may
+  // `/embed` answer with a page this function serves for `/d/**` (lib/embed.ts).
+  const embed = embedSegments(req.path);
+  if (embed !== null) {
+    await serveEmbed(req, res, embed);
+    return;
+  }
 
   const template = await loadShell({ origin: publicOrigin() }).catch((err: unknown) => {
     // A 503 with nothing beside it is undiagnosable. The reason is

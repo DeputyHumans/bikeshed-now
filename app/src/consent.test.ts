@@ -90,7 +90,7 @@ describe("analytics is gated on consent", () => {
       MEASUREMENT_ID: MEASUREMENT_ID_FOR_TESTS,
       USE_EMULATORS: false,
     }));
-    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/app", () => ({ getApps: () => [{}], initializeApp: () => ({}) }));
     vi.doMock("firebase/analytics", () => ({
       initializeAnalytics,
       isSupported: async () => true,
@@ -134,7 +134,7 @@ describe("analytics is gated on consent", () => {
      */
     const initializeAnalytics = vi.fn(() => ({}) as never);
     vi.doMock("./config", () => ({ MEASUREMENT_ID: MEASUREMENT_ID_FOR_TESTS, USE_EMULATORS: false }));
-    vi.doMock("./firebase", () => ({ app: {} }));
+    vi.doMock("firebase/app", () => ({ getApps: () => [{}], initializeApp: () => ({}) }));
     vi.doMock("firebase/analytics", () => ({
       initializeAnalytics,
       isSupported: async () => true,

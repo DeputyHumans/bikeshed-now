@@ -412,6 +412,13 @@ export function collectPrefix(stream: NodeJS.ReadableStream, cap: number): Promi
 
 export interface ShellSource {
   origin: string;
+  /**
+   * The built page to adopt, on that origin: the app shell at `/` unless
+   * named. The embed page's template is `/embed.html` (`lib/embed.ts`).
+   */
+  path?: string;
+  /** The attribute that says the body is that page: the app's `id="root"` unless named. */
+  marker?: string;
   fetchImpl?: typeof fetch;
   log?: (line: string) => void;
 }
@@ -456,8 +463,8 @@ function discardBody(res: Response): void {
   }
 }
 
-/** The adopted shell and the ETag Hosting gave it, for the whole process. */
-let cached: { etag: string | null; body: string } | null = null;
+/** Each adopted page and the ETag Hosting gave it, by path, for the whole process. */
+const adopted = new Map<string, { etag: string | null; body: string }>();
 let originLogged = false;
 
 /**
@@ -479,12 +486,15 @@ export async function loadShell(source: ShellSource): Promise<string> {
     log(`shell origin: ${source.origin}`);
   }
   const fetchImpl = source.fetchImpl ?? fetch;
+  const path = source.path ?? "/";
+  const marker = source.marker ?? 'id="root"';
+  const cached = adopted.get(path) ?? null;
   const headers: Record<string, string> = { Accept: "text/html" };
   if (cached !== null && cached.etag !== null) headers["If-None-Match"] = cached.etag;
 
   let refused: string;
   try {
-    const res = await fetchImpl(`${source.origin}/`, {
+    const res = await fetchImpl(`${source.origin}${path}`, {
       headers,
       signal: AbortSignal.timeout(SHELL_FETCH_TIMEOUT_MS),
     });
@@ -492,8 +502,8 @@ export async function loadShell(source: ShellSource): Promise<string> {
     const type = res.headers.get("content-type") ?? "";
     if (res.ok && type.toLowerCase().startsWith("text/html")) {
       const body = await res.text();
-      if (body.includes('id="root"') && body.includes("/assets/")) {
-        cached = { etag: res.headers.get("etag"), body };
+      if (body.includes(marker) && body.includes("/assets/")) {
+        adopted.set(path, { etag: res.headers.get("etag"), body });
         return body;
       }
       refused = `${res.status} without the app's markers`;
@@ -510,9 +520,9 @@ export async function loadShell(source: ShellSource): Promise<string> {
   throw new ShellNotAdopted(refused);
 }
 
-/** Forgets the adopted shell and the logged origin, so each test starts clean. */
+/** Forgets every adopted page and the logged origin, so each test starts clean. */
 export function resetShellCacheForTests(): void {
-  cached = null;
+  adopted.clear();
   originLogged = false;
 }
 

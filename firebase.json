@@ -50,6 +50,7 @@
       { "source": "/thumb/**", "function": "contentProxy" },
       { "source": "/d/**", "function": "docShell" },
       { "source": "/folder/**", "function": "docShell" },
+      { "source": "/embed/**", "function": "docShell" },
       { "source": "**", "destination": "/index.html" }
     ],
     "headers": [
@@ -61,7 +62,7 @@
         ]
       },
       {
-        "source": "!/@(content|draft|thumb)/**",
+        "source": "!/@(content|draft|thumb|embed)/**",
         "headers": [
           { "key": "X-Frame-Options", "value": "DENY" },
           { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" }

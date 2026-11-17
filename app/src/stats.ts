@@ -39,8 +39,21 @@ export const OPEN_DELAY_MS = 2_000;
 export interface ViewTracker {
   /** Note interaction, in the parent or inside the document iframe. */
   markActive: () => void;
+  /**
+   * Whether the document is inside the viewport that shows it. The viewer's
+   * always is; an embed's is not until the host page scrolls to it, and out
+   * of view counts exactly as a hidden tab does.
+   */
+  setInView: (inView: boolean) => void;
   /** Flush a final beat and detach. Safe to call more than once. */
   stop: () => void;
+}
+
+export interface TrackOptions {
+  /** Sent with every beat from the embed page, so its sessions are counted as embedded (SPEC §4). */
+  surface?: "embed";
+  /** Whether the document starts inside its viewport. True unless told otherwise. */
+  inView?: boolean;
 }
 
 /** Post a beat. sendBeacon survives pagehide, where fetch is killed. */
@@ -51,10 +64,18 @@ function beat(
   ms: number,
   final: boolean,
   k?: string,
+  surface?: "embed",
 ): void {
   // An unlisted document's key rides along: without it, the server answers a
   // link holder's view exactly as an id that does not exist (SPEC §17).
-  const payload = JSON.stringify({ docId, versionId, sessionId, ms, ...(k ? { k } : {}) });
+  const payload = JSON.stringify({
+    docId,
+    versionId,
+    sessionId,
+    ms,
+    ...(k ? { k } : {}),
+    ...(surface ? { surface } : {}),
+  });
 
   if (final && typeof navigator !== "undefined" && navigator.sendBeacon) {
     try {
@@ -85,10 +106,16 @@ function newSessionId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export function trackView(docId: string, versionId: string, k?: string): ViewTracker {
+export function trackView(
+  docId: string,
+  versionId: string,
+  k?: string,
+  options: TrackOptions = {},
+): ViewTracker {
   if (typeof window === "undefined" || typeof document === "undefined") {
-    return { markActive: () => {}, stop: () => {} };
+    return { markActive: () => {}, setInView: () => {}, stop: () => {} };
   }
+  const { surface } = options;
 
   const sessionId = newSessionId();
 
@@ -100,8 +127,10 @@ export function trackView(docId: string, versionId: string, k?: string): ViewTra
   let looking = false; // this stretch on screen has outlasted the grace period
   let sentMs = 0; // the time the server last heard
   let graceTimer: number | undefined;
+  let inView = options.inView ?? true;
 
-  const isVisible = () => document.visibilityState === "visible";
+  // On screen: a visible tab, and a document inside the viewport showing it.
+  const isVisible = () => document.visibilityState === "visible" && inView;
   const isIdle = () => Date.now() - lastActivity > IDLE_MS;
 
   /** Bank the interval in flight and return total active milliseconds. */
@@ -132,7 +161,7 @@ export function trackView(docId: string, versionId: string, k?: string): ViewTra
       final ? settle() : runningSince != null ? accruedMs + (Date.now() - runningSince) : accruedMs;
     if (ms === sentMs) return;
     sentMs = ms;
-    beat(docId, versionId, sessionId, ms, final, k);
+    beat(docId, versionId, sessionId, ms, final, k, surface);
   };
 
   /** The tab is on screen. Switching to it is the reader doing something. */
@@ -149,7 +178,7 @@ export function trackView(docId: string, versionId: string, k?: string): ViewTra
       registered = true;
       // Registers the session — and so the +1 view — well before the first
       // heartbeat, so a reader who leaves after thirty seconds is still counted.
-      beat(docId, versionId, sessionId, 0, false, k);
+      beat(docId, versionId, sessionId, 0, false, k, surface);
     }, OPEN_DELAY_MS);
   };
 
@@ -183,6 +212,13 @@ export function trackView(docId: string, versionId: string, k?: string): ViewTra
 
   return {
     markActive,
+    setInView(next: boolean) {
+      if (stopped || next === inView) return;
+      inView = next;
+      // Scrolling an embed into view is reading it, as bringing a tab forward
+      // is; scrolling it away is leaving, and flushes like going hidden.
+      onVisibility();
+    },
     stop() {
       if (stopped) return;
       stopped = true;

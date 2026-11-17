@@ -17,6 +17,7 @@ interface Beat {
   sessionId: string;
   ms: number;
   k?: string;
+  surface?: string;
 }
 
 function beats(): Beat[] {
@@ -69,6 +70,56 @@ describe("trackView", () => {
     // counted rather than being lost between heartbeats.
     expect(beats()[0].ms).toBe(0);
     tracker.stop();
+  });
+
+  it("marks the embed page's beats as embedded, and sends no surface from the viewer", () => {
+    // The server counts `stats.embeds` from this field alone (SPEC §4).
+    const embedded = trackView("d1", "v1", undefined, { surface: "embed" });
+    vi.advanceTimersByTime(OPEN_DELAY_MS);
+    embedded.stop();
+    const fromEmbed = beats().length;
+    expect(fromEmbed).toBeGreaterThan(0);
+    expect(beats().every((b) => b.surface === "embed")).toBe(true);
+
+    const viewer = trackView("d1", "v1");
+    vi.advanceTimersByTime(OPEN_DELAY_MS);
+    viewer.stop();
+    const fromViewer = beats().slice(fromEmbed);
+    expect(fromViewer.length).toBeGreaterThan(0);
+    for (const beat of fromViewer) expect(beat).not.toHaveProperty("surface");
+  });
+
+  it("counts an embed only while it is in view: unseen, scrolled to, scrolled past, and back, in one page", () => {
+    /**
+     * The sequence a reader of a long host page performs, in one tracker: the
+     * embed loads below the fold, the reader scrolls to it, reads, scrolls on
+     * past it, and comes back. A fresh tracker per state would never exercise
+     * the transitions, which are the part that can be wrong.
+     */
+    const tracker = trackView("d1", "v1", undefined, { surface: "embed", inView: false });
+    vi.advanceTimersByTime(10_000);
+    expect(beats(), "an embed nobody has scrolled to is not a view").toHaveLength(0);
+
+    tracker.setInView(true); // t = 10 s
+    vi.advanceTimersByTime(OPEN_DELAY_MS - 1);
+    expect(beats(), "a glance at it counts for nothing").toHaveLength(0);
+    vi.advanceTimersByTime(1); // t = 12 s: registered
+    expect(beats().map((b) => b.ms)).toEqual([0]);
+
+    vi.advanceTimersByTime(30_000); // t = 42 s
+    tracker.setInView(false); // scrolled past: flushes, as going hidden does
+    expect(beats().map((b) => b.ms)).toEqual([0, 32_000]);
+
+    vi.advanceTimersByTime(120_000); // t = 162 s, out of view throughout
+    expect(beats(), "out of view sends no beat").toHaveLength(2);
+
+    tracker.setInView(true);
+    vi.advanceTimersByTime(OPEN_DELAY_MS); // t = 164 s
+    tracker.stop();
+    const sent = beats();
+    expect(sent.map((b) => b.ms)).toEqual([0, 32_000, 34_000]);
+    expect(new Set(sent.map((b) => b.sessionId)).size, "one session throughout").toBe(1);
+    expect(sent.every((b) => b.surface === "embed")).toBe(true);
   });
 
   it("carries an unlisted document's key, and sends no key field otherwise", () => {

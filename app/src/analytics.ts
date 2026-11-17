@@ -2,8 +2,8 @@
 // Product analytics: eleven events, no identifiers, opt-out on the account (SPEC §15).
 
 import type { Analytics } from "firebase/analytics";
-import { app } from "./firebase";
-import { MEASUREMENT_ID, USE_EMULATORS } from "./config";
+import type { FirebaseApp } from "firebase/app";
+import { MEASUREMENT_ID, USE_EMULATORS, firebaseConfig } from "./config";
 import { readConsent } from "./consent";
 import type { Role } from "./types";
 
@@ -36,7 +36,8 @@ export type AnalyticsEvent =
   | { name: "login"; params: { method: "google" | "github" | "password" } }
   | { name: "sign_up"; params: { method: "google" | "github" | "password" } }
   | { name: "doc_publish"; params: { source: "cli" | "upload" | "mcp"; format: "html" | "markdown" } }
-  | { name: "doc_open"; params: { format: "html" | "markdown"; sandboxed: boolean } }
+  // `embedded` only from the embed page another site framed (SPEC §15); the viewer sends none.
+  | { name: "doc_open"; params: { format: "html" | "markdown"; sandboxed: boolean; embedded?: true } }
   | { name: "annotation_create"; params: Record<string, never> }
   | { name: "comment_create"; params: Record<string, never> }
   | { name: "version_commit"; params: { format: "html" | "markdown" } }
@@ -58,6 +59,18 @@ let optedOut = true;
  */
 export function analyticsConfigured(): boolean {
   return Boolean(MEASUREMENT_ID) && !USE_EMULATORS;
+}
+
+/**
+ * The Firebase app Analytics hangs off: the one `firebase.ts` made, in the app,
+ * and a bare one in the embed page, which has no Auth, Firestore or Realtime
+ * Database to bring with it and must not import the module that starts them
+ * (SPEC §2 "GET /embed/…"). The same config either way, so whichever asks
+ * first, `initializeApp` and `getApps` agree on one default app.
+ */
+async function firebaseApp(): Promise<FirebaseApp> {
+  const { getApps, initializeApp } = await import("firebase/app");
+  return getApps()[0] ?? initializeApp(firebaseConfig);
 }
 
 /**
@@ -84,6 +97,7 @@ function resolve(): Promise<Analytics | null> {
     try {
       const { initializeAnalytics, isSupported } = await import("firebase/analytics");
       if (!(await isSupported()) || optedOut || readConsent() !== "granted") return null;
+      const app = await firebaseApp();
       instance = initializeAnalytics(app, {
         config: {
           // The one line that keeps document slugs out of a third party's logs.
@@ -144,6 +158,8 @@ export function routePattern(pathname: string): string {
       return segments.length > 2 ? "/d/:docId/:versionId" : "/d/:docId";
     case "folder":
       return "/folder/:folderId";
+    case "embed":
+      return segments.length > 2 ? "/embed/:docId/:versionId" : "/embed/:docId";
     default:
       return `/${segments[0]}`;
   }

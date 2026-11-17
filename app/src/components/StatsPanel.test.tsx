@@ -29,11 +29,11 @@ const PAGE2: ActivityItem[] = [
   { id: "e1", type: "version.published", at: at(1), by: "own@example.com", channel: "cli", via: "CLI on mbp", automated: true, version: "v1", origin: "upload" },
 ];
 
-async function open() {
+async function open(meta: DocMeta = META, canSeeDetail = true) {
   render(
     <ToastProvider>
       <MemoryRouter>
-        <StatsPanel meta={META} canSeeDetail onClose={() => {}} />
+        <StatsPanel meta={meta} canSeeDetail={canSeeDetail} onClose={() => {}} />
       </MemoryRouter>
     </ToastProvider>,
   );
@@ -53,6 +53,21 @@ const how = (row: number) =>
 beforeEach(() => {
   fetchActivity.mockReset();
   fetchActivity.mockImplementation(async (_doc: string, before?: string) => (before === "c1" ? { items: PAGE2, next: null } : { items: PAGE1, next: "c1" }));
+});
+
+describe("the visits", () => {
+  it("say how many came through an embed, to any member, and nothing when none did", async () => {
+    const embedded = { ...META, stats: { ...META.stats, views: 9, embeds: 4 } } as unknown as DocMeta;
+    await open(embedded, false);
+    // Four of the nine, not four more: the tile still says nine.
+    expect(document.querySelector(".stat-value")?.textContent).toBe("9");
+    expect(document.querySelector(".stat-label")?.textContent).toBe("visits · 4 in embeds");
+  });
+
+  it("say nothing about embeds for a document nobody has embedded", async () => {
+    await open(META, false);
+    expect(document.querySelector(".stat-label")?.textContent).toBe("visits");
+  });
 });
 
 describe("the Activity feed", () => {

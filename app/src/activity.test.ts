@@ -83,6 +83,11 @@ describe("each row in words", () => {
     expect(subjectOf(row({ type: "read", by: null }))).toBe("Somebody without an account");
   });
 
+  it("says a read came through an embed on another site", () => {
+    expect(describeActivity(row({ type: "read", embedded: true }))).toBe("read it in an embed");
+    expect(describeActivity(row({ type: "read" }))).toBe("read it");
+  });
+
   it("quotes what a thread or suggestion is about, briefly", () => {
     const long = "word ".repeat(40);
     expect(describeActivity(row({ type: "thread.opened", quote: long })).length).toBeLessThan(80);

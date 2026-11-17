@@ -95,6 +95,11 @@ export const ENDPOINTS = [
   // `/folder` itself is the exact createFolder row above, which a prefix
   // glob does not match.
   { path: "/folder", fn: "docShell", match: "prefix", devProxy: false },
+  // The embed page another site frames (SPEC §2 "GET /embed/…"). Not a
+  // client route, but its template is built by Vite and the dev server has no
+  // function to fill it, so it stays out of the dev proxy too: an embed is
+  // checked on the emulators, where Hosting rewrites it.
+  { path: "/embed", fn: "docShell", match: "prefix", devProxy: false },
 ];
 
 /**
