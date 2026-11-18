@@ -4,12 +4,12 @@
  // The workspace: suggestions, upload, folders, organizing and forking (SPEC §2, §13, §21, §22).
  
  import { onRequest, type Request } from "firebase-functions/v2/https";
--import { MAX_BUNDLE_BYTES, UPLOAD_CHUNK_BYTES } from "../config";
-+import { MAX_BUNDLE_BYTES, UPLOAD_CHUNK_BYTES, publicOrigin } from "../config";
+-import { MAX_BUNDLE_BYTES, MAX_MEDIA_FILE_BYTES, UPLOAD_CHUNK_BYTES, isEmulated } from "../config";
++import { MAX_BUNDLE_BYTES, MAX_MEDIA_FILE_BYTES, UPLOAD_CHUNK_BYTES, isEmulated, publicOrigin } from "../config";
  import { resourceOrigin } from "../oauth/metadata";
  import { checkSessionRequest, openSession, readStaged, type StagedFile, type StagingBucket } from "../lib/staging";
  import { blobKey } from "../lib/storage";
-@@ -751,6 +751,12 @@
+@@ -754,6 +754,12 @@
            ? []
            : [{ type: "doc.moved", audience: "editors", actor: eventActor(actorFrom(caller, req)), data: { from: fromFolder, to: target.id } }],
      );
