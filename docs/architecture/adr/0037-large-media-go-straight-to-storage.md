@@ -27,7 +27,7 @@ Nothing here limits rates, by decision (overview, "What this is not"), so whatev
 - A publish that takes more than 60 s answers the caller `504` while the version lands. The browser says it may still publish; a retry is `deduped`.
 - Storage holds one copy of each distinct file per document (ADR 0035), plus staged objects and built zips for a day.
 - An existing deployment has no lifecycle rule until `scripts/setup.mjs` runs again; until then staged objects and built zips stay until the document is deleted forever.
-- The emulator is not evidence for the parts that make this work: a session's declared length, its CORS, the lifecycle rule, signing and Hosting's 60 s cut. Unit tests stand in for each, and the real deployment is where they are proven.
+- The emulator is not evidence for the parts that make this work: a session's declared length, its CORS, chunks and resuming, the lifecycle rule, signing and Hosting's 60 s cut. Its Storage finishes a resumable session at the first `PUT`, so there `/media` answers a `chunkBytes` of the whole file; the CLI also checks the size Storage reports for a finished object, so an upload closed early is an error, never a sent file. Unit tests stand in for each, and the real deployment is where they are proven.
 
 ## What would change this
 

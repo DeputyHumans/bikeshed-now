@@ -2,7 +2,7 @@
 // The workspace: suggestions, upload, folders, organizing and forking (SPEC §2, §13, §21, §22).
 
 import { onRequest, type Request } from "firebase-functions/v2/https";
-import { MAX_BUNDLE_BYTES, UPLOAD_CHUNK_BYTES } from "../config";
+import { MAX_BUNDLE_BYTES, MAX_MEDIA_FILE_BYTES, UPLOAD_CHUNK_BYTES, isEmulated } from "../config";
 import { resourceOrigin } from "../oauth/metadata";
 import { checkSessionRequest, openSession, readStaged, type StagedFile, type StagingBucket } from "../lib/staging";
 import { blobKey } from "../lib/storage";
@@ -584,7 +584,10 @@ async function openMediaSession(req: Request, res: import("express").Response, c
     // token's session needs no CORS at all.
     origin: caller.tokenId ? null : resourceOrigin(req),
   });
-  res.status(200).json({ ...session, chunkBytes: UPLOAD_CHUNK_BYTES });
+  // The Storage emulator finishes a resumable upload at its first PUT, so
+  // there the file goes in one; chunks and resuming are proven only on a
+  // real bucket (ADR 0037).
+  res.status(200).json({ ...session, chunkBytes: isEmulated() ? MAX_MEDIA_FILE_BYTES : UPLOAD_CHUNK_BYTES });
 }
 
 /** A JSON-encoded query parameter, for structured metadata on a binary upload. */

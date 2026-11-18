@@ -375,6 +375,13 @@ export async function sendToSession(url, path, size, { chunkBytes = 8 * 1024 * 1
         res = null;
       }
       if (res && (res.status === 200 || res.status === 201)) {
+        // Storage says it has the whole object. Believe the size it reports,
+        // not the status, so an upload closed early is never called sent.
+        const object = await res.json().catch(() => null);
+        const stored = Number(object?.size);
+        if (Number.isFinite(stored) && stored !== size) {
+          throw new CliError(`Storage closed the upload of ${path} after ${stored} of ${size} bytes; run the command again`);
+        }
         offset = size;
       } else if (res && res.status === 308) {
         // Storage may keep fewer bytes than were sent; it says how many. A

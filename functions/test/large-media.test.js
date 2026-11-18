@@ -143,6 +143,10 @@ test("POST /media opens a create-only session of the declared length on the call
   await w.media(OWNER, { docId: "d", path: "b.mp4", size: 5 }, { "x-forwarded-host": other });
   await w.media(OWNER, { docId: "d", path: "c.mp4", size: 5 }, { "x-forwarded-host": "evil.example" });
   assert.deepEqual(w.bucket.log.sessions.slice(1).map((s) => s.options.origin), [`https://${other}`, "https://bikeshed.example"]);
+  // The emulator finishes a session at its first PUT, so there a file goes whole.
+  process.env.FUNCTIONS_EMULATOR = "true";
+  try { assert.equal((await w.media(OWNER, { docId: "d", path: "e.mp4", size: 5 })).body.chunkBytes, 200 * MB); }
+  finally { delete process.env.FUNCTIONS_EMULATOR; }
 
   const frozen = world({ doc: { expiresAt: Timestamp.fromMillis(NOW - 1000) } });
   assert.equal((await frozen.media(OWNER, { docId: "d", path: "a.mp4", size: 5 })).status, 409);

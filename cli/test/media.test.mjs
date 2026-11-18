@@ -52,7 +52,7 @@ async function session({ keep = (chunk) => chunk.length, drop = () => false } = 
         if (start === Buffer.concat(held).length) held.push(body.subarray(0, keep(body, n)));
       } else if (asked) size = Number(asked[1]);
       const have = Buffer.concat(held).length;
-      if (have === size && size > 0) { res.statusCode = 200; res.end("{}"); return; }
+      if (have === size && size > 0) { res.statusCode = 200; res.end(JSON.stringify({ size: String(size) })); return; }
       res.statusCode = 308;
       if (have > 0) res.setHeader("Range", `bytes=0-${have - 1}`);
       res.end();
@@ -89,6 +89,21 @@ test("a session that keeps nothing more is given up on, not tried for ever", asy
   try {
     await assert.rejects(sendToSession(s.url, f.path, bytes.length, { chunkBytes: MB, attempts: 2 }), /stopped moving/);
   } finally { s.close(); f.done(); }
+});
+
+test("an upload Storage closes before every byte arrived is an error, never sent", async () => {
+  const bytes = randomBytes(3 * MB);
+  const f = tempFile(bytes);
+  // As the Storage emulator does: the first PUT finishes the object.
+  const server = createServer((req, res) => {
+    let n = 0;
+    req.on("data", (c) => { n += c.length; });
+    req.on("end", () => { res.statusCode = 200; res.end(JSON.stringify({ size: String(n) })); });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  try {
+    await assert.rejects(sendToSession(`http://127.0.0.1:${server.address().port}/u`, f.path, bytes.length, { chunkBytes: MB }), /closed the upload of .* after 1048576 of 3145728 bytes/);
+  } finally { server.close(); f.done(); }
 });
 
 test("a dropped connection asks the session what it holds, and goes on from there", async () => {
