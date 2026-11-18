@@ -19,7 +19,7 @@ import { mcpClient } from "../../lib/mcp.mjs";
 import { publish, publishMcp, publishOperator, readFixture } from "../../lib/seed.mjs";
 import { share } from "../../lib/grant.mjs";
 import { runCli } from "../../lib/cli.mjs";
-import { readDoc, readObject } from "../../lib/admin.mjs";
+import { readDoc, readVersionObject } from "../../lib/admin.mjs";
 import { discover, register, pkce, authorizeParams, approveViaApi, exchangeCode, refresh, startReceiver } from "../../lib/oauth.mjs";
 
 const target = loadTarget();
@@ -68,7 +68,8 @@ test("clients: publish through /publish and through publish_document; the stored
   assert.equal(up.status, 200);
   assert.equal(up.versionId, "v1");
   assert.match(up.docId, /^e2e-[a-z0-9]{6}-crdt-paragraphs-[a-z0-9]{4}$/);
-  const stored = await readObject(target, `docs/${up.docId}/v1/index.html`);
+  // The version names its stored file (SPEC §4); read it as the record names it.
+  const stored = await readVersionObject(target, up.docId, "v1", await readDoc(target, `docs/${up.docId}/versions/v1`), "index.html");
   assert.equal(sha(stored), sha(html));
   ctx.docId = up.docId;
 
