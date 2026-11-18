@@ -1,26 +1,26 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -29,6 +29,7 @@
- import { MAX_BUNDLE_BYTES, bucketName } from "../config";
+@@ -28,6 +28,7 @@
+ import { isStageable, storeStaged, type StagedFile, type StagingBucket } from "./staging";
  import { emptyGrants } from "./access";
  import type { Actor } from "./actor";
 +import { e2eRaceGate } from "./e2eRaceGate";
  import { publishedViaOf } from "./versions";
- import { hashBundleFiles, type BundleFile } from "./hash";
- import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
-@@ -510,6 +511,8 @@
+ import { type BundleFile, type ListedFile } from "./hash";
+ import {
+@@ -642,6 +643,8 @@
+   // This path deletes the draft; changes accepted into it would go with it.
    const held = await refuseIfAcceptedInDraft(docRef, args.baseVersion ?? "");
    if (held) return held;
- 
-+  await e2eRaceGate("update-before-id", docRef.id);
 +
++  await e2eRaceGate("update-before-id", docRef.id);
+ 
    const allVersions = await versionsRef.get();
    let maxN = 0;
-   for (const d of allVersions.docs) {
-@@ -519,6 +522,7 @@
+@@ -652,6 +655,7 @@
    const versionId = `v${maxN + 1}`;
-   const storagePrefix = newBundlePrefix(docRef.id);
-   await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
+   // Only what this version brings is written; what it carries is already stored.
+   await storeFiles(docRef.id, compiled.files);
 +  await e2eRaceGate("update-after-upload", docRef.id);
  
    const base = args.baseVersion ?? "";

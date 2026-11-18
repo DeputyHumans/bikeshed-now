@@ -1,7 +1,11 @@
 --- a/app/src/components/FileDropzone.tsx
 +++ b/app/src/components/FileDropzone.tsx
-@@ -60,3 +60,3 @@
+@@ -79,7 +79,7 @@
+         ref={filesRef}
          type="file"
+         multiple
 -        tabIndex={-1}
 +        tabIndex={0}
-         aria-label="Choose a document file"
+         aria-label="Choose files"
+         className="visually-hidden"
+         onChange={(e) => { chosen(e.target.files); e.target.value = ""; }}

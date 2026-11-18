@@ -1,9 +1,11 @@
 --- a/app/src/components/UploadVersionDialog.tsx
 +++ b/app/src/components/UploadVersionDialog.tsx
-@@ -58,5 +58,5 @@
-   const [base] = useState(headVersion);
-   const moved = Boolean(headVersion && base && headVersion !== base);
+@@ -72,7 +72,7 @@
+   // Fixed at open: what the person is told they are replacing.
+   const [baseVersion] = useState(headVersion);
+   const moved = Boolean(headVersion && baseVersion && headVersion !== baseVersion);
 -  const blocked = moved || editing.length > 0;
 +  const blocked = moved;
-
-   const upload = async () => {
+   // What the version holds decides what an upload replaces and drops, so it
+   // is known before a plan is shown: a guess would call a replacement "added".
+   const [files, setFiles] = useState<BaseFiles | "failed" | null>(base ?? null);

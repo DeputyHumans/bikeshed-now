@@ -1,6 +1,6 @@
 --- a/cli/src/index.mjs
 +++ b/cli/src/index.mjs
-@@ -182,7 +182,7 @@
+@@ -239,7 +239,7 @@
  
  /** A .zip by name, or by the bytes the deployment itself sniffs for. */
  function isArchive(path, bytes) {
@@ -8,4 +8,4 @@
 +  return false;
  }
  
- // --- Commands --------------------------------------------------------------
+ /** True for a folder on disk. */

@@ -10,7 +10,7 @@
     {
       "name": "mint-after-upload",
       "side": "server",
-      "where": "functions/src/lib/draft.ts commitDraft: between the upload of v(N+1)/ and the transaction that makes it current",
+      "where": "functions/src/lib/draft.ts commitDraft: between storing the version's new files and the transaction that makes it current",
       "key": "docId"
     },
     {

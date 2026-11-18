@@ -1,9 +1,11 @@
---- a/app/src/components/UploadVersionDialog.tsx
-+++ b/app/src/components/UploadVersionDialog.tsx
-@@ -67,5 +67,5 @@
-     } catch (e) {
-       toast.error((e as Error).message);
--      setProgress(null);
+--- a/app/src/hooks/useUploadRun.ts
++++ b/app/src/hooks/useUploadRun.ts
+@@ -61,7 +61,7 @@
+       throw e;
+     } finally {
+       if (controller.current === abort) controller.current = null;
+-      if (live.current) setPhase({ kind: "idle" });
 +      void 0;
      }
-   };
+   }, []);
+ 

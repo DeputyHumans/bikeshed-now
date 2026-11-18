@@ -1,9 +1,11 @@
 --- a/app/src/components/UploadVersionDialog.tsx
 +++ b/app/src/components/UploadVersionDialog.tsx
-@@ -67,5 +67,5 @@
+@@ -93,7 +93,7 @@
+       const result = await upload.run((control) => publishVersion(plan, { docId, baseVersion, ...control }));
+       if (result) onPublished(result);
      } catch (e) {
-       toast.error((e as Error).message);
--      setProgress(null);
-+      setProgress(null); setFile(null);
+-      toast.error((e as Error).message);
++      toast.error((e as Error).message); setPick(null);
      }
    };
+ 

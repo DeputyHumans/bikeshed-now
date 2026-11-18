@@ -1,9 +1,9 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -524,7 +524,7 @@
+@@ -638,7 +638,7 @@
+     return;
    }
  
-   const base = typeof docData.slug === "string" && docData.slug ? docData.slug : docId;
 -  res.setHeader("Content-Type", "application/zip");
 +  res.setHeader("Content-Type", "text/html");
    res.setHeader("Cache-Control", "private, no-store");

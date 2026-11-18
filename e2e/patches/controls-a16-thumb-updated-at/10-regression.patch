@@ -1,11 +1,11 @@
 --- a/functions/src/endpoints/content.ts
 +++ b/functions/src/endpoints/content.ts
-@@ -60,3 +60,3 @@
+@@ -63,3 +63,3 @@
  } from "../lib/http";
--import { db, bucket, refusal, PLAIN, WARM } from "./runtime";
-+import { db, bucket, now, refusal, PLAIN, WARM } from "./runtime";
+-import { db, bucket, refusal, MINTING, PLAIN, WARM } from "./runtime";
++import { db, bucket, now, refusal, MINTING, PLAIN, WARM } from "./runtime";
  
-@@ -438,3 +438,3 @@
+@@ -512,3 +512,3 @@
      recordReceipt(tx, docRef, fresh, receipt, result);
 -    tx.update(docRef, { thumb: decision.thumb });
 +    tx.update(docRef, { thumb: decision.thumb, updatedAt: now() });

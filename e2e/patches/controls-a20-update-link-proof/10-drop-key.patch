@@ -1,10 +1,10 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -561,7 +561,6 @@
-         extracted,
+@@ -621,7 +621,6 @@
+         ...input,
          actor: ctx.actor,
          authorEmail: ctx.caller.emailLower,
 -        k: proof.k,
+         ...(sendsFiles ? { editorsOnly: true } : {}),
        });
        if ("error" in committed) throw new Error(committed.error);
-       // A comment thread stays on the version it was opened on, and this path

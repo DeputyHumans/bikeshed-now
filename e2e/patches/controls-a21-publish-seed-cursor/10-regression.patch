@@ -1,10 +1,10 @@
 --- a/functions/src/mcp/tools/documents.ts
 +++ b/functions/src/mcp/tools/documents.ts
-@@ -20,2 +20,3 @@
+@@ -21,2 +21,3 @@
  import { filedIn } from "../../lib/audience";
 +import { encodeCursor, headCursor } from "../../lib/events";
- import { extractBundle } from "../../lib/bundle";
-@@ -406,3 +407,3 @@
+ import { extractBundle, type BundleEntry, type ExtractedBundle } from "../../lib/bundle";
+@@ -441,3 +442,3 @@
            // Where get_changes starts: nothing that happens from now on is missed.
 -          cursor: await startingCursor(ctx, ctx.db.collection("docs").doc(published.docId), "always"),
 +          cursor: encodeCursor(await headCursor(ctx.db.collection("docs").doc(published.docId))),

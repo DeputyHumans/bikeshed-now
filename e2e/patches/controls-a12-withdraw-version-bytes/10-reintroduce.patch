@@ -1,11 +1,11 @@
 --- a/scripts/delete-version.mjs
 +++ b/scripts/delete-version.mjs
-@@ -286,7 +286,7 @@
-   await finishOperatorReplacement(docId, result, { bucket, project: values.project });
-   console.log("    done.");
-   console.log(`  deleting gs://${bucketName}/${prefix} ...`);
--  await bucket.deleteFiles({ prefix, force: true });
-+  await bucket.deleteFiles({ prefix: `docs/${docId}/${doomed}/`, force: true });
-   console.log("    done.");
-   console.log(`  deleting gs://${bucketName}/${thumbsPrefix} ...`);
-   await bucket.deleteFiles({ prefix: thumbsPrefix, force: true });
+@@ -337,7 +337,7 @@
+     // Exactly what the repoint transaction found only this version naming,
+     // not what the preview above found: a version may have been published since.
+     console.log(`  deleting ${result.blobs.length} stored file(s) only ${doomed} named ...`);
+-    for (const key of result.blobs) await bucket.file(key).delete({ ignoreNotFound: true });
++    await bucket.deleteFiles({ prefix: `docs/${docId}/${doomed}/`, force: true });
+     await docRef.update({ withdrawing: FieldValue.delete() });
+     console.log("    done.");
+   }

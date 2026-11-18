@@ -1,8 +1,8 @@
 --- a/app/src/pages/DocList.tsx
 +++ b/app/src/pages/DocList.tsx
-@@ -306,7 +306,7 @@
+@@ -420,7 +420,7 @@
          try {
-           const result = await uploadDoc(file, {
+           const result = await publishNew(plan, {
              folderId: target,
 -            marking: defaultMarkingRef.current,
 +            marking: { ...defaultMarkingRef.current, enabled: false },

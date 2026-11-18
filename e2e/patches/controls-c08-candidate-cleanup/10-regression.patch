@@ -1,8 +1,0 @@
---- a/functions/src/lib/draft.ts
-+++ b/functions/src/lib/draft.ts
-@@ -594,4 +594,3 @@
-     if (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message)) {
--      if (candidateMayHaveCommitted) await removeUnreferencedCandidate(db, docRef, storagePrefix);
--      else await removeDraftSnapshot(docId, { storagePrefix });
-+      void [candidateMayHaveCommitted, removeUnreferencedCandidate, removeDraftSnapshot, docId, storagePrefix];
-     }

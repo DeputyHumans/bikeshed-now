@@ -1,11 +1,11 @@
 --- a/app/src/components/UploadVersionDialog.tsx
 +++ b/app/src/components/UploadVersionDialog.tsx
-@@ -56,7 +56,7 @@
-   const [progress, setProgress] = useState<number | null>(null);
+@@ -71,7 +71,7 @@
+   const upload = useUploadRun();
    // Fixed at open: what the person is told they are replacing.
-   const [base] = useState(headVersion);
--  const moved = Boolean(headVersion && base && headVersion !== base);
-+  const moved = Boolean(headVersion && base && headVersion !== base && false);
+   const [baseVersion] = useState(headVersion);
+-  const moved = Boolean(headVersion && baseVersion && headVersion !== baseVersion);
++  const moved = Boolean(headVersion && baseVersion && headVersion !== baseVersion && false);
    const blocked = moved || editing.length > 0;
-
-   const upload = async () => {
+   // What the version holds decides what an upload replaces and drops, so it
+   // is known before a plan is shown: a guess would call a replacement "added".

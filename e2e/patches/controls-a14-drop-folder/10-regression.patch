@@ -1,9 +1,9 @@
 --- a/app/src/pages/DocList.tsx
 +++ b/app/src/pages/DocList.tsx
-@@ -305,7 +305,7 @@
-       for (const file of usable) {
+@@ -419,7 +419,7 @@
+       for (const { pick, plan } of usable) {
          try {
-           const result = await uploadDoc(file, {
+           const result = await publishNew(plan, {
 -            folderId: target,
 +            folderId: target ? null : target,
              marking: defaultMarkingRef.current,

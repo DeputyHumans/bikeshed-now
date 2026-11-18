@@ -1,10 +1,10 @@
 --- a/app/src/pages/DocList.tsx
 +++ b/app/src/pages/DocList.tsx
-@@ -305,6 +305,7 @@
-       for (const file of usable) {
+@@ -419,6 +419,7 @@
+       for (const { pick, plan } of usable) {
          try {
-           const result = await uploadDoc(file, {
-+            title: file.name.replace(/\.[^.]+$/, ""),
+           const result = await publishNew(plan, {
++            title: pickSummary(pick).name.replace(/\.[^.]+$/, ""),
              folderId: target,
              marking: defaultMarkingRef.current,
              onProgress: (fraction) =>

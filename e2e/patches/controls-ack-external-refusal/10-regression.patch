@@ -1,7 +1,11 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -529,3 +529,3 @@
+@@ -664,7 +664,7 @@
+       // above ran before the upload, and either may have changed during it.
+       const cur = await tx.get(docRef);
        const candidate = await tx.get(versionsRef.doc(versionId));
--      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
-+      if (false && candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
+-      if (candidateMayHaveCommitted && candidate.data()?.attempt === attempt) return;
++      if (false && candidateMayHaveCommitted && candidate.data()?.attempt === attempt) return;
        if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
+       assertNotWithdrawing(cur.data(), listing);
+       await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail }, { k: args.k, editorsOnly: args.editorsOnly });

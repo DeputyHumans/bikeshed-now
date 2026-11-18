@@ -1,8 +1,8 @@
 --- a/functions/src/lib/fork.ts
 +++ b/functions/src/lib/fork.ts
-@@ -190,4 +190,5 @@
-     for (const obj of objects) {
-       await obj.copy(`${prefix}/${obj.name.slice(srcPrefix.length)}`, CREATE_ONLY);
-+      await obj.copy(`${prefix}/older/${obj.name.slice(srcPrefix.length)}`, CREATE_ONLY);
+@@ -102,4 +102,5 @@
      }
-   });
+     copied.add(sha256);
++    await bucket.file(f.key).copy(`docs/${docId}/older/${f.rel}`, CREATE_ONLY);
+     listing.push({ rel: f.rel, size, sha256 });
+   }

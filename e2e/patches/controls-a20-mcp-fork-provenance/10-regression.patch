@@ -1,7 +1,7 @@
 --- a/functions/src/lib/fork.ts
 +++ b/functions/src/lib/fork.ts
-@@ -240,7 +240,7 @@
-     ...(Array.isArray(v.files) ? { files: v.files } : {}),
+@@ -272,7 +272,7 @@
+     ...storedRecord(listing, randomUUID()),
      parentVersion: null,
      origin: "fork",
 -    publishedVia: publishedViaOf("fork", input.actor),

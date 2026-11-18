@@ -1,11 +1,11 @@
 --- a/app/src/components/UploadVersionDialog.tsx
 +++ b/app/src/components/UploadVersionDialog.tsx
-@@ -52,7 +52,7 @@
+@@ -67,7 +67,7 @@
    onPublished: (result: VersionUploadResult) => void;
  }) {
    const toast = useToast();
--  const [file, setFile] = useState<File | null>(initialFile);
-+  const [file, setFile] = useState<File | null>(initialFile ? null : initialFile);
-   const [progress, setProgress] = useState<number | null>(null);
+-  const [pick, setPick] = useState<Pick | null>(initialPick);
++  const [pick, setPick] = useState<Pick | null>(initialPick ? null : initialPick);
+   const upload = useUploadRun();
    // Fixed at open: what the person is told they are replacing.
-   const [base] = useState(headVersion);
+   const [baseVersion] = useState(headVersion);

@@ -1,7 +1,10 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -571,3 +571,4 @@
+@@ -705,6 +705,7 @@
+   // draft and its log to the people editing them.
+   await removeDraftSnapshot(docRef.id, replacedDraft);
    await retireLiveSession(db, docRef.id, retiredEpoch);
-+  await removeDraftSnapshot(docRef.id, { storagePrefix });
-
-   return { versionId, contentHash, fileCount, bytes, deduped: false };
++  await Promise.all(listing.map((f) => admin.storage().bucket(bucketName()).file(`docs/${docRef.id}/blobs/${f.sha256}`).delete({ ignoreNotFound: true })));
+ 
+   return { versionId, contentHash, fileCount, bytes, deduped: false, ...(changes ? { changes } : {}) };
+ 

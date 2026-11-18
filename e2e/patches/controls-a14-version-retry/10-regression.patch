@@ -1,10 +1,11 @@
---- a/app/src/components/UploadVersionDialog.tsx
-+++ b/app/src/components/UploadVersionDialog.tsx
-@@ -66,6 +66,6 @@
-       onPublished(await uploadVersion(file, { docId, baseVersion: base, onProgress: setProgress }));
-     } catch (e) {
-       toast.error((e as Error).message);
--      setProgress(null);
-+      setProgress(1);
+--- a/app/src/hooks/useUploadRun.ts
++++ b/app/src/hooks/useUploadRun.ts
+@@ -61,7 +61,7 @@
+       throw e;
+     } finally {
+       if (controller.current === abort) controller.current = null;
+-      if (live.current) setPhase({ kind: "idle" });
++      if (live.current) setPhase({ kind: "publishing" });
      }
-   };
+   }, []);
+ 

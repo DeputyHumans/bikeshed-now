@@ -1,11 +1,11 @@
 --- a/app/src/pages/DocList.tsx
 +++ b/app/src/pages/DocList.tsx
-@@ -291,7 +291,7 @@
+@@ -407,7 +407,7 @@
     */
    const uploadFiles = useCallback(
-     async (files: File[], target: string | null) => {
--      const usable = files.filter(isUploadable);
-+      const usable = files.filter((file) => isUploadable(file) || file.name.endsWith(".txt"));
-       const rejected = files.length - usable.length;
-       if (rejected > 0) {
-         toast.error(
+     async (dropped: Promise<Pick[]>, target: string | null) => {
+-      const planned = (await dropped).map((pick) => ({ pick, plan: planNew(pick) }));
++      const planned = (await dropped).map((pick) => ({ pick, plan: pickSummary(pick).name.endsWith(".txt") ? { ...planNew(pick), problems: [] } : planNew(pick) }));
+       for (const { pick, plan } of planned) {
+         if (plan.problems.length > 0) toast.error(`${pickSummary(pick).name}: ${plan.problems[0]}`);
+       }

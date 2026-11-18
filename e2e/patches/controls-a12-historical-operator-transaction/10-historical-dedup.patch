@@ -1,7 +1,11 @@
 --- a/scripts/lib/operator-writes.mjs
 +++ b/scripts/lib/operator-writes.mjs
-@@ -54,3 +54,3 @@
-     if (attempted && versions.docs.some((version) => version.id === attempted.versionId && version.data().storagePrefix === input.version.storagePrefix)) return attempted;
--    const duplicate = versions.docs.find((version) => version.id === snap.data()?.currentVersion && version.data().contentHash === input.version.contentHash);
-+    const duplicate = versions.docs.find((version) => version.data().contentHash === input.version.contentHash);
+@@ -68,7 +68,7 @@
+     if (attempted && versions.docs.some((version) => version.id === attempted.versionId && version.data().attempt === input.version.attempt)) return attempted;
+     // The head's hash is compared in the framing it was minted with: v2 over the
+     // file list, or v1 over the bytes, which the operator has on disk (SPEC §9.1).
+-    const duplicate = versions.docs.find((version) => version.id === snap.data()?.currentVersion &&
++    const duplicate = versions.docs.find((version) =>
+       version.data().contentHash === (version.data().hashVersion === 2 ? input.version.contentHash : input.bytesHash));
      if (duplicate) return { duplicate: true, versionId: duplicate.id };
+     const current = snap.data() || {};

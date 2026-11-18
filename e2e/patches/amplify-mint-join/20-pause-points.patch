@@ -1,27 +1,37 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -21,2 +21,3 @@
+@@ -32,4 +32,5 @@
+ import { syncPublicProjection } from "./publicdoc";
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
  import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
-@@ -486,2 +487,4 @@
-
+ 
+@@ -552,4 +553,6 @@
+   }
+ 
 +  await e2eGate("mint-before-id", docId);
 +
    // Version ids mint as max(N)+1 over EXISTING version documents, so a
-@@ -505,2 +508,4 @@
-   }
-+
+   // withdrawn id is re-used by the next commit. That is deliberate; the view
+@@ -566,4 +569,6 @@
+   await storeFiles(docId, files);
+ 
 +  await e2eGate("mint-after-upload", docId);
-
++
+   const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
+   let candidateMayHaveCommitted = false;
 --- a/app/src/viewer/useSharedDocument.ts
 +++ b/app/src/viewer/useSharedDocument.ts
-@@ -10,2 +10,3 @@
+@@ -9,4 +9,5 @@
+ import { seedFragment } from "../crdt/binding";
  import { bindSync, type Sync } from "../crdt/sync";
 +import { e2eGate } from "../e2eGate";
  import type { FrameMode } from "./frameMode";
-@@ -82,2 +83,4 @@
+ 
+@@ -85,4 +86,6 @@
+           connected.current = connection;
            await log.ready();
 +          // Hold simultaneous empty reads before the seed is elected.
 +          await e2eGate("join-before-bind", docId);
            if (cancelled || !doc.body) return;
+           if (ydoc.getXmlFragment("body").length === 0) {

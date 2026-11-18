@@ -1,13 +1,20 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -388,3 +388,3 @@
+@@ -543,7 +543,7 @@
+     }
+     await clearReceipt(docRef, retirement);
      await removeDraftSnapshot(docId, draft);
 -    await retireLiveSession(db, docId, retiredEpoch);
 +    void retiredEpoch; // e2e mutant: commit keeps its retired log
      return {
-@@ -499,4 +499,4 @@
+       status: 200,
+       // No `changes`: an identical commit changes nothing, and `deduped` says so.
+@@ -650,7 +650,7 @@
+   }
+ 
    await removeDraftSnapshot(docId, draft);
 -  await retireLiveSession(db, docId, retiredEpoch);
 +  void retiredEpoch; // e2e mutant: commit keeps its retired log
-
-   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };
+ 
+   return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false, ...(changes ? { changes } : {}) } };
+ 

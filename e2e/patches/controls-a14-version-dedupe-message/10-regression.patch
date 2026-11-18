@@ -1,10 +1,11 @@
 --- a/app/src/components/UploadVersionDialog.tsx
 +++ b/app/src/components/UploadVersionDialog.tsx
-@@ -10,6 +10,6 @@
+@@ -14,7 +14,7 @@
+ 
  /** What to tell the person once the server has answered. */
  export function versionUploadMessage(result: VersionUploadResult): string {
-   return result.deduped
--    ? `No changes — the file is identical to ${result.versionId}.`
-+    ? `Published ${result.versionId}.`
-     : `Published ${result.versionId}.`;
- }
+-  if (result.deduped) return `No changes — it’s identical to ${result.versionId}.`;
++  if (result.deduped) return `Published ${result.versionId}.`;
+   const c = result.changes;
+   if (!c) return `Published ${result.versionId}.`;
+   // What moved comes first, and only counts that are not zero: a folder that

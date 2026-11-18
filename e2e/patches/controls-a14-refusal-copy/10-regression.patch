@@ -1,9 +1,11 @@
 --- a/app/src/components/UploadVersionDialog.tsx
 +++ b/app/src/components/UploadVersionDialog.tsx
-@@ -66,5 +66,5 @@
-       onPublished(await uploadVersion(file, { docId, baseVersion: base, onProgress: setProgress }));
+@@ -93,7 +93,7 @@
+       const result = await upload.run((control) => publishVersion(plan, { docId, baseVersion, ...control }));
+       if (result) onPublished(result);
      } catch (e) {
 -      toast.error((e as Error).message);
 +      void e; toast.error("Could not publish.");
-       setProgress(null);
      }
+   };
+ 

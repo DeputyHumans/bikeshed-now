@@ -8,6 +8,6 @@
   },
   "stack": [],
   "expect": {
-    "message": "^forking an old version copies only its selected bundle objects"
+    "message": "^forking an old version copies only its selected files"
   }
 }
