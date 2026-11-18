@@ -1,6 +1,6 @@
 --- a/functions/src/lib/publish.ts
 +++ b/functions/src/lib/publish.ts
-@@ -38,7 +38,7 @@
+@@ -56,7 +56,7 @@
    uniqueDocId,
    type Membership,
  } from "./folders";
@@ -9,14 +9,13 @@
  import {
    anyAcceptedInDraft,
    anyOpenThread,
-@@ -500,7 +500,14 @@
+@@ -641,7 +641,13 @@
    // Whoever is in the editor would lose their typing to this version, and the
    // next save of theirs would be refused as stale.
    const editing = await editorsRefusal(docRef.id, "published");
 -  if ("refusal" in editing) return editing.refusal;
 +  if ("refusal" in editing) {
-+    const all = await versionsRef.get();
-+    await uploadBundle(`docs/${docRef.id}/v${all.size + 1}`, compiled.files);
++    await storeFiles(docRef.id, compiled.files);
 +    const refusedSnapshot = (await docRef.get()).data();
 +    await removeDraftSnapshot(docRef.id, refusedSnapshot?.draft);
 +    await clearEditLog(docRef.id, String(refusedSnapshot?.liveEpoch ?? "initial"));

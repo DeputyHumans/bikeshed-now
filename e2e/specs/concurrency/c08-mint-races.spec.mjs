@@ -1325,7 +1325,7 @@ scenario("C9b update_document mixed with in-app commits (SYNC-P): while ceil(N/2
     await requireHeld(ctx, g, "mint-before-id", m, { key, timeoutMs: HELD_MS });
     draft = await readDraftObject(target, s.docId, s.entry);
     precondition(draft, "the draft is in Storage while the commits are held");
-    before = { snap: await serverSnapshot(s.docId), draftSha: sha(draft), y: Object.keys((await readLiveLogs(target, s.docId)) ?? {}).sort() };
+    before = { snap: await serverSnapshot(s.docId), draftSha: sha(draft), y: Object.keys((await readLiveLogs(target, s.docId)) ?? {}).sort(), blobs: await listObjects(target, `docs/${s.docId}/blobs/`) };
     ctx.step(`while they are held, ${k} agent(s) update on v1 at once`);
     ({ rows } = await fireUpdates(ctx, agents, s.docId, "C9b updates"));
     const obj = await readDraftObject(target, s.docId, s.entry);
@@ -1333,7 +1333,9 @@ scenario("C9b update_document mixed with in-app commits (SYNC-P): while ceil(N/2
       snap: await serverSnapshot(s.docId),
       draftSha: obj ? sha(obj) : "absent",
       y: Object.keys((await readLiveLogs(target, s.docId)) ?? {}).sort(),
-      next: await listObjects(target, `docs/${s.docId}/v2/`),
+      // The held commits store their files only after choosing an id, so a
+      // stored file that appears now was stored by a refused update (SPEC §4).
+      next: (await listObjects(target, `docs/${s.docId}/blobs/`)).filter((k) => !before.blobs.includes(k)),
       held: (await g.counts({ key }))["mint-before-id"]?.held ?? null,
     };
     ctx.ev.json("c9b-during", { before, during });
@@ -1351,7 +1353,7 @@ scenario("C9b update_document mixed with in-app commits (SYNC-P): while ceil(N/2
   await others.check(() => judgeUpdates(rows, { winners: 0, refusal: "editors", label: "C9b updates under editors" }));
   await others.check(() => {
     const failures = [];
-    if (during.next.length) failures.push(`objects under docs/${s.docId}/v2/ before any commit had chosen an id: ${during.next.join(", ")}`);
+    if (during.next.length) failures.push(`stored files added under docs/${s.docId}/blobs/ before any commit had chosen an id: ${during.next.join(", ")}`);
     if (JSON.stringify(during.snap.draft) !== JSON.stringify(before.snap.draft)) failures.push(`docs/${s.docId}.draft changed: ${JSON.stringify(before.snap.draft)} → ${JSON.stringify(during.snap.draft)}`);
     if (during.draftSha !== before.draftSha) failures.push(`the draft's entry changed (${short(before.draftSha)} → ${short(during.draftSha)})`);
     if (JSON.stringify(during.y) !== JSON.stringify(before.y)) failures.push(`status/${s.docId}/y changed (${before.y.length} → ${during.y.length} entries)`);
