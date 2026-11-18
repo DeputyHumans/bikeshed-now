@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Changed
+
+- **`playwright-core` moves to 1.65.1, for development only.** It drives Chromium r1255 in place of r1254, and the end-to-end harness still prefers the cached Chrome for Testing build that matches it. Dependabot's pull request for it closes once main carries it.
+
 ### Fixed
 
 - **Back from a document returns to where you were in a list.** A list unmounts while a document is open, so coming back drew it again from the top, 25 items long, however far down you had been. How many items were drawn and how far the window was scrolled are now kept for that history entry in the tab's session storage, and restored once the list has drawn. They are keyed by an id the entry carries itself, because the router gives every freshly loaded page the same key. The same holds moving between the workspace's own pages: Back to Everything from a folder returns to where Everything was, and a page opened from the rail or a folder starts at its top, where before it kept the last page's scroll. A new visit, or a different view, folder, sort, layout or filter, starts at the top (SPEC §13).
