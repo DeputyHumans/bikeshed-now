@@ -8,13 +8,13 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
-## Unreleased
+## 0.39.0 — 2026-11-18
 
 ### Added
 
 - **A link can open a document on a comment, a slide or a section.** The place goes after `#` on the document's address, where the server never sees it: `#<id>` for a section or slide its author gave an id, `#slide=5` for a slide without one, and `#comment=<thread>` on the path of the version the thread is on, so the link still works after the next version. Opening one lands there once: the slide shown, the section at the top, or the thread selected with its comments open and its passage on screen, a resolved one included. A comment that is not on that version, or that the reader cannot see, opens the document with a notice saying so, and signing in comes back to the same comment. On a deck the address follows the slide you are on, replaced rather than added to your history, so copying the address bar shares the slide and Back still leaves the document, and a frame that reloads returns to that slide. **Copy link** is on every comment, beside Comment and Suggest edit when you select a passage, for any reader, and as **Copy link to this slide** in a deck's menu. A copy keeps your own path and link key, and adds nothing else (SPEC §6e, ADR 0035).
 
-- **Comment emails and agents link to the comment itself.** "Reply in context" in a comment or suggestion email now opens the document on that thread. Over MCP, every thread in `get_comments` has a `url`, and `add_comment`, `reply_to_comment` and `suggest_edit` return the thread's `threadUrl`, pinned to the thread's version and carrying the link key when the agent came in by it; `bikeshed comments` prints it under each thread. The agent guide and the comment skill say to hand it back (SPEC §14, §19).
+- **Comment emails and agents link to the comment itself.** "Reply in context" in a comment or suggestion email now opens the document on that thread. Over MCP, every thread in `get_comments` has a `url`, and `add_comment`, `reply_to_comment` and `suggest_edit` return the thread's `threadUrl`, pinned to the thread's version and carrying the link key when the agent came in by it; `bikeshed comments` prints it under each thread (in `bikeshed-now` 0.23.0). The agent guide and the comment skill say to hand it back (SPEC §14, §19).
 
 ### Fixed
 
