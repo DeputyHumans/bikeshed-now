@@ -546,7 +546,8 @@ export async function commitDraft(args: {
     await retireLiveSession(db, docId, retiredEpoch);
     return {
       status: 200,
-      body: { versionId: dup.id, contentHash: String(dup.data()?.contentHash), fileCount, bytes, deduped: true, ...(changes ? { changes } : {}) },
+      // No `changes`: an identical commit changes nothing, and `deduped` says so.
+      body: { versionId: dup.id, contentHash: String(dup.data()?.contentHash), fileCount, bytes, deduped: true },
     };
   }
 

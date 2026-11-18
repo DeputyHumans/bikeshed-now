@@ -631,8 +631,8 @@ export async function commitNewVersion(args: {
       contentHash: String(dup.data()?.contentHash),
       fileCount,
       bytes,
+      // No `changes`: an identical update changes nothing, and `deduped` says so.
       deduped: true,
-      ...(changes ? { changes } : {}),
     };
   }
 

@@ -133,7 +133,7 @@ test("the same files again mint nothing, and write nothing", async () => {
     const result = await reviseDocument({ db, docRef, baseVersion: "v1", title: "Deck", extracted: pageOnly(page), actor, authorEmail: actor.email });
     assert.equal(result.deduped, true);
     assert.equal(result.versionId, "v1");
-    assert.deepEqual(result.changes, { changed: 0, unchanged: 2, removed: 0 });
+    assert.equal(result.changes, undefined, "a deduped answer has no changes: deduped says nothing changed (SPEC §2)");
     assert.deepEqual(writes, []);
     assert.equal(store.has("docs/d/versions/v2"), false);
   });
