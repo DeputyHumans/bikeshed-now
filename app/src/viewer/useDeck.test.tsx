@@ -482,3 +482,54 @@ describe("a deck that fades between its slides", () => {
     expect(at()).toBe(0);
   });
 });
+
+describe("a deck whose incoming slide fades in from nothing", () => {
+  /**
+   * What the animated sample does in a browser: the moment a slide is made
+   * current it is still at opacity 0, so the only slide shown is the one being
+   * left, and both are in the middle of a transition until `settle()`. jsdom
+   * runs no transitions, so `getAnimations` says so instead.
+   */
+  function mountFadeInDeck() {
+    const { doc, sections } = mountDeck(`<main class="deck">${[1, 2, 3, 4, 5].map((n) => `<section class="slide"><h2>${n}</h2></section>`).join("")}</main>`, 700, 700);
+    let at = 0;
+    let shownSlide = 0;
+    const running = new Set<number>();
+    const paint = () =>
+      sections.forEach((el, i) => {
+        el.getBoundingClientRect = () => ({ top: 0, height: 700 }) as DOMRect;
+        el.style.visibility = i === shownSlide ? "visible" : "hidden";
+        (el as unknown as { getAnimations: () => Array<{ playState: string }> }).getAnimations = () =>
+          running.has(i) ? [{ playState: "running" }] : [];
+      });
+    paint();
+    doc.addEventListener("keydown", (e) => {
+      const next = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : null;
+      if (next === null) return;
+      running.add(at);
+      at = Math.max(0, Math.min(sections.length - 1, next));
+      running.add(at);
+      paint();
+      e.preventDefault();
+    });
+    const settle = () => {
+      running.clear();
+      shownSlide = at;
+      paint();
+    };
+    return { doc, settle, at: () => at };
+  }
+
+  it("counts a second move from the slide it was sent to while the first is still fading in", async () => {
+    const { doc, settle, at } = mountFadeInDeck();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+    act(() => result.current.goTo(5));
+    expect(at()).toBe(4);
+    // Only the cover is shown yet; slide five is on its way in.
+    act(() => result.current.goTo(1));
+    expect(at()).toBe(1);
+    act(() => settle());
+    await act(async () => {});
+    expect(result.current.locate()).toBe(1);
+  });
+});

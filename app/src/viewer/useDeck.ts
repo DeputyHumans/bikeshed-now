@@ -70,18 +70,23 @@ function shownSlide(view: Window, slides: Slide[]): number {
 }
 
 /**
- * Whether a stacked deck is between slides: more than one of them still
- * shown. A deck that fades its slides keeps the one it is leaving visible
- * until the fade ends, so for that moment the first slide shown is the old
- * one, and a second move counted from it presses the wrong number of keys.
+ * Whether a stacked deck is still moving between slides: more than one of
+ * them shown, or a slide in the middle of a transition or animation of its
+ * own. A deck that fades starts the incoming slide at opacity 0 and keeps the
+ * one it is leaving until the fade ends, so for that moment the only slide
+ * shown is the old one, and a second move counted from it presses the wrong
+ * number of keys. Reading the styles first makes the browser start the
+ * transitions it is about to report.
  */
-function between(view: Window, slides: Slide[]): boolean {
+function moving(view: Window, slides: Slide[]): boolean {
   let shown = 0;
   for (const slide of slides) if (isShown(readComputed(view, slide.el)) && ++shown > 1) return true;
-  return false;
+  return slides.some((slide) =>
+    typeof slide.el.getAnimations === "function" && slide.el.getAnimations().some((a) => a.playState === "running"),
+  );
 }
 
-/** How long a move this hook made is trusted over a deck that still reads as between slides. */
+/** How long a move this hook made is trusted over a deck that is still moving. */
 const AIM_MS = 1500;
 
 /**
@@ -213,7 +218,7 @@ export function useDeck({
   /**
    * The slide this hook last drove a stacked deck to, while the deck is still
    * on its way there: for that moment the frame cannot say where it is going.
-   * Let go once the deck shows one slide again, or after `AIM_MS`.
+   * Let go once the deck has stopped moving, or after `AIM_MS`.
    */
   const aim = useRef<{ index: number; until: number } | null>(null);
 
@@ -221,7 +226,7 @@ export function useDeck({
     const view = doc?.defaultView;
     if (!view || slides.length === 0) return 0;
     const heading = aim.current;
-    if (stacked && heading && Date.now() < heading.until && between(view, slides)) return heading.index;
+    if (stacked && heading && Date.now() < heading.until && moving(view, slides)) return heading.index;
     return stacked
       ? shownSlide(view, slides)
       : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top));
@@ -233,7 +238,7 @@ export function useDeck({
     const measure = () => {
       // Arrived, or never coming: the frame says where the deck is again.
       const heading = aim.current;
-      if (heading && (Date.now() >= heading.until || !(stacked && between(view, slides)))) aim.current = null;
+      if (heading && (Date.now() >= heading.until || !(stacked && moving(view, slides)))) aim.current = null;
       setCurrent(locate());
     };
     measure();
