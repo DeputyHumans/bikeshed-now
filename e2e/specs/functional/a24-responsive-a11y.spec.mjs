@@ -494,7 +494,8 @@ const phoneWalk = sharedMeasurement("A24.1 at 400×800 on a touch phone, 11 scre
     await visit(phone, "workspace", { ready: btn(phone, "Upload"), primary: [btn(phone, "Upload")] });
     await phone.page.getByRole("button", { name: "Upload", exact: true }).click();
     const uploadDialog = phone.page.getByRole("dialog", { name: "Upload a document" });
-    await visit(phone, "upload dialog", { ready: { label: "the dialog", loc: uploadDialog }, primary: [btn(phone, "Choose a file", uploadDialog), btn(phone, "Cancel", uploadDialog), btn(phone, "Upload", uploadDialog)] });
+    // A touch phone has no "Choose a folder" (FileDropzone.tsx canChooseFolder), so "Choose files" is the dialog's one picker.
+    await visit(phone, "upload dialog", { ready: { label: "the dialog", loc: uploadDialog }, primary: [btn(phone, "Choose files", uploadDialog), btn(phone, "Cancel", uploadDialog), btn(phone, "Upload", uploadDialog)] });
     await uploadDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await uploadDialog.waitFor({ state: "detached", timeout: 10_000 });
     await phone.goto(`/folder/${encodeURIComponent(folderId)}`);
@@ -890,12 +891,14 @@ const uploadKeyboard = sharedMeasurement("A24.2f upload by keyboard: Tab to Uplo
   assert.equal(describe(round.at(-1)), describe(start), `Tab came round to where it began (${round.map(describe).join(" → ")})`);
   stops.push(...round.filter((s) => s.visible));
 
-  ctx.step("Tab to Choose a file, Enter: the file picker opens; the harness answers it");
-  await tabTo(u.page, isButton("Choose a file"), { max: 8, what: "Choose a file", stops });
+  // The dialog's pickers are "Choose files" and, on a desktop browser, "Choose a folder" beside it
+  // (app/src/components/FileDropzone.tsx). One page is a file, so this takes "Choose files".
+  ctx.step("Tab to Choose files, Enter: the file picker opens; the harness answers it");
+  await tabTo(u.page, isButton("Choose files"), { max: 8, what: "Choose files", stops });
   const title = `A24 keyboard upload ${tag()}`;
   const before = choosers.length;
   await u.page.keyboard.press("Enter");
-  const chooser = await eventually(() => choosers[before] ?? false, { timeout: 10_000, interval: 50, message: "Enter on Choose a file opened the file picker" });
+  const chooser = await eventually(() => choosers[before] ?? false, { timeout: 10_000, interval: 50, message: "Enter on Choose files opened the file picker" });
   await chooser.setFiles(uploadFile(title));
   await dialog.getByText("keyboard-upload.html").waitFor({ state: "visible", timeout: 10_000 });
 

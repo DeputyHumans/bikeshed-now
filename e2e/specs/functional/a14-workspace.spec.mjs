@@ -71,7 +71,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, docIdFor, ledgerDoc, ledgerFolder, publish, readSample, updateUpload, zipBundle } from "../../lib/seed.mjs";
 import { share, shareFolder } from "../../lib/grant.mjs";
-import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject, readVersionObject, rtdbGet, trustAsOperator, writeUser } from "../../lib/admin.mjs";
+import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject, readVersionObject, rtdbGet, trustAsOperator, versionObjects, writeUser } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
@@ -84,8 +84,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- what the product says, quoted from its source -----------------------------
 
-/** app/src/upload.ts UPLOAD_HINT. */
-const UPLOAD_HINT = "A self-contained .html file, a .md file, or a .zip bundle";
+/**
+ * What an upload dialog and a workspace drop say of one file that is not a
+ * page or a .zip (app/src/bundleInput.ts planNew). The dialogs plan an upload
+ * before sending it, so this is shown before anything reaches the server.
+ */
+const notAPage = (name) => `${name} isn’t a page. To publish a page with its pictures, choose the folder they’re in, or pick the page and the pictures together.`;
+/** app/src/bundleInput.ts planVersion, for a Markdown page chosen for an HTML document. */
+const HTML_PAGE_ONLY = "This document is HTML, so its page has to be HTML too.";
+/**
+ * functions/src/lib/publish.ts compileRevision's format refusal, as
+ * app/src/upload.ts sentence() shows it.
+ */
+const FORMAT_REFUSAL = "This document is HTML, so an update to it cannot be Markdown.";
+/**
+ * The upload dialogs' "Choose files" input (app/src/components/FileDropzone.tsx).
+ * On a desktop browser a "Choose a folder" input sits beside it, so a bare
+ * input[type="file"] matches two elements.
+ */
+const CHOOSE_FILES = 'input[type="file"][aria-label="Choose files"]';
 /** functions/src/lib/bundle.ts extractBundle, for any other single file. */
 const TYPE_ERROR = "upload a self-contained .html, a .md file, or a .zip bundle";
 /** functions/src/lib/folders.ts BAD_DOC_ID. */
@@ -103,8 +120,6 @@ const DOC_DELETE_ERROR = 'a document is not deleted: move it to the Trash with o
 const TRASH_LABEL = "Move to Trash";
 /** app/src/pages/DocList.tsx folderMenu's confirmation. */
 const folderTrashConfirm = (name) => `Move “${name}” and everything in it to the Trash? Anything in it that other people own goes too, and each of them can restore their own.`;
-/** The input's accept list (app/src/components/UploadDialog.tsx). */
-const ACCEPT = ".html,.htm,.md,.markdown,.zip";
 /** The backfill's own clock (app/src/hooks/useCoverBackfill.ts): start after 1.5 s, look again every 2 s. */
 const BACKFILL_SETTLE_MS = 6_000;
 /**
@@ -344,7 +359,7 @@ async function uploadThroughDialog(u, { f, title = null, id = null, marking = nu
   await page.locator(".workspace-toolbar").getByRole("button", { name: "Upload", exact: true }).click();
   const dlg = page.getByRole("dialog", { name: "Upload a document" });
   await dlg.waitFor({ state: "visible", timeout: 10_000 });
-  await dlg.locator('input[type="file"]').setInputFiles({ name: f.name, mimeType: f.type || "application/octet-stream", buffer: f.data });
+  await dlg.locator(CHOOSE_FILES).setInputFiles({ name: f.name, mimeType: f.type || "application/octet-stream", buffer: f.data });
   await dlg.locator(".upload-dropzone strong", { hasText: f.name }).waitFor({ timeout: 10_000 });
   if (title != null) await dlg.locator("#upload-title").fill(title);
   if (id != null) await dlg.locator("#upload-id").fill(id);
@@ -690,8 +705,9 @@ scenario("A14.3 upload dialog: only the listed types, an invalid id is a 400 tha
   assert.match(second.docId, suffixed, "the second publish");
   assert.match(third.docId, suffixed, "the third publish");
   assert.notEqual(second.docId, third.docId, "each taken publish gets its own suffix");
-  assert.equal((await readObject(target, `docs/${wanted}/v1/index.html`))?.toString("utf8"), bodies[0], "the first document's bytes are untouched");
-  assert.equal((await readObject(target, `docs/${second.docId}/v1/index.html`))?.toString("utf8"), bodies[1], "the second's bytes are under its own id");
+  // Read as each v1 record names its page (a version's files are stored once per document).
+  assert.equal((await publishedEntry(wanted, "v1"))?.toString("utf8"), bodies[0], "the first document's bytes are untouched");
+  assert.equal((await publishedEntry(second.docId, "v1"))?.toString("utf8"), bodies[1], "the second's bytes are under its own id");
 
   ctx.step("with no title: <title>, then og:title, then the file name; Markdown's first H1 (ATX or setext), then the file name; a title given wins");
   const titled = [
@@ -713,7 +729,7 @@ scenario("A14.3 upload dialog: only the listed types, an invalid id is a 400 tha
   const given = await publish(O.http, { body: html, filename: "index.html", title: `Given ${tag}`, id: false });
   assert.equal(given.json?.title, `Given ${tag}`, "a given title wins over <title>");
 
-  ctx.step("the dialog: its file input accepts exactly the listed types, and choosing a .txt is refused with the hint and leaves Upload disabled");
+  ctx.step("the dialog: its Choose files input takes several files of any kind, and a chosen .txt is refused in the dialog with Upload left disabled, before anything is sent");
   const uEmail = U.account.email;
   const u = await ctx.users.user({ name: "uploader" });
   await u.signInUi(uEmail, U.account.password, { next: EVERYTHING });
@@ -722,16 +738,24 @@ scenario("A14.3 upload dialog: only the listed types, an invalid id is a 400 tha
   await u.page.locator(".workspace-toolbar").getByRole("button", { name: "Upload", exact: true }).click();
   const dlg = u.page.getByRole("dialog", { name: "Upload a document" });
   await dlg.waitFor();
-  assert.equal(await dlg.locator('input[type="file"]').getAttribute("accept"), ACCEPT, "the file input's accept list");
+  // The input no longer filters by type: the dialog plans what was chosen
+  // (app/src/bundleInput.ts planNew) and says what is wrong with it.
+  const chooser = dlg.locator(CHOOSE_FILES);
+  assert.deepEqual(
+    { accept: await chooser.getAttribute("accept"), multiple: await chooser.evaluate((el) => el.multiple) },
+    { accept: null, multiple: true },
+    "the Choose files input takes several files and leaves judging them to the dialog",
+  );
   const uploadBtn = dlg.getByRole("button", { name: "Upload", exact: true });
   assert.equal(await uploadBtn.isDisabled(), true, "Upload is disabled with no file");
-  const mark = u.toastMark();
-  await dlg.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") });
-  const refusal = await u.waitForToast(() => true, { since: mark, timeout: 10_000 });
-  assert.deepEqual({ kind: refusal.kind, text: refusal.text }, { kind: "error", text: `${UPLOAD_HINT}. That file is not one of those.` }, "the refusal toast");
+  await chooser.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") });
+  // Was a toast with the type hint. The refusal is now the plan's problem,
+  // shown in the dialog as an alert.
+  const problem = dlg.getByRole("alert");
+  await problem.filter({ hasText: "notes.txt" }).waitFor({ timeout: 10_000 });
+  assert.equal(await problem.textContent(), notAPage("notes.txt"), "the dialog refuses a .txt and says what to choose instead");
   assert.equal(await uploadBtn.isDisabled(), true, "Upload stays disabled");
   assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/publish").map(describe), [], "a refused file is never sent");
-  await dismissToasts(u);
   await dlg.getByRole("button", { name: "Cancel" }).click();
   await dlg.waitFor({ state: "detached" });
 
@@ -850,13 +874,16 @@ scenario("A14.4 drag and drop behaves as the dialog: the same types, one upload 
   await dropFiles(u.page, ".workspace-main", [file("x.html", "<p>x</p>")], { events: ["dragleave"] });
   await u.page.locator(".drop-hint").waitFor({ state: "detached", timeout: 5_000 });
 
-  ctx.step("dropping a .txt alone is refused with the hint, and nothing is sent");
+  ctx.step("dropping a .txt alone is refused, naming the file and what to drop instead, and nothing is sent");
   const before = await ownedDocIds(email);
   let mark = u.toastMark();
   const dropped = await dropFiles(u.page, ".workspace-main", [file("notes.txt", "plain", "text/plain")]);
   assert.equal(dropped.at(-1).claimed, true, "the page claims the drop, so the browser does not navigate to the file");
   const t1 = await u.waitForToast(() => true, { since: mark, timeout: 10_000 });
-  assert.deepEqual({ kind: t1.kind, text: t1.text }, { kind: "error", text: `${UPLOAD_HINT}. That is not one of those.` });
+  // Was the type hint ("… That is not one of those."). A drop is now planned
+  // as the dialog plans an upload (app/src/bundleInput.ts planNew), and each
+  // refused item gets a toast with its name and its problem.
+  assert.deepEqual({ kind: t1.kind, text: t1.text }, { kind: "error", text: `notes.txt: ${notAPage("notes.txt")}` }, "a .txt dropped alone is refused with what to drop instead");
   await sleep(ABSENCE_SETTLE_MS);
   assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/publish").map(describe), [], "a refused drop sends nothing");
   await dismissToasts(u);
@@ -870,7 +897,7 @@ scenario("A14.4 drag and drop behaves as the dialog: the same types, one upload 
     file("drop-c.txt", "plain", "text/plain"),
   ]);
   const refusedSome = await u.waitForToast((t) => t.kind === "error", { since: mark, timeout: 10_000 });
-  assert.equal(refusedSome.text, `${UPLOAD_HINT}. 1 of those are not.`);
+  assert.equal(refusedSome.text, `drop-c.txt: ${notAPage("drop-c.txt")}`, "the .txt among them is refused by name");
   await dismissToasts(u);
   await eventually(() => u.log.toasts.slice(mark).filter((t) => t.kind === "info" && t.text.startsWith("Uploaded ")).length === 2, { timeout: 180_000, message: "two Uploaded toasts" });
   const posts = watch.since(t0).filter((r) => r.method === "POST" && pathOf(r.url) === "/publish");
@@ -912,20 +939,24 @@ scenario("A14.4 drag and drop behaves as the dialog: the same types, one upload 
   for (const d of inFolder) ledgerUi("doc", d.id, email);
   assert.deepEqual(inFolder.map((d) => ({ folderId: d.doc?.folderId, format: d.v1?.format, marking: d.doc?.marking })), [{ folderId, format: "html", marking }]);
 
-  ctx.step("the dialog's drop zone: a .txt is refused with the hint; an .html is taken and named; the marking box starts checked from the account default");
+  ctx.step("the dialog's drop zone: a .txt is refused in the dialog with Upload disabled; an .html is taken and named; the marking box starts checked from the account default; nothing is sent");
+  const tDialog = Date.now();
   await u.page.locator(".workspace-toolbar").getByRole("button", { name: "Upload", exact: true }).click();
   const dlg = u.page.getByRole("dialog", { name: "Upload a document" });
   await dlg.waitFor();
   assert.equal(await dlg.locator("#upload-marking").isChecked(), true, "seeded from the account default");
-  mark = u.toastMark();
   await dropFiles(u.page, ".upload-dropzone", [file("zone.txt", "plain", "text/plain")]);
-  const t3 = await u.waitForToast(() => true, { since: mark, timeout: 10_000 });
-  assert.deepEqual({ kind: t3.kind, text: t3.text }, { kind: "error", text: `${UPLOAD_HINT}. That file is not one of those.` });
-  assert.equal(await dlg.getByRole("button", { name: "Upload", exact: true }).isDisabled(), true);
-  await dismissToasts(u);
+  // Was a toast with the type hint. The dialog now shows the plan's problem,
+  // the same one a workspace drop toasts, as an alert in the dialog.
+  const problem = dlg.getByRole("alert");
+  await problem.filter({ hasText: "zone.txt" }).waitFor({ timeout: 10_000 });
+  assert.equal(await problem.textContent(), notAPage("zone.txt"), "the dialog's drop zone refuses a .txt as a workspace drop does");
+  assert.equal(await dlg.getByRole("button", { name: "Upload", exact: true }).isDisabled(), true, "a refused drop leaves Upload disabled");
   await dropFiles(u.page, ".upload-dropzone", [file("zone.html", pageHtml({ title: "Zone", heading: "Zone" }), "text/html")]);
   await dlg.locator(".upload-dropzone strong", { hasText: "zone.html" }).waitFor({ timeout: 5_000 });
+  assert.equal(await problem.count(), 0, "the problem goes with the refused file");
   assert.equal(await dlg.getByRole("button", { name: "Upload", exact: true }).isDisabled(), false, "a dropped .html can be uploaded");
+  assert.deepEqual(watch.since(tDialog).filter((r) => pathOf(r.url) === "/publish").map(describe), [], "the dialog's drop zone sends nothing until Upload");
   await dlg.getByRole("button", { name: "Cancel" }).click();
   watch.stop();
   noPageErrors([u]);
@@ -1029,7 +1060,10 @@ scenario("A14.5 actions menus: Rename keeps the docId; Move to Trash is the owne
     { editor: 403, stranger: 404, absent: 404, anonymous: 401, deleteByOwner: [400, DOC_DELETE_ERROR] },
   );
   assert.equal((await readDoc(target, `docs/${docId}`))?.trashed ?? null, null, "the document is not in the Trash");
-  assert.deepEqual(await listObjects(target, `docs/${docId}/v1/`), [`docs/${docId}/v1/index.html`], "and its bytes are where they were");
+  // The files v1's record names, each still stored (a version's files are stored once per document).
+  const v1Record = await readDoc(target, `docs/${docId}/versions/v1`);
+  const v1Files = await Promise.all((await versionObjects(target, docId, "v1", v1Record)).map(async ({ rel, key }) => ({ rel, stored: (await readObject(target, key)) !== null })));
+  assert.deepEqual(v1Files, [{ rel: "index.html", stored: true }], "and its bytes are where they were");
 
   ctx.step("a folder renamed from its menu keeps its id");
   const pName = `Parent ${tag}`;
@@ -1344,7 +1378,7 @@ async function openVersionDialog(u, docId, title) {
 }
 
 async function chooseVersionFile(dlg, f) {
-  await dlg.locator('input[type="file"]').setInputFiles({ name: f.name, mimeType: f.type || "application/octet-stream", buffer: f.data });
+  await dlg.locator(CHOOSE_FILES).setInputFiles({ name: f.name, mimeType: f.type || "application/octet-stream", buffer: f.data });
 }
 
 /** Read the exact immutable entry selected by the published version record. */
@@ -1368,6 +1402,7 @@ scenario("A14.7 Upload a new version from the workspace preserves the address, e
   const u = await ctx.users.user({ name: "owner" });
   await u.signInUi(O.account.email, O.account.password, { next: EVERYTHING });
   await waitDocCards(u.page, [doc.docId]);
+  const watch = watchRequests(u.page);
   const next = file("revision.html", pageHtml({ title: "Authored next title", heading: "Revised body" }), "text/html");
 
   ctx.step("the card action opens a dialog naming its document, fixed base and permanent address; Publish needs a file");
@@ -1376,13 +1411,28 @@ scenario("A14.7 Upload a new version from the workspace preserves the address, e
   assert.match(await dlg.textContent(), /after v1, at the same address/);
   assert.match(await dlg.textContent(), /Comments stay on v1/);
 
-  ctx.step("a Markdown file cannot change the HTML document's format: the refusal is readable, the dialog stays open, and the head is untouched");
+  ctx.step("a Markdown page cannot change the HTML document's format: the dialog refuses it before sending, the dialog stays open, and the head is untouched");
+  // Was the server's 400 ("This document is HTML, so an update to it cannot be
+  // Markdown."). The dialog now plans the version before sending it
+  // (app/src/bundleInput.ts planVersion) and refuses a Markdown page for an
+  // HTML document there, with Publish disabled, so nothing is sent.
   await chooseVersionFile(dlg, file("wrong.md", "# Wrong format\n", "text/markdown"));
+  const problem = dlg.getByRole("alert");
+  await problem.filter({ hasText: "HTML" }).waitFor({ timeout: PAGE_LOAD_MS });
+  assert.equal(await problem.textContent(), HTML_PAGE_ONLY, "the revision refusal explains the format conflict");
+  assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).isDisabled(), true, "a format-changing page cannot be published");
+  assert.equal(await dlg.isVisible(), true, "a refused revision keeps its dialog open");
+  assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/publish").map(describe), [], "a refused page is never sent");
+  assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v1", "a refused revision does not change the head");
+
+  ctx.step("a .zip holding a Markdown page is the server's to refuse, as the plan cannot see inside it: the refusal is readable, the dialog stays open, and the head is untouched");
+  // Keeps a server refusal in this case, so the retry below follows one.
+  await chooseVersionFile(dlg, file("wrong.zip", await zipBundle({ "index.md": "# Wrong format\n" }, target), "application/zip"));
   let toastAt = u.toastMark();
   const refused = await submitVersion(u, dlg);
   assert.equal(refused.status, 400, "a format-changing browser revision is refused");
   const refusal = await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 });
-  assert.deepEqual({ kind: refusal.kind, text: refusal.text }, { kind: "error", text: "This document is HTML, so an update to it cannot be Markdown." }, "the revision refusal explains the format conflict");
+  assert.deepEqual({ kind: refusal.kind, text: refusal.text }, { kind: "error", text: FORMAT_REFUSAL }, "the server's revision refusal explains the format conflict");
   assert.equal(await dlg.isVisible(), true, "a refused revision keeps its dialog open");
   assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v1", "a refused revision does not change the head");
   await dismissToasts(u);
@@ -1393,7 +1443,8 @@ scenario("A14.7 Upload a new version from the workspace preserves the address, e
   const updated = await submitVersion(u, dlg);
   assert.deepEqual({ status: updated.status, id: updated.json?.docId, version: updated.json?.versionId }, { status: 200, id: doc.docId, version: "v2" }, "the browser revision preserves the document address");
   await dlg.waitFor({ state: "detached" });
-  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2.", "the revision success message names the new version");
+  // A page replacing a one-page document's page: one file changed, nothing kept or removed.
+  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2 — 1 file changed.", "the revision success message names the new version");
   assert.equal((await publishedEntry(doc.docId, "v2"))?.toString("utf8"), next.data.toString("utf8"), "the browser revision stores the selected bytes");
   await dismissToasts(u);
 
@@ -1403,7 +1454,7 @@ scenario("A14.7 Upload a new version from the workspace preserves the address, e
   toastAt = u.toastMark();
   const duplicate = await submitVersion(u, dlg);
   assert.deepEqual({ status: duplicate.status, version: duplicate.json?.versionId, deduped: duplicate.json?.deduped }, { status: 200, version: "v2", deduped: true }, "an identical browser revision is deduplicated");
-  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "No changes — the file is identical to v2.", "the identical-file message names the retained version");
+  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "No changes — it’s identical to v2.", "the identical-file message names the retained version");
   await dismissToasts(u);
 
   ctx.step("another publisher advances the head while the dialog is open: the dialog explains it and disables Publish before any request");
@@ -1414,6 +1465,7 @@ scenario("A14.7 Upload a new version from the workspace preserves the address, e
   assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).isDisabled(), true, "an outdated open revision dialog cannot publish");
   assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v3");
   await dlg.getByRole("button", { name: "Cancel" }).click();
+  watch.stop();
   noPageErrors([u]);
 });
 
@@ -1441,23 +1493,28 @@ scenario("A14.8 dropping a file onto an open document offers a confirmed revisio
   await dlg.waitFor({ state: "detached" });
   assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v1", "cancelled dropped revision leaves the head unchanged");
 
-  ctx.step("a dropped Markdown file receives the format refusal, remains replaceable, and does not replace the published bytes");
+  ctx.step("a dropped Markdown file is refused in the dialog before anything is sent, remains replaceable, and does not replace the published bytes");
   await dropFiles(frame, "body", [file("wrong.md", "# Wrong format\n", "text/markdown")]);
   await dlg.waitFor();
-  let toastAt = u.toastMark();
-  assert.equal((await submitVersion(u, dlg)).status, 400);
-  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "This document is HTML, so an update to it cannot be Markdown.", "a dropped revision explains its format refusal");
+  // Was the server's 400 ("This document is HTML, so an update to it cannot be
+  // Markdown."). The dialog now plans the version before sending it
+  // (app/src/bundleInput.ts planVersion) and refuses the Markdown page there,
+  // with Publish disabled, so nothing is sent.
+  const problem = dlg.getByRole("alert");
+  await problem.filter({ hasText: "HTML" }).waitFor({ timeout: PAGE_LOAD_MS });
+  assert.equal(await problem.textContent(), HTML_PAGE_ONLY, "a dropped revision explains its format refusal");
+  assert.equal(await dlg.getByRole("button", { name: "Publish", exact: true }).isDisabled(), true, "a dropped format-changing page cannot be published");
   assert.equal(await dlg.isVisible(), true);
+  assert.deepEqual(watch.list.filter((r) => pathOf(r.url) === "/publish").map(describe), [], "a refused dropped revision is never sent");
   assert.equal((await readDoc(target, `docs/${doc.docId}`))?.currentVersion, "v1");
-  await dismissToasts(u);
 
   ctx.step("replace the refused file in the open dialog and confirm: exactly one version is minted and shown at the same address");
   await chooseVersionFile(dlg, next);
-  toastAt = u.toastMark();
+  const toastAt = u.toastMark();
   const updated = await submitVersion(u, dlg);
   assert.deepEqual({ status: updated.status, id: updated.json?.docId, version: updated.json?.versionId }, { status: 200, id: doc.docId, version: "v2" }, "a confirmed dropped revision preserves the address");
   await dlg.waitFor({ state: "detached" });
-  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2.");
+  assert.equal((await u.waitForToast(() => true, { since: toastAt, timeout: 10_000 })).text, "Published v2 — 1 file changed.");
   assert.equal(new URL(u.page.url()).pathname, `/d/${doc.docId}`, "the dropped revision stays at its permanent address");
   await (await u.frame()).locator("h1").filter({ hasText: "Dropped replacement" }).waitFor({ timeout: PAGE_LOAD_MS });
   assert.equal((await publishedEntry(doc.docId, "v2"))?.toString("utf8"), next.data.toString("utf8"), "the dropped revision stores its selected bytes");
