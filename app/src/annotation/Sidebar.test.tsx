@@ -426,7 +426,7 @@ describe("a link to a thread", () => {
     expect(onCopyLink).toHaveBeenCalledWith("a1");
   });
 
-  it("shows a resolved thread it opened, though resolved threads are hidden until asked for", () => {
+  it("shows a resolved thread a link opened, though resolved threads are hidden until asked for", () => {
     // A selected thread scrolls itself into view, which jsdom does not implement.
     const proto = HTMLElement.prototype as { scrollIntoView?: unknown };
     const had = proto.scrollIntoView;
@@ -437,7 +437,21 @@ describe("a link to a thread", () => {
     });
     const view = render(<ToastProvider><Sidebar {...base} annotations={[THREAD, RESOLVED]} selectedId={null} /></ToastProvider>);
     expect(screen.queryByText("a settled passage")).toBeNull();
-    view.rerender(<ToastProvider><Sidebar {...base} annotations={[THREAD, RESOLVED]} selectedId="done" /></ToastProvider>);
+    view.rerender(<ToastProvider><Sidebar {...base} annotations={[THREAD, RESOLVED]} selectedId="done" reveal="done" /></ToastProvider>);
     expect(screen.getByText("a settled passage")).toBeTruthy();
+  });
+
+  it("still hides a thread resolved while it is selected, as Resolve always has", () => {
+    const proto = HTMLElement.prototype as { scrollIntoView?: unknown };
+    const had = proto.scrollIntoView;
+    proto.scrollIntoView = vi.fn();
+    onTestFinished(() => {
+      if (had) proto.scrollIntoView = had;
+      else delete proto.scrollIntoView;
+    });
+    const view = render(<ToastProvider><Sidebar {...base} annotations={[THREAD]} selectedId="a1" /></ToastProvider>);
+    expect(screen.getByText("the passage")).toBeTruthy();
+    view.rerender(<ToastProvider><Sidebar {...base} annotations={[{ ...THREAD, resolved: true }]} selectedId="a1" /></ToastProvider>);
+    expect(screen.queryByText("the passage")).toBeNull();
   });
 });

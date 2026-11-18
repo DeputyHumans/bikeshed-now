@@ -445,13 +445,17 @@ export function DocViewer() {
       : annotationsUnreadable
         ? { ready: true, refused: signedIn ? "comment-unreadable" : "comment-sign-in" }
         : { ready: true };
+  // A resolved thread a link opened, which the panel shows though resolved
+  // threads are hidden until asked for.
+  const [linkedResolved, setLinkedResolved] = useState<string | null>(null);
   const openThread = useCallback(
     (threadId: string) => {
+      setLinkedResolved(annotations.find((a) => a.annId === threadId)?.resolved ? threadId : null);
       setSelectedId(threadId);
       setCommentsOpen(true);
       setPane("comments");
     },
-    [setCommentsOpen],
+    [annotations, setCommentsOpen],
   );
   const sayNotice = useCallback(
     (notice: TargetNotice) => {
@@ -1428,6 +1432,7 @@ export function DocViewer() {
             emailLower={emailLower}
             onSelect={setSelectedId}
             onCopyLink={(threadId) => void copyLinkTo({ kind: "comment", id: threadId })}
+            reveal={linkedResolved}
             onComposing={presence.setComposing}
             onSignIn={signInToComment}
             selectionKept={pendingComment !== null}
