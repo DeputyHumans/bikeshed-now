@@ -134,8 +134,18 @@ describe("a list drawn a batch at a time", () => {
 
 describe("Back returns to the same place in a list", () => {
   /** A list that keeps its place for its history entry, its items landing when `ready`. */
-  function Remembered({ total, ready = true, resetKey = "everything" }: { total: number; ready?: boolean; resetKey?: string }) {
-    const list = useIncremental(ready ? total : 0, resetKey, { remember: { ready } });
+  function Remembered({
+    total,
+    ready = true,
+    resetKey = "everything",
+    at = "k1",
+  }: {
+    total: number;
+    ready?: boolean;
+    resetKey?: string;
+    at?: string;
+  }) {
+    const list = useIncremental(ready ? total : 0, resetKey, { remember: { at, ready } });
     return (
       <main>
         <div className="doc-grid">
@@ -200,5 +210,41 @@ describe("Back returns to the same place in a list", () => {
     render(<Remembered total={60} resetKey="folder:plans" />);
     expect(drawn()).toBe(25);
     expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("follows the history entry as the page moves on without unmounting: a new one starts at the top, a returning one where it was", () => {
+    const view = render(<Remembered total={60} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show 25 more" }));
+    scrolledTo(1234);
+    const everything = window.history.state;
+
+    // Into a folder: the router pushes a new entry, and the workspace stays mounted.
+    window.history.replaceState(null, "");
+    view.rerender(<Remembered total={60} resetKey="folder:plans" at="k2" />);
+    expect(drawn()).toBe(25);
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+    scrolledTo(300);
+
+    // Back to Everything.
+    window.history.replaceState(everything, "");
+    view.rerender(<Remembered total={60} at="k1" />);
+    expect(drawn()).toBe(50);
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 1234);
+  });
+
+  it("after a document opened from a page it moved on to, Back returns to that page's place", () => {
+    const view = render(<Remembered total={60} />);
+    window.history.replaceState(null, "");
+    view.rerender(<Remembered total={60} resetKey="folder:plans" at="k2" />);
+    fireEvent.click(screen.getByRole("button", { name: "Show 25 more" }));
+    scrolledTo(700);
+    const folder = window.history.state;
+    view.unmount();
+
+    scrollTo.mockClear();
+    window.history.replaceState(folder, "");
+    render(<Remembered total={60} resetKey="folder:plans" at="k2" />);
+    expect(drawn()).toBe(50);
+    expect(scrollTo).toHaveBeenCalledWith(0, 700);
   });
 });

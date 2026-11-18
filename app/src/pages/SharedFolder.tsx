@@ -2,7 +2,7 @@
 // A folder opened by its link or its public level, for someone who is not its member (SPEC §17).
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { UpdatedLine } from "../components/UpdatedLine";
 import { ExpiryChip } from "../components/ExpiryChip";
@@ -58,7 +58,8 @@ export function SharedFolder() {
   );
 
   // Drawn a batch at a time, like every workspace list (SPEC §13 "Grid and list").
-  const batch = useIncremental(folders.length + documents.length, folderId, { remember: { ready: answer !== undefined } });
+  const location = useLocation();
+  const batch = useIncremental(folders.length + documents.length, folderId, { remember: { at: location.key, ready: answer !== undefined } });
   const shownFolders = folders.slice(0, batch.shown);
   const shownDocs = documents.slice(0, Math.max(0, batch.shown - folders.length));
 

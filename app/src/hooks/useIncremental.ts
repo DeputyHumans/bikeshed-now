@@ -15,12 +15,15 @@ import { entryId, readPlace, savePlace, type Place } from "../workspace/place";
  * layout never paints with the last one's count. Live updates replace the
  * list without a new key, so a document arriving or leaving keeps your place.
  *
- * With `remember`, the count and the window's scroll are kept for this
- * history entry (`workspace/place.ts`), and a list mounted again for the same
- * entry and the same `resetKey`, by Back after opening a document, draws as
- * much as it had and scrolls back once `remember.ready` says its items have
- * landed. Until then nothing is kept, so the scroll a half-drawn page clamps
- * to never overwrites the place it is about to return to.
+ * With `remember`, the count and the window's scroll are kept for the history
+ * entry the list is showing (`workspace/place.ts`). The workspace stays
+ * mounted while the reader moves between its pages, so the entry is looked up
+ * again whenever `remember.at`, the router's location key, changes: an entry
+ * the reader comes back to, by Back after a document or between pages, draws
+ * as much as it had and scrolls back once `remember.ready` says its items have
+ * landed, and a new entry starts at the top. Until a returning list has
+ * scrolled back nothing is kept, so the scroll a half-drawn page clamps to
+ * never overwrites the place it is about to return to.
  */
 
 /** How many items each batch draws. */
@@ -42,28 +45,48 @@ export interface Incremental {
 
 export interface IncrementalOptions {
   batch?: number;
-  /** Keep this list's place for its history entry; `ready` once its items have landed. */
-  remember?: { ready: boolean };
+  /**
+   * Keep this list's place for its history entry. `at` changes on every
+   * navigation (the router's location key); `ready` once the items have landed.
+   */
+  remember?: { at: string; ready: boolean };
+}
+
+/** Which history entry the list is showing, and the place kept for it when it is the same list. */
+interface Entry {
+  at: string | null;
+  id: string | null;
+  returning: Place | null;
+}
+
+function lookup(at: string | null, list: string): Entry {
+  const id = entryId();
+  const kept = id ? readPlace(id) : null;
+  return { at, id, returning: kept && kept.list === list ? kept : null };
 }
 
 export function useIncremental(total: number, resetKey: string, options: IncrementalOptions = {}): Incremental {
   const batch = options.batch ?? BATCH;
   const remember = options.remember ?? null;
+  const at = remember?.at ?? null;
 
-  // Read once, when the list mounts: this entry's id, and its place when the
-  // reader is coming back to the same list.
-  const [entry] = useState(() => (remember ? entryId() : null));
-  const [returning] = useState<Place | null>(() => {
-    if (!entry) return null;
-    const kept = readPlace(entry);
-    return kept && kept.list === resetKey ? kept : null;
-  });
+  // The entry, looked up when the list mounts and again after every navigation.
+  const [tracked, setTracked] = useState<Entry>(() => (remember ? lookup(at, resetKey) : { at, id: null, returning: null }));
+  let entry = tracked;
+  if (remember && tracked.at !== at) {
+    entry = lookup(at, resetKey);
+    setTracked(entry);
+  }
 
-  const [state, setState] = useState(() => ({ key: resetKey, count: returning ? Math.max(batch, returning.shown) : batch }));
+  // One count per entry and list. A new entry starts from its kept place, if
+  // any; a new list in the same entry starts from one batch.
+  const listKey = `${entry.id ?? ""}\n${resetKey}`;
+  const startAt = (e: Entry) => (e.returning ? Math.max(batch, e.returning.shown) : batch);
+  const [state, setState] = useState(() => ({ key: listKey, entry: entry.id, count: startAt(entry) }));
   let count = state.count;
-  if (state.key !== resetKey) {
-    count = batch;
-    setState({ key: resetKey, count: batch });
+  if (state.key !== listKey) {
+    count = state.entry !== entry.id ? startAt(entry) : batch;
+    setState({ key: listKey, entry: entry.id, count });
   }
   const shown = Math.min(count, total);
 
@@ -79,7 +102,7 @@ export function useIncremental(total: number, resetKey: string, options: Increme
     if (!el || shown >= total || typeof IntersectionObserver !== "function") return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) more();
+        if (entries.some((e) => e.isIntersecting)) more();
       },
       { rootMargin: AHEAD },
     );
@@ -89,35 +112,65 @@ export function useIncremental(total: number, resetKey: string, options: Increme
 
   // --- Back returns to the same place ---------------------------------------
 
-  const settled = useRef(returning === null);
   const ready = remember?.ready ?? false;
+  /** The entry being kept, and whether its returning place has been scrolled back to yet. */
+  const place = useRef({ id: entry.id, returning: entry.returning, settled: entry.returning === null });
   const latest = useRef({ list: resetKey, shown });
   latest.current = { list: resetKey, shown };
+  /** Where the reader last scrolled to, read on every scroll: by the time a page has changed, the window may not say. */
+  const lastY = useRef(typeof window === "undefined" ? 0 : window.scrollY);
+  /** The place noted for the entry being kept, written to storage on the next frame or before the entry changes. */
+  const pending = useRef<{ id: string; place: Place } | null>(null);
 
-  const keep = useCallback(() => {
-    if (!entry || !settled.current) return;
-    savePlace(entry, { ...latest.current, y: window.scrollY, at: Date.now() });
-  }, [entry]);
+  const flush = useCallback(() => {
+    const p = pending.current;
+    pending.current = null;
+    if (p) savePlace(p.id, p.place);
+  }, []);
+  const note = useCallback(() => {
+    const p = place.current;
+    if (!p.id || !p.settled) return;
+    pending.current = { id: p.id, place: { ...latest.current, y: lastY.current, at: Date.now() } };
+  }, []);
+
+  // A navigation while mounted: what was noted for the entry being left is
+  // written first, then a new entry starts at the top and a returning one
+  // waits below for its items. On mount the page is already where it should be.
+  useLayoutEffect(() => {
+    if (place.current.id === entry.id) return;
+    flush();
+    place.current = { id: entry.id, returning: entry.returning, settled: entry.returning === null };
+    if (!entry.returning) {
+      window.scrollTo(0, 0);
+      lastY.current = 0;
+    }
+  }, [entry.id, entry.returning, flush]);
 
   // Before paint, once the items are there: the reader never sees the top first.
   useLayoutEffect(() => {
-    if (settled.current || !ready || !returning) return;
-    settled.current = true;
-    window.scrollTo(0, returning.y);
-  }, [ready, returning]);
+    const p = place.current;
+    if (p.settled || !ready || !p.returning) return;
+    p.settled = true;
+    window.scrollTo(0, p.returning.y);
+    lastY.current = p.returning.y;
+  }, [ready, entry.id]);
 
   useLayoutEffect(() => {
-    keep();
-  }, [keep, shown, resetKey]);
+    note();
+    flush();
+  }, [note, flush, shown, resetKey, entry.id]);
 
+  const remembering = remember !== null;
   useEffect(() => {
-    if (!entry) return;
+    if (!remembering) return;
     let frame = 0;
     const onScroll = () => {
+      lastY.current = window.scrollY;
+      note();
       if (frame) return;
       frame = window.requestAnimationFrame(() => {
         frame = 0;
-        keep();
+        flush();
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -125,11 +178,18 @@ export function useIncremental(total: number, resetKey: string, options: Increme
       window.removeEventListener("scroll", onScroll);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, [entry, keep]);
+  }, [note, flush, remembering]);
 
   // Leaving: a layout cleanup runs before the list's nodes go, while the
   // window is still scrolled where the reader left it.
-  useLayoutEffect(() => () => keep(), [keep]);
+  useLayoutEffect(
+    () => () => {
+      if (place.current.settled) lastY.current = window.scrollY;
+      note();
+      flush();
+    },
+    [note, flush],
+  );
 
   return { shown, total, batch, more, sentinel };
 }

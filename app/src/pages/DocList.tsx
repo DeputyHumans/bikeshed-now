@@ -2,7 +2,7 @@
 // The workspace: folders, documents, and everything you can do to them (SPEC §5, §13).
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
 import {
@@ -269,6 +269,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
   const folderId = params.folderId ?? null;
   const across = view === "recent" || view === "shared";
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const { user, emailLower } = useAuth();
   const singleColumn = useIsSingleColumn();
@@ -473,7 +474,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
   const batch = useIncremental(
     visibleFolders.length + visibleDocs.length,
     JSON.stringify([view, folderId, search, sort, layout, filters]),
-    { remember: { ready: !(loading || foldersLoading || (view === "recent" && reads.status === "loading")) } },
+    { remember: { at: location.key, ready: !(loading || foldersLoading || (view === "recent" && reads.status === "loading")) } },
   );
   const shownFolders = useMemo(() => visibleFolders.slice(0, batch.shown), [visibleFolders, batch.shown]);
   const shownDocs = useMemo(
