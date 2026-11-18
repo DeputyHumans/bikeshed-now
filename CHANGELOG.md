@@ -8,6 +8,13 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Back from a document returns to where you were in a list.** A list unmounts while a document is open, so coming back drew it again from the top, 25 items long, however far down you had been. How many items were drawn and how far the window was scrolled are now kept for that history entry in the tab's session storage, and restored once the list has drawn. They are keyed by an id the entry carries itself, because the router gives every freshly loaded page the same key. A new visit, or a different view, folder, sort, layout or filter, starts at the top (SPEC §13).
+- **A busy CI runner no longer stops a deploy over the head scanner's time budget.** The 0.38.0 deploy failed once because a linear scan of 256 KiB took 207 ms of CPU under coverage, against a 200 ms budget; it takes about 100 ms elsewhere. The budget is now one second, five times the worst linear run and sixteen times below a quadratic one, which still fails it after about 18 s.
+
 ## 0.38.0 — 2026-11-18
 
 ### Added

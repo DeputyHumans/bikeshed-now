@@ -34,11 +34,13 @@ function timed(fn) {
   return best;
 }
 
-// The adversarial cases must each finish well inside a request budget. 200 ms
-// of CPU is generous for a linear scan of 256 KiB and far below what a
-// quadratic one takes, so the bound separates the two however busy the
-// machine running it is.
-const TIME_BUDGET_MS = 200;
+// The adversarial cases must each finish well inside a request budget. A
+// linear scan of 256 KiB takes about 100 ms of CPU here and up to 207 ms on a
+// busy CI runner under coverage, which failed the 0.38.0 deploy at a 200 ms
+// budget; a quadratic one takes over 16 s. One second sits five times above
+// the worst linear run and sixteen times below the quadratic one, so the bound
+// separates the two without depending on how fast the machine is.
+const TIME_BUDGET_MS = 1_000;
 
 test("HEAD_SCAN_BYTES is 256 KiB", () => {
   assert.equal(HEAD_SCAN_BYTES, 256 * 1024);
