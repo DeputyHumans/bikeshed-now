@@ -1,11 +1,9 @@
 --- a/functions/src/lib/draft.ts
 +++ b/functions/src/lib/draft.ts
-@@ -32,4 +32,5 @@
- import { syncPublicProjection } from "./publicdoc";
+@@ -33,2 +33,3 @@
  import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 +import { e2eGate } from "./e2eGate";
  import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
- 
 @@ -552,4 +553,6 @@
    }
  

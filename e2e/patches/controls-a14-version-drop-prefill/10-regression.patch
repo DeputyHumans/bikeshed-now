@@ -6,6 +6,6 @@
    const toast = useToast();
 -  const [pick, setPick] = useState<Pick | null>(initialPick);
 +  const [pick, setPick] = useState<Pick | null>(initialPick ? null : initialPick);
-   const upload = useUploadRun();
    // Fixed at open: what the person is told they are replacing.
    const [baseVersion] = useState(headVersion);
+   const upload = useUploadRun();

@@ -1,11 +1,11 @@
 --- a/app/src/components/UploadVersionDialog.tsx
 +++ b/app/src/components/UploadVersionDialog.tsx
-@@ -71,7 +71,7 @@
+@@ -73,7 +73,7 @@
    const upload = useUploadRun();
-   // Fixed at open: what the person is told they are replacing.
-   const [baseVersion] = useState(headVersion);
--  const moved = Boolean(headVersion && baseVersion && headVersion !== baseVersion);
-+  const moved = Boolean(headVersion && baseVersion && headVersion !== baseVersion && false);
+   // While its own upload runs, the head moving is that upload's version
+   // landing before its answer; only an idle dialog has been overtaken.
+-  const moved = upload.phase.kind === "idle" && Boolean(headVersion && baseVersion && headVersion !== baseVersion);
++  const moved = upload.phase.kind === "idle" && Boolean(headVersion && baseVersion && headVersion !== baseVersion && false);
    const blocked = moved || editing.length > 0;
    // What the version holds decides what an upload replaces and drops, so it
    // is known before a plan is shown: a guess would call a replacement "added".
