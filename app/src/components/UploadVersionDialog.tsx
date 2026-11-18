@@ -68,10 +68,12 @@ export function UploadVersionDialog({
 }) {
   const toast = useToast();
   const [pick, setPick] = useState<Pick | null>(initialPick);
-  const upload = useUploadRun();
   // Fixed at open: what the person is told they are replacing.
   const [baseVersion] = useState(headVersion);
-  const moved = Boolean(headVersion && baseVersion && headVersion !== baseVersion);
+  const upload = useUploadRun();
+  // While its own upload runs, the head moving is that upload's version
+  // landing before its answer; only an idle dialog has been overtaken.
+  const moved = upload.phase.kind === "idle" && Boolean(headVersion && baseVersion && headVersion !== baseVersion);
   const blocked = moved || editing.length > 0;
   // What the version holds decides what an upload replaces and drops, so it
   // is known before a plan is shown: a guess would call a replacement "added".

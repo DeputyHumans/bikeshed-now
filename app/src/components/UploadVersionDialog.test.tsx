@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The upload dialog says what publishing will do, file by file, and never publishes over a version nobody saw (SPEC §2, §6a).
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UploadVersionDialog, versionUploadMessage } from "./UploadVersionDialog";
@@ -176,6 +176,35 @@ describe("UploadVersionDialog", () => {
     expect(onClose).toHaveBeenCalled();
     await act(async () => finish({ docId: "d1", versionId: "v5", contentHash: "h", fileCount: 1, bytes: 1, deduped: false }));
     expect(onPublished).not.toHaveBeenCalled();
+  });
+
+  it("lets the head move to its own new version while it publishes, and reports the version", async () => {
+    let control!: SendControl;
+    let finish!: (r: VersionUploadResult) => void;
+    publishVersion.mockImplementationOnce((_p, opts) => { control = opts; return new Promise((r) => (finish = r)); });
+    const { onPublished, rerender } = dialog({ initialPick: filePick(FILE) });
+    await act(async () => fireEvent.click(publish()));
+    act(() => control.onSent?.());
+    // The document's listener sees the version this upload made before its answer arrives.
+    rerender({ headVersion: "v5" });
+    expect(screen.queryByText(/was published while this was open/)).toBeNull();
+    expect(control.signal?.aborted).toBe(false);
+    await act(async () => finish({ docId: "d1", versionId: "v5", contentHash: "h", fileCount: 1, bytes: 1, deduped: false }));
+    expect(onPublished).toHaveBeenCalledTimes(1);
+  });
+
+  it("never stops an upload whose bytes have all been sent: closing or leaving only stops listening", async () => {
+    let control!: SendControl;
+    publishVersion.mockImplementationOnce((_p, opts) => { control = opts; return new Promise(() => {}); });
+    const view = dialog({ initialPick: filePick(FILE) });
+    await act(async () => fireEvent.click(publish()));
+    act(() => control.onSent?.());
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(view.onClose).toHaveBeenCalled();
+    expect(control.signal?.aborted).toBe(false);
+    cleanup();
+    // Unmounting while publishing leaves the request alone too.
+    expect(control.signal?.aborted).toBe(false);
   });
 
   it("is busy while the files are on their way, and stays open when it is refused", async () => {

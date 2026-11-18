@@ -21,12 +21,15 @@ export function useUploadRun() {
   const [phase, setPhase] = useState<UploadPhase>({ kind: "idle" });
   const controller = useRef<AbortController | null>(null);
   const live = useRef(true);
+  // Every byte has arrived: the deployment finishes the publish whatever
+  // happens here, so stopping now would lose only its answer.
+  const sent = useRef(false);
 
   useEffect(() => {
     live.current = true;
     return () => {
       live.current = false;
-      controller.current?.abort();
+      if (!sent.current) controller.current?.abort();
     };
   }, []);
 
@@ -48,12 +51,13 @@ export function useUploadRun() {
   const run = useCallback(async <T,>(send: (control: SendControl) => Promise<T>): Promise<T | null> => {
     const abort = new AbortController();
     controller.current = abort;
+    sent.current = false;
     setPhase({ kind: "sending", fraction: 0 });
     try {
       const result = await send({
         signal: abort.signal,
         onProgress: (fraction) => { if (live.current && !abort.signal.aborted) setPhase({ kind: "sending", fraction }); },
-        onSent: () => { if (live.current) setPhase({ kind: "publishing" }); },
+        onSent: () => { sent.current = true; if (live.current) setPhase({ kind: "publishing" }); },
       });
       return live.current && !abort.signal.aborted ? result : null;
     } catch (e) {
@@ -66,7 +70,7 @@ export function useUploadRun() {
   }, []);
 
   /** Stop the upload while it is still sending. */
-  const stop = useCallback(() => controller.current?.abort(), []);
+  const stop = useCallback(() => { if (!sent.current) controller.current?.abort(); }, []);
 
   return { phase, run, stop, busy: phase.kind !== "idle" };
 }

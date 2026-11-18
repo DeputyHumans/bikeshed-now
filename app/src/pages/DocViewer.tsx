@@ -762,7 +762,6 @@ export function DocViewer() {
       if (!canWrite) setWantsEdit(false);
       setSuggesting(null);
       setReview(null);
-      setDialog((value) => value === "upload-version" ? null : value);
     }
     interactionVersion.current = doc.currentVersion;
   }, [canWrite, doc.currentVersion, setWantsEdit]);
