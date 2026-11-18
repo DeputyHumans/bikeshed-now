@@ -828,3 +828,123 @@ describe("Shared with me", () => {
     expect(screen.getByRole("button", { name: "Grid" }).getAttribute("aria-pressed")).toBe("true");
   });
 });
+
+describe("a long workspace, drawn 25 at a time", () => {
+  const HOUR = 3_600_000;
+  const ts = (ms: number) => ({ toMillis: () => ms, toDate: () => new Date(ms) }) as never;
+  /** Thirty documents at the top level, each with a recent new version, newest first by number. */
+  const many = (n = 30, folderId: string | null = null, prefix = "doc") =>
+    Array.from({ length: n }, (_, i) =>
+      docMeta({
+        docId: `${prefix}-${i}`,
+        title: `${prefix} ${String(i).padStart(2, "0")}`,
+        folderId,
+        currentVersion: "v2",
+        latest: { version: "v2", at: ts(Date.now() - (i + 1) * HOUR), byEmail: "ana@example.com", channel: "web", origin: "upload" },
+      } as Partial<DocMeta>),
+    );
+  const twoFolders = [folderMeta({ folderId: "a", name: "Alpha" }), folderMeta({ folderId: "b", name: "Beta" })];
+  const titles = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll(".doc-row-title, .doc-card-title")).map((e) => e.textContent?.trim());
+  const rows = (container: HTMLElement) =>
+    container.querySelectorAll('[role="rowgroup"]:not(.doc-table-head) [role="row"]').length;
+  const land = async (docs: DocMeta[], folders: FolderMeta[] = []) => {
+    act(() => listeners.folders!(folders));
+    act(() => listeners.docs!(docs));
+    await act(async () => {});
+  };
+
+  it("draws folders then documents up to 25 as rows, says how many of how many, and the button draws the rest", async () => {
+    const { container } = mount("everything");
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    await land(many(), twoFolders);
+    expect(rows(container)).toBe(25);
+    expect(titles(container).slice(0, 3)).toEqual(["Alpha", "Beta", "doc 00"]);
+    expect(screen.getByText("25 of 32")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show 7 more" }));
+    expect(rows(container)).toBe(32);
+    expect(screen.queryByRole("button", { name: /^Show \d+ more$/ })).toBeNull();
+    // The sentinel and the button are never a row of the table.
+    expect(container.querySelector(".doc-table .workspace-more")).toBeNull();
+  });
+
+  it("draws the same 25 as cards, in the two grids and no third", async () => {
+    const { container } = mount("everything");
+    await land(many(), twoFolders);
+    const grids = container.querySelectorAll(".doc-grid");
+    expect(grids).toHaveLength(2);
+    expect(grids[0].querySelectorAll(".doc-card")).toHaveLength(2);
+    expect(grids[1].querySelectorAll(".doc-card")).toHaveLength(23);
+    fireEvent.click(screen.getByRole("button", { name: "Show 7 more" }));
+    expect(container.querySelectorAll(".doc-grid")[1].querySelectorAll(".doc-card")).toHaveLength(30);
+  });
+
+  it("counts folders in the batch too, so documents wait behind a long run of folders", async () => {
+    const { container } = mount("everything");
+    const folders = Array.from({ length: 30 }, (_, i) => folderMeta({ folderId: `f${i}`, name: `Folder ${String(i).padStart(2, "0")}` }));
+    await land(many(5), folders);
+    const grids = container.querySelectorAll(".doc-grid");
+    expect(grids).toHaveLength(1);
+    expect(grids[0].querySelectorAll(".doc-card")).toHaveLength(25);
+    expect(screen.getByText("25 of 35")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show 10 more" }));
+    expect(container.querySelectorAll(".doc-grid")[1].querySelectorAll(".doc-card")).toHaveLength(5);
+  });
+
+  it("hands the backfill only the documents it drew", async () => {
+    mount("everything");
+    await land(many(), twoFolders);
+    const docs = backfill.mock.calls[backfill.mock.calls.length - 1][0] as DocMeta[];
+    expect(docs).toHaveLength(23);
+  });
+
+  it("starts again at 25 for a search, a new sort and another page, but not when a document arrives", async () => {
+    const { container, rerender } = mount("everything");
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    await land(many(), twoFolders);
+    const more = () => fireEvent.click(screen.getByRole("button", { name: /^Show \d+ more$/ }));
+
+    more();
+    expect(rows(container)).toBe(32);
+    act(() => listeners.docs!([...many(), ...many(1, null, "late")]));
+    expect(rows(container)).toBe(33);
+
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "doc" } });
+    expect(rows(container)).toBe(25);
+    more();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "" } });
+    expect(rows(container)).toBe(25);
+
+    more();
+    fireEvent.change(screen.getByLabelText("Sort"), { target: { value: "name" } });
+    expect(rows(container)).toBe(25);
+
+    more();
+    rerender(
+      <MemoryRouter>
+        <ToastProvider>
+          <DocList view="shared" />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {});
+    expect(container.querySelectorAll(".doc-row-title, .doc-card-title")).toHaveLength(25);
+  });
+
+  it("does the same on Recent", async () => {
+    const { container } = mount("recent");
+    await land(many());
+    expect(rows(container)).toBe(25);
+    expect(screen.getByText("25 of 30")).toBeTruthy();
+  });
+
+  it("still says a list is empty, or that nothing matches, from the whole list", async () => {
+    mount("everything");
+    await land(many(), twoFolders);
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "doc 29" } });
+    expect(screen.queryByText(/Nothing matches/)).toBeNull();
+    expect(screen.getByText("doc 29")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "no such title" } });
+    expect(screen.getByText(/Nothing matches/)).toBeTruthy();
+  });
+});

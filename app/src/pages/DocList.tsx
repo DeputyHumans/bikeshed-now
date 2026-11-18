@@ -67,6 +67,8 @@ import { offersVersionUpload } from "../roles";
 import { CardSkeletons, RowSkeletons } from "../components/Spinner";
 import { coverUrl } from "../thumbs";
 import { useCoverBackfill } from "../hooks/useCoverBackfill";
+import { useIncremental } from "../hooks/useIncremental";
+import { MoreItems } from "../components/MoreItems";
 import { isExpired } from "../expiry";
 import { useToast } from "../components/Toast";
 import { DEPLOYMENT_MARKING } from "../config";
@@ -457,12 +459,6 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
     return sortDocs(docsInFolder(docs, folderId), sort);
   }, [docs, folderId, search, sort, view, recentShown, me]);
 
-  // Covers nobody has captured yet are filled in here, for the cards on
-  // screen, by an editor's browser. The viewer captures on open; this is for
-  // every document nobody has opened since (SPEC §6d).
-  useCoverBackfill(visibleDocs, emailLower ?? "");
-
-
   // Recent and Shared with me list documents; shared folders are in the rail.
   const visibleFolders = useMemo(() => {
     if (across && !search) return [];
@@ -471,6 +467,23 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
       : folders.filter((f) => (f.parentId ?? null) === folderId);
     return filterFolders(scoped, search).sort((a, b) => a.name.localeCompare(b.name));
   }, [folders, folderId, search, across]);
+
+  // Drawn a batch at a time, folders then documents, and the next batch as
+  // the end comes within reach. Everything above still sees the whole list.
+  const batch = useIncremental(
+    visibleFolders.length + visibleDocs.length,
+    JSON.stringify([view, folderId, search, sort, layout, filters]),
+  );
+  const shownFolders = useMemo(() => visibleFolders.slice(0, batch.shown), [visibleFolders, batch.shown]);
+  const shownDocs = useMemo(
+    () => visibleDocs.slice(0, Math.max(0, batch.shown - visibleFolders.length)),
+    [visibleDocs, visibleFolders.length, batch.shown],
+  );
+
+  // Covers nobody has captured yet are filled in here, for the cards on
+  // screen, by an editor's browser. The viewer captures on open; this is for
+  // every document nobody has opened since (SPEC §6d).
+  useCoverBackfill(shownDocs, emailLower ?? "");
 
   const defaultMarking: Marking = account?.defaultMarking ?? DEPLOYMENT_MARKING;
 
@@ -875,7 +888,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                 onSort={view === "recent" && !search ? undefined : setSort}
                 recent={view === "recent" && !search}
               >
-                {visibleFolders.map((folder) => (
+                {shownFolders.map((folder) => (
                   <FolderRow
                     key={folder.folderId}
                     folder={folder}
@@ -886,7 +899,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                     owner={ownerLabel(folder.ownerEmail)}
                   />
                 ))}
-                {visibleDocs.map((doc) => {
+                {shownDocs.map((doc) => {
                   const isOwner = doc.ownerEmail === emailLower;
                   return (
                     <DocRow
@@ -908,9 +921,9 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                 {/* Two grids, not one: a folder has no cover, and in a row with
                     documents that do it would stretch to their height and stand
                     mostly empty. */}
-                {visibleFolders.length > 0 ? (
+                {shownFolders.length > 0 ? (
                   <div className="doc-grid">
-                    {visibleFolders.map((folder) => (
+                    {shownFolders.map((folder) => (
                       <FolderCard
                         key={folder.folderId}
                         folder={folder}
@@ -921,9 +934,9 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                     ))}
                   </div>
                 ) : null}
-                {visibleDocs.length > 0 ? (
+                {shownDocs.length > 0 ? (
                   <div className="doc-grid">
-                    {visibleDocs.map((doc) => {
+                    {shownDocs.map((doc) => {
                       const isOwner = doc.ownerEmail === emailLower;
                       return (
                         <DocCard
@@ -942,6 +955,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                 ) : null}
               </>
             )}
+            <MoreItems list={batch} />
           </>
         )}
       </div>

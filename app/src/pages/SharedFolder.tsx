@@ -10,6 +10,8 @@ import { NotHere } from "../components/NotHere";
 import { CardSkeletons } from "../components/Spinner";
 import { unlockFolder, type FolderUnlock } from "../visibility";
 import { thumbUrl } from "../thumbs";
+import { useIncremental } from "../hooks/useIncremental";
+import { MoreItems } from "../components/MoreItems";
 
 /**
  * Read-only, and it looks it: no menus, no upload, no drop zone, no tree.
@@ -50,6 +52,15 @@ export function SharedFolder() {
         : [],
     [answer],
   );
+  const folders = useMemo(
+    () => (answer && "open" in answer ? [...answer.open.folders].sort((a, b) => a.name.localeCompare(b.name)) : []),
+    [answer],
+  );
+
+  // Drawn a batch at a time, like every workspace list (SPEC §13 "Grid and list").
+  const batch = useIncremental(folders.length + documents.length, folderId);
+  const shownFolders = folders.slice(0, batch.shown);
+  const shownDocs = documents.slice(0, Math.max(0, batch.shown - folders.length));
 
   if (failed) {
     return (
@@ -121,25 +132,23 @@ export function SharedFolder() {
         </div>
       ) : null}
 
-      {folder.folders.length > 0 ? (
+      {shownFolders.length > 0 ? (
         <div className="doc-grid">
-          {[...folder.folders]
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((child) => (
-              <div className="doc-card" key={child.folderId}>
-                <div className="doc-card-head">
-                  <Link to={withKey(`/folder/${child.folderId}`)} className="doc-card-title">
-                    <Icon name="folder" size={15} /> {child.name}
-                  </Link>
-                </div>
+          {shownFolders.map((child) => (
+            <div className="doc-card" key={child.folderId}>
+              <div className="doc-card-head">
+                <Link to={withKey(`/folder/${child.folderId}`)} className="doc-card-title">
+                  <Icon name="folder" size={15} /> {child.name}
+                </Link>
               </div>
-            ))}
+            </div>
+          ))}
         </div>
       ) : null}
 
-      {documents.length > 0 ? (
+      {shownDocs.length > 0 ? (
         <div className="doc-grid">
-          {documents.map((doc) => {
+          {shownDocs.map((doc) => {
             const href = withKey(`/d/${doc.docId}`);
             const cover = doc.cover ? thumbUrl(doc.docId, doc.cover.versionId, doc.cover.key, "cover", k) : null;
             return (
@@ -166,6 +175,8 @@ export function SharedFolder() {
           })}
         </div>
       ) : null}
+
+      <MoreItems list={batch} />
 
       {folder.truncated ? (
         <p className="caption shared-folder-note">

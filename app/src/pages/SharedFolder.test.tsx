@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // A folder opened by its link: read-only, every way out keyed, every refusal alike (SPEC §17).
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -101,5 +101,27 @@ describe("a folder opened by its link", () => {
     mountAt("/folder/sub?k=wrong");
     expect(await screen.findByRole("heading", { name: "Not here" })).toBeTruthy();
     expect(screen.getByText(/this folder does not exist, or you do not have access to it/i)).toBeTruthy();
+  });
+});
+
+describe("a long folder opened by its link", () => {
+  test("draws 25 items, folders first, and the rest on request", async () => {
+    const documents = Array.from({ length: 30 }, (_, i) => ({
+      docId: `d${i}`,
+      title: `Doc ${i}`,
+      currentVersion: "v1",
+      updatedAt: 100 - i,
+      cover: null,
+    }));
+    unlockFolder.mockResolvedValueOnce({ open: { ...LISTING, documents } });
+    mountAt("/folder/sub?k=fkey");
+    expect(await screen.findByRole("heading", { name: /Q3 reviews/ })).toBeTruthy();
+    const cards = () => document.querySelectorAll(".doc-card").length;
+    expect(cards()).toBe(25);
+    expect(screen.getByRole("link", { name: /Drafts/ })).toBeTruthy();
+    expect(screen.getByText("25 of 31")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show 6 more" }));
+    expect(cards()).toBe(31);
+    expect(screen.getByRole("link", { name: "Doc 29" }).getAttribute("href")).toBe("/d/d29?k=fkey");
   });
 });

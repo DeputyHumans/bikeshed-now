@@ -187,6 +187,15 @@
 /* Folders and documents are two grids; the second needs the same gap the rows do. */
 .doc-grid + .doc-grid { margin-top: var(--s-3); }
 
+/* After a list drawn a batch at a time: how much is shown, and the button for the rest (SPEC §13 "Grid and list"). */
+.workspace-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+
 .doc-card-head {
   display: flex;
   align-items: flex-start;

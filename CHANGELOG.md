@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **Every workspace list draws 25 items at a time and adds more as you scroll.** Recent, Shared with me, Everything, every folder and the search results on them drew everything they had at once, which for a busy reader was hundreds of cards above the one they wanted. Each now draws 25, folders first, and the next 25 when the end of the list comes into reach. A "Show 25 more" button does the same for a keyboard or a screen reader, and moves focus to the first item it drew. A line under the list says how many of how many are shown. A new page, folder, search, sort, filter or layout starts again at 25. The list is still fetched whole, so a search, the sort and the filters reach every item. A folder opened by its link draws the same way (SPEC §13).
+
 ## 0.37.3 — 2026-11-18
 
 ### Fixed
