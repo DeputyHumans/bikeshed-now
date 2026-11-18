@@ -23,7 +23,7 @@
 --- a/functions/src/endpoints/agents.ts
 +++ b/functions/src/endpoints/agents.ts
 @@ -19,7 +19,6 @@
- export const mcp = onRequest({ ...MAILING, cors: true }, async (req, res) => {
+ export const mcp = onRequest({ ...MAILING, ...READS_PAGES, cors: true }, async (req, res) => {
    // Before anything can answer: a GET's 405 and every 401 would otherwise
    // inherit Hosting's default max-age=600.
 -  noStore(res);

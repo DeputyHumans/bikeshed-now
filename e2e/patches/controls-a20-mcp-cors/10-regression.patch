@@ -2,6 +2,6 @@
 +++ b/functions/src/endpoints/agents.ts
 @@ -18,3 +18,3 @@
   */
--export const mcp = onRequest({ ...MAILING, cors: true }, async (req, res) => {
-+export const mcp = onRequest({ ...MAILING, cors: false }, async (req, res) => {
+-export const mcp = onRequest({ ...MAILING, ...READS_PAGES, cors: true }, async (req, res) => {
++export const mcp = onRequest({ ...MAILING, ...READS_PAGES, cors: false }, async (req, res) => {
    // Before anything can answer: a GET's 405 and every 401 would otherwise
