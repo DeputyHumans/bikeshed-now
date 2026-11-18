@@ -91,6 +91,11 @@ export interface DeckControls {
   slides: Slide[];
   /** Index into `slides` of whatever is nearest the top of the frame. */
   current: number;
+  /**
+   * Where the deck is NOW, read from the frame rather than from `current`,
+   * which follows the deck's own moves a moment late (an observer, a scroll).
+   */
+  locate: () => number;
   /** True when slides are about one viewport tall, so paging makes sense. */
   paged: boolean;
   /** What a preview is laid out at: one size for every slide in the deck. */
@@ -102,6 +107,12 @@ export interface DeckControls {
   prev: () => void;
   /** Re-read the document after a structural edit. */
   rescan: () => void;
+  /**
+   * The frame epoch the slide list and the latch above were measured for.
+   * Until it equals the frame's epoch, `slides` and `paged` may still describe
+   * the document before it, so anything that acts on a new document waits.
+   */
+  measuredEpoch: number;
 }
 
 export function useDeck({
@@ -115,6 +126,9 @@ export function useDeck({
   keysEnabled: boolean;
 }): DeckControls {
   const [scan, setScan] = useState<SlideScan>({ kind: "none" });
+  // Which epoch `scan` was read from, and which one the latch has measured.
+  const [scannedEpoch, setScannedEpoch] = useState(-1);
+  const [measuredEpoch, setMeasuredEpoch] = useState(-1);
   // Bumped after a structural edit. Adding or reordering a slide is DOM
   // surgery that fires no load and no scroll, so nothing else would tell us
   // the list changed.
@@ -140,6 +154,7 @@ export function useDeck({
   // onLoad, and that is the only moment the document is known to be the new one.
   useEffect(() => {
     setScan(scanSlides(doc));
+    setScannedEpoch(epoch);
   }, [doc, epoch, nonce]);
 
   // Position and the overview belong to the DOCUMENT, not to its slide list:
@@ -169,16 +184,18 @@ export function useDeck({
    * own keys, clicks and wheel inside the frame. Observation only: nothing
    * here changes the document.
    */
+  const locate = useCallback((): number => {
+    const view = doc?.defaultView;
+    if (!view || slides.length === 0) return 0;
+    return stacked
+      ? shownSlide(view, slides)
+      : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top));
+  }, [doc, slides, stacked]);
+
   useEffect(() => {
     const view = doc?.defaultView;
     if (!view || slides.length === 0) return;
-    const measure = () => {
-      setCurrent(
-        stacked
-          ? shownSlide(view, slides)
-          : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top)),
-      );
-    };
+    const measure = () => setCurrent(locate());
     measure();
     // Watched: an engine that delivers a sandboxed deck no events would
     // otherwise never move the rail off its first slide (viewer/frameWatch.ts).
@@ -200,7 +217,7 @@ export function useDeck({
       if (stacked) for (const event of motionEvents) doc.removeEventListener(event, measure, true);
       observer?.disconnect();
     };
-  }, [doc, epoch, slides, stacked]);
+  }, [doc, epoch, slides, stacked, locate]);
 
   /**
    * `paged`, `stacked` and `stage` are LATCHED: decided once per document,
@@ -217,11 +234,15 @@ export function useDeck({
    * property of the document, not of whether somebody opened a panel.
    */
   useEffect(() => {
+    // The first pass after a load still holds the last document's slides, whose
+    // nodes are detached and measure nothing. Wait for this document's list.
+    if (scannedEpoch !== epoch) return;
     const view = doc?.defaultView;
     if (!view || slides.length === 0) {
       setPaged(false);
       setStacked(false);
       setStage(FALLBACK_STAGE);
+      setMeasuredEpoch(epoch);
       return;
     }
     const rects = slides.map((slide) => slide.outer.getBoundingClientRect());
@@ -230,7 +251,8 @@ export function useDeck({
     setStage(
       stageSize({ width: view.innerWidth, height: view.innerHeight }, rects),
     );
-  }, [doc, epoch, slides]);
+    setMeasuredEpoch(epoch);
+  }, [doc, epoch, slides, scannedEpoch]);
 
   const goTo = useCallback(
     (index: number) => {
@@ -349,6 +371,7 @@ export function useDeck({
       scan,
       slides,
       current,
+      locate,
       paged,
       stage,
       overviewOpen,
@@ -357,7 +380,8 @@ export function useDeck({
       next,
       prev,
       rescan,
+      measuredEpoch,
     }),
-    [scan, slides, current, paged, stage, overviewOpen, goTo, next, prev, rescan],
+    [scan, slides, current, locate, paged, stage, overviewOpen, goTo, next, prev, rescan, measuredEpoch],
   );
 }

@@ -10,6 +10,7 @@ import {
   isStacked,
   scanSlides,
   shownIndex,
+  slideOf,
   slideTitle,
   stageSize,
 } from "./deck";
@@ -246,6 +247,29 @@ describe("scanSlides across realms", () => {
     } finally {
       realm.HTMLElement = saved;
     }
+  });
+});
+
+describe("slideOf", () => {
+  const doc = parse(`<main>
+    <section class="slide"><h2>One</h2><p id="p1">First words.</p></section>
+    <section class="slide"><h2>Two</h2><p>Second <em id="deep">words</em>.</p></section>
+    <section class="slide"><h2>Three</h2></section>
+  </main><footer id="after">Not a slide.</footer>`);
+  const scan = scanSlides(doc);
+  const slides = scan.kind === "slides" ? scan.slides : [];
+
+  it("names the slide that holds a node, however deep, including the slide itself", () => {
+    expect(slides).toHaveLength(3);
+    expect(slideOf(slides, doc.getElementById("p1"))).toBe(0);
+    expect(slideOf(slides, doc.getElementById("deep")!.firstChild)).toBe(1);
+    expect(slideOf(slides, slides[2].el)).toBe(2);
+  });
+
+  it("is -1 for a node on no slide, and for no node", () => {
+    expect(slideOf(slides, doc.getElementById("after"))).toBe(-1);
+    expect(slideOf(slides, null)).toBe(-1);
+    expect(slideOf([], doc.getElementById("p1"))).toBe(-1);
   });
 });
 

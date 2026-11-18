@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Selecting a thread brings its passage into view, and only then (SPEC §6).
+// A read document's clicks: a comment intent stays the thread's, and a link out opens beside it (SPEC §6).
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAnnotationLayer } from "./useAnnotationLayer";
-import { ANN_ATTR } from "../brand/dom";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -71,16 +70,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The element a scroll call was made on. */
-function scrolledTo(): Element | undefined {
-  return scrollIntoView.mock.contexts.at(-1) as Element | undefined;
-}
-
 interface Props {
   selectedId: string | null;
   annotations: Annotation[];
-    frameShown?: boolean;
-  }
+}
 
 function mount(doc: Document) {
   const annotations = [
@@ -97,108 +90,12 @@ function mount(doc: Document) {
         epoch: 1,
         annotations: props.annotations,
         selectedId: props.selectedId,
-        frameShown: props.frameShown,
         onSelect,
       }),
     { initialProps },
   );
   return { ...hook, annotations, onSelect };
 }
-
-describe("selecting a thread", () => {
-  it("brings the passage into view, centred, when a thread is selected", () => {
-    const doc = makeDoc();
-    const { rerender, annotations } = mount(doc);
-    expect(scrollIntoView).not.toHaveBeenCalled();
-
-    rerender({ selectedId: "a2", annotations });
-
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a2");
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
-  });
-
-  it("does not scroll again when the highlights are redrawn for the same selection", () => {
-    // A peer's comment landing redraws every highlight. The reader may have
-    // scrolled on since selecting; pulling them back would be a bug.
-    const doc = makeDoc();
-    const { rerender, annotations } = mount(doc);
-    rerender({ selectedId: "a2", annotations });
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-
-    rerender({ selectedId: "a2", annotations: [...annotations] });
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-  });
-
-  it("scrolls to a passage whose highlight arrives after the selection", () => {
-    // Posting a comment selects the new thread before the listener delivers
-    // it; the passage is drawn a moment later and is where the reader is
-    // looking, but a selection that outruns its highlight must still land.
-    const doc = makeDoc();
-    const { rerender, annotations } = mount(doc);
-    rerender({ selectedId: "a3", annotations });
-    expect(scrollIntoView).not.toHaveBeenCalled();
-
-    rerender({
-      selectedId: "a3",
-      annotations: [...annotations, annotation("a3", "s2", "further down")],
-    });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a3");
-  });
-
-  it("waits for a hidden frame to come back, rather than using the jump up on nothing", () => {
-    // In one column the comments pane hides the frame, whose box then measures zero,
-    // so every passage looks in view. The reader tapped a thread and then Document,
-    // and landed nowhere near it.
-    const doc = makeDoc();
-    const { rerender, annotations } = mount(doc);
-    rerender({ selectedId: "a2", annotations, frameShown: false });
-    expect(scrollIntoView).not.toHaveBeenCalled();
-
-    rerender({ selectedId: "a2", annotations, frameShown: true });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a2");
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not move a passage that is already in view", () => {
-    // The usual way that happens: the selection came from clicking the
-    // highlight, which is under the pointer. Moving it would be the document
-    // jumping under a click — and the same holds for a panel click on a
-    // passage the reader is looking at.
-    const doc = makeDoc();
-    const { rerender, annotations, onSelect } = mount(doc);
-    const mark = doc.querySelector(`[${ANN_ATTR}="a2"]`)!;
-    mark.getBoundingClientRect = () => rectAt(viewHeight(doc) / 2);
-    act(() => {
-      mark.dispatchEvent(new Event("click", { bubbles: true }));
-    });
-    expect(onSelect).toHaveBeenCalledWith("a2");
-
-    rerender({ selectedId: "a2", annotations });
-    expect(scrollIntoView).not.toHaveBeenCalled();
-
-    // The next selection, below the fold, scrolls as usual.
-    rerender({ selectedId: "a1", annotations });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a1");
-  });
-
-  it("brings a passage that is only partly in view fully in", () => {
-    const doc = makeDoc();
-    const { rerender, annotations } = mount(doc);
-    doc.querySelector(`[${ANN_ATTR}="a2"]`)!.getBoundingClientRect = () =>
-      rectAt(viewHeight(doc) - 10);
-    rerender({ selectedId: "a2", annotations });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a2");
-  });
-
-  it("scrolls to the same thread again once it has been deselected in between", () => {
-    const doc = makeDoc();
-    const { rerender, annotations } = mount(doc);
-    rerender({ selectedId: "a2", annotations });
-    rerender({ selectedId: null, annotations });
-    rerender({ selectedId: "a2", annotations });
-    expect(scrollIntoView).toHaveBeenCalledTimes(2);
-  });
-});
 
 describe("a click that carries a comment intent", () => {
   /** The gesture a reader makes: pointer down, the drag selects, click. */

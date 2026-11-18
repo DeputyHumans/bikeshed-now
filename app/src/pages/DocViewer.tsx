@@ -31,6 +31,7 @@ import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
 import { useDeck } from "../viewer/useDeck";
+import { useTarget } from "../viewer/useTarget";
 import { useFrameFit } from "../viewer/useFrameFit";
 import { useThumbCapture } from "../viewer/useThumbCapture";
 import { captureNeeds, storedSlideImages } from "../thumbs";
@@ -119,6 +120,11 @@ import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf, offersSuggest,
  *
  * Nor is `useChromeAutoHide`, which reads the document's scroll, size and selection
  * and sets an attribute on the parent's `.viewer`.
+ *
+ * Nor is `useTarget`, which takes the reader to a place — a thread's passage, on
+ * whichever slide holds it — by scrolling the frame and paging the deck. It is
+ * declared after `useDeck` because it pages the deck, and writes nothing to the
+ * document.
  */
 
 type Dialog =
@@ -323,8 +329,6 @@ export function DocViewer() {
     epoch: frame.epoch,
     annotations,
     selectedId,
-    // In one column the comments pane hides the frame, which measures nothing.
-    frameShown: !(singleColumn && pane === "comments"),
     onSelect: (id: string) => {
       setSelectedId(id);
       setCommentsOpen(true);
@@ -433,6 +437,18 @@ export function DocViewer() {
     // A dialog or the editor owns the keyboard while it is up: paging the deck
     // underneath the share dialog is somebody losing their place.
     keysEnabled: dialog === null && mode.kind === "reading",
+  });
+
+  // After the deck, which it pages: a thread's passage may be on another slide.
+  useTarget({
+    mode,
+    doc: frame.doc,
+    epoch: frame.epoch,
+    deck,
+    annotations,
+    selectedId,
+    // In one column the comments pane hides the frame, which measures nothing.
+    frameShown: !(singleColumn && pane === "comments"),
   });
 
   // A deck that scales itself by script renders at full size in the
