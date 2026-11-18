@@ -34,6 +34,7 @@ The bucket is private and has public access prevented. **One function decides ev
 - **The editor works on the authored markup**, not a normalized model of it, so a deck with inline SVG, a folded tree and a scroll observer survives a round trip ([ADR 0007](docs/architecture/adr/0007-execcommand-over-schema-editor.md)).
 - **Identical bytes mint no version.** A version's file list is hashed (SPEC §9.1), so publishing is safe in a loop, in CI, and in front of an agent that cannot remember what it already did. Each file is stored once per document, so changing one file writes one object and reads none of the rest ([ADR 0035](docs/architecture/adr/0035-a-version-lists-its-files-each-stored-once.md)).
 - **An agent's channel is derived from the credential, not claimed.** Everything an agent does is stamped with it, so a reviewer can always tell which feedback came from a person. Agent reads are counted separately so they do not distort anybody's statistics.
+- **Large media never pass through a function.** A picture, film or recording up to 200 MB goes straight to Storage through a session `POST /media` opens on an object of the uploader's own, and the publish that names it checks and hashes it before the version holds it. Over 25 MB, a version downloads by a link to a zip built once ([ADR 0037](docs/architecture/adr/0037-large-media-go-straight-to-storage.md)).
 - **Agents come in three ways:** the deployment's `/mcp` address (SPEC §19), the `bikeshed` terminal client, which signs in through the browser, and personal access tokens for scripts. The four skills a deployment serves live in `claude-plugin/skills/`.
 
 ## Before you say it works
@@ -58,7 +59,9 @@ Four classes of defect are **invisible locally** and have all shipped:
 | Anything IAM | A fresh project grants its runtime identity almost nothing. Symptoms are remote from causes; `docs/operations/overview.md` has the table |
 | `defineSecret` | Mandatory at deploy time, whatever the runtime does with it |
 
-So: **if you touch a response header, an admin-SDK call, the sign-in path, or anything about deployment, a green local suite is not evidence.** Assert it structurally (see `noStore` in `functions/src/lib/http.ts` and the test pinning it) or verify against a real deployment.
+Storage's upload sessions and the length they enforce, the bucket's CORS and lifecycle rule, and signed links are the same: the emulator has no signer, and nothing here takes its word for the rest. Media links, large uploads and large downloads are proven by unit tests standing in for Storage, then on a real deployment (ADR 0036, 0037).
+
+So: **if you touch a response header, an admin-SDK call, the sign-in path, upload sessions or signed links, or anything about deployment, a green local suite is not evidence.** Assert it structurally (see `noStore` in `functions/src/lib/http.ts` and the test pinning it) or verify against a real deployment.
 
 ## How tests pass while the bug is live
 
@@ -173,7 +176,7 @@ Each is a decision with a reason in `docs/architecture/overview.md`, not a gap: 
 | `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/architecture/adr/` | thirty-five decisions, each with its reversal condition |
+| `docs/architecture/adr/` | thirty-six decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 | `docs/README.md` | every document, by what you want to do |
 | `README.md`, `docs/assets/readme/` | the page for people deciding whether to use Bikeshed, and its images. The SVGs are the source, each in a light and a dark file, with Basic Latin of Bikeshed Sans embedded so a wording change needs no new subset. The screenshots come from a kept e2e stack with the sample documents, made-up names and `example.com` addresses; retake them when the screens they show change. A new PNG there must be added to `EXPECTED_BINARIES` in `scripts/check-secrets.sh`, which reads tracked files only, so it passes `verify` until the commit and then fails CI |
@@ -192,6 +195,7 @@ Each is a decision with a reason in `docs/architecture/overview.md`, not a gap: 
 - **A public document's shell holds its words, hidden.** They are for a crawler that runs no JavaScript ([ADR 0028](docs/architecture/adr/0028-what-a-crawler-can-read.md)). The stylesheet hides them and the app replaces them on mount; an attribute or inline style would read to a parser as a page choosing not to say them.
 - **`robots.txt` names no bot.** A bot obeys only the group that names it, so naming one would lift every other rule for it.
 - **`/embed/**` is left out of the `DENY` glob, and its prefix ignores case.** It is the one page any site may frame ([ADR 0031](docs/architecture/adr/0031-a-document-can-be-embedded-in-another-site.md)), and it is safe only because it is not the app: `app/src/embed/graph.test.ts` holds its imports away from the router, sign-in and Firestore. `docShell` matches the prefix decoded and in any case, so no spelling Hosting routes there can come back as a frameable app shell.
+- **A staged upload is not deleted when it is published.** `staging/{uid}/…` keeps it for a day, and the bucket's lifecycle rule deletes it, so a publish whose acknowledgement was lost retries into `deduped` instead of finding its film gone ([ADR 0037](docs/architecture/adr/0037-large-media-go-straight-to-storage.md)).
 - **A video's address answers `302` to `storage.googleapis.com`.** That is the proxy, after it has decided the caller may read, handing over a signed link to that one object for ten minutes: Storage answers the ranges a player asks for and a function cannot outlast 60 s. The redirect is `private, no-store`, and the emulator streams instead, because it cannot sign ([ADR 0036](docs/architecture/adr/0036-a-pages-files-sit-beside-it.md)).
 - **The email secret holds a single space.** `defineSecret` demands a version; Secret Manager refuses an empty payload. Whitespace is how a deployment says "email off", and `apiKey()` trims.
 

@@ -297,6 +297,18 @@ The embed page is for a page on another site, so check it from one. `localhost` 
 4. Make the document private and reload after five minutes: *This document isn’t available here*, the same page an id that does not exist gets.
 5. `curl -sI` for `/EMBED/<id>`, `/d/<id>` and `/signup`: the first is the embed page, the other two carry `x-frame-options: DENY`. On the emulator this is a smoke test only; Hosting's header globs are checked on a deployment (SPEC §2 "GET /embed/…").
 
+### 21 · A folder publishes as one document, and the next version sends only what changed
+
+Make a folder `talk/` holding `index.html` with `<link rel="stylesheet" href="style.css">`, `<img src="img/chart.png">` and `<video controls src="clip.mp4"></video>`, those three files (a clip of a few MB), and a `.env`.
+
+1. Drop the folder on Everything. The dialog says it opens with `index.html` and that it left `.env` out. Publish. In the Storage emulator the document's files sit under `docs/<id>/blobs/`, one object per distinct file named by its SHA-256, and the version's record lists `files`, `hashes` and `sizes` (SPEC §4).
+2. Open it: the style applies, the chart shows and the clip plays. The emulator cannot sign, so the clip is streamed; its `302` is checked on a deployment (SPEC §24).
+3. Drop a new `chart.png` on the open document. The dialog says `chart.png` replaces `img/chart.png` and every other file stays as it is. Publish: *Published v2 — 1 file changed, 3 unchanged.* Only one new object appears under `blobs/`.
+4. Drop the same picture again: *No changes — it’s identical to v2.*
+5. Delete `img/chart.png` from the folder and drop the folder on the open document. Before anything is sent, the dialog warns that the folder becomes the whole next version and removes `img/chart.png`. Publish: the message counts 3 unchanged and 1 removed.
+
+Large media are not proven here. A film over 25 MB goes up through a Storage session, and its link, its download and the bucket's lifecycle rule are Storage's and IAM's; the emulator is not evidence for any of them ([ADR 0037](../architecture/adr/0037-large-media-go-straight-to-storage.md)). Unit tests stand in for Storage (`functions/test/large-media.test.js`, `cli/test/media.test.mjs`), and the checks after a deploy are in `docs/operations/overview.md`, "Upgrading".
+
 ## Automated: `npm run test:e2e`
 
 The suite in `e2e/` runs most of this walkthrough by itself. It builds a copy of the product from the tree and starts it on its own ports, with its own emulators, a local Mailpit for mail and its own `functions/.env.local`. It builds the app from `app/.env.example` with the copy's own origin, so none of "Running it" applies to it and nothing in it can reach a deployment. It is **opt-in**, and neither `npm run verify` nor CI runs it. One run takes minutes and gigabytes, and it needs Java, Mailpit and system Chrome on the machine. Its concurrency tier is a measurement that wants the machine to itself. [`e2e/README.md`](../../e2e/README.md) is the full guide.

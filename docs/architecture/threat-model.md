@@ -6,7 +6,7 @@ What this system protects, from whom, and where it deliberately stops.
 
 | Asset | Where it lives | Who may see it |
 |---|---|---|
-| Document bytes, and the thumbnails captured from them | private bucket, served only by `contentProxy` and `downloadBundle`, except that video and audio, once `contentProxy` or `getDraft` has decided the caller may read, are fetched through a signed link to that one object that lives ten minutes; thumbnails only by `contentProxy`, uploaded by an editor's browser through `saveThumbs` as size-checked JPEG; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it); and, to read only, anyone a folder above it opens to by its link or public level (SPEC §17 "A folder's reach") |
+| Document bytes, and the thumbnails captured from them | private bucket, served only by `contentProxy` and `downloadBundle`, except that video and audio, once `contentProxy` or `getDraft` has decided the caller may read, are fetched through a signed link to that one object that lives ten minutes, and a version over 25 MB downloads through such a link to its zip; a large upload waits under `staging/{uid}/` as its uploader's own until a publish names it; thumbnails only by `contentProxy`, uploaded by an editor's browser through `saveThumbs` as size-checked JPEG; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it); and, to read only, anyone a folder above it opens to by its link or public level (SPEC §17 "A folder's reach") |
 | Member lists, owner email, usage stats | `docs/{docId}` | members only — never anonymous, never a non-member on a public document |
 | Reviewer identities (annotations, comments) | `docs/{docId}/versions/**` | anyone with an account who can read the document: a member, anyone on a public one, a link grant on an unlisted one |
 | That an unlisted document exists, and its title | `docs/{docId}` only — never `public/` | its members and the holders of its link, or of a link to a folder above it |
@@ -162,11 +162,11 @@ An agent reads `get_changes` as its owner. The log could otherwise hand a reader
 
 ### A media link outlives the access that minted it
 
-**Attack.** Video and audio reach a reader through a V4 signed Storage link rather than the proxy's stream (SPEC §24, [ADR 0036](adr/0036-a-pages-files-sit-beside-it.md)). A link is a bearer credential: whoever holds it reads that object, whoever they are, until it expires. A cached or logged redirect would hand it on.
+**Attack.** Video and audio reach a reader through a V4 signed Storage link rather than the proxy's stream (SPEC §24, [ADR 0036](adr/0036-a-pages-files-sit-beside-it.md)), and so does a download over 25 MB ([ADR 0037](adr/0037-large-media-go-straight-to-storage.md)). A link is a bearer credential: whoever holds it reads that object, whoever they are, until it expires. A cached or logged redirect would hand it on.
 
 **Mitigation.** A link is minted only after every check the proxy makes for any other file — the caller, the ACL, expiry, the link key — and names exactly one object, the type it is served as and inline display. It lives ten minutes. It is never logged. The redirect that carries it is `private, no-store`, set after everything else, so no shared cache keeps it. Signing is the runtime's own identity through IAM signBlob, which it already held for session cookies, so the change granted nothing.
 
-**Residual, accepted.** A reader whose access is withdrawn, or who forwards the link, can still fetch that one file for at most ten minutes. A picture, a stylesheet or a font a member's browser has kept stays there for at most an hour, as a thumbnail does for a day (SPEC §17).
+**Residual, accepted.** A reader whose access is withdrawn, or who forwards the link, can still fetch that one file, or that one download, for at most ten minutes. A picture, a stylesheet or a font a member's browser has kept stays there for at most an hour, as a thumbnail does for a day (SPEC §17).
 
 ### A folder upload publishes a secret beside the page
 
@@ -183,6 +183,19 @@ An agent reads `get_changes` as its owner. The log could otherwise hand a reader
 **Mitigation.** Only the Admin SDK writes version records, and the key of a stored file is always built from the document the record sits under, never from the record: `blobKey(docId, sha256)` takes the document's id from the path, and the hash must be 64 hex characters. A record whose arrays disagree in length, repeat a path, carry an unsafe path or a malformed digest names no file at all. Files are scoped to their document, so no account can learn whether some bytes exist in a document it cannot read. Withdrawal reads every version in the transaction that repoints the head, deletes only the files no other version names, and marks them first so that a publish racing it cannot start naming one.
 
 **Residual, accepted.** Withdrawing a version no longer removes a file another version also holds. An operator taking a leaked file out of a document withdraws every version that names it; the dry run lists them. Files written by an attempt that was refused stay, unnamed and unreadable, until the document is deleted forever.
+
+### A large upload is used to name, swap or pile up bytes
+
+**Attack.** A picture, film or recording over 25 MB goes straight to Storage through a resumable session, and the publish names it afterwards (SPEC §2 `POST /media`, §24, [ADR 0037](adr/0037-large-media-go-straight-to-storage.md)). So the object a version will hold is written by a client, not a function. A caller could name somebody else's staged upload, or one made for another document; send more than they declared; swap the bytes at the staged name between the check and the copy; name a hash the document does not store to borrow another document's bytes; or open session after session to fill the bucket. The session URL is a bearer credential while it lives.
+
+**Mitigation.**
+- **Only your own, only what you declared.** A session is opened only for a signed-in caller, on `staging/{uid}/{uuid}` under their own uid, and for an existing document only by one of its editors on an unfrozen document. The publish looks a staging id up under the caller's uid alone, so another account's uploads cannot be named. The session declares the type and the length, and Storage refuses a byte past it; it is create-only, so a second object cannot replace the first.
+- **Checked, then read once at that generation.** The publish reads the object's metadata, requires this document (none for a new one), a path that is a picture, a film or a recording, exactly the declared size and an age under a day, pins its generation, and reads it once at that generation to hash it. What is hashed is what is copied; a change at that name meanwhile is refused or ignored, never stored.
+- **A stored hash is the document's own.** `have=<path>:<sha256>` is checked against `docs/{docId}/blobs/{sha256}` of the document being updated, and only its editors may update it, who can read every version already. `{have: true}` from `POST /media` is answered on the same terms, so it tells nobody whether bytes exist in a document they cannot read.
+- **SVG, scripts and pages never go up on their own.** Only the extensions of pictures, films and recordings may be staged, so nothing over 25 MB is ever a document a browser would run.
+- **The URL is never logged,** and a browser's session names one of the deployment's own origins: the forwarded host only when it is on that list, the configured origin otherwise.
+
+**Residual, accepted.** No rate limiter, by decision: one account may open as many sessions as it likes, each at most 200 MB, deleted by the bucket a day after it was made and writing nothing to Firestore. Everything one account staged sits under one prefix, so it can be found and removed. A staged upload that was published stays for that day as its uploader's, unreadable by anybody, even after the version naming it is withdrawn or the document deleted forever. Until `scripts/setup.mjs` has given the bucket its lifecycle rule, staged uploads are not deleted at all.
 
 ### Zip-slip and zip bombs
 

@@ -65,7 +65,7 @@ There is no runtime here: no shared state, no viewer identity, no storage a page
 | HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte. `get_document` reads it to an agent as Markdown, and `as: "source"` returns the file |
 | A page and its files: stylesheets, scripts, fonts, pictures, video | `publish_document` with `files` beside `content`; or a folder or a `.zip` through `bikeshed publish <folder>` | The page, with every file at the relative path it is referenced by. `index.html` or `index.md` opens, or the only page there is. One enclosing folder is fine |
 
-Anything else is refused. A document may be 25 MB and 2,000 files, each path at most 256 bytes; `files` may come to 10 MB. Markdown is read as UTF-8. A folder or a zip leaves out every name starting with a dot (`.env`, `.git/`), node_modules and `__MACOSX/`, and says so.
+Anything else is refused. A version may be 500 MB and 2,000 files, each path at most 256 bytes; a picture, a film or a recording may be 200 MB and any other file 25 MB; `files` may come to 10 MB. Markdown is read as UTF-8. A folder or a zip leaves out every name starting with a dot (`.env`, `.git/`), node_modules and `__MACOSX/`, and says so.
 
 Without a title from you, a Markdown document is named by its first `#` heading and an HTML one by its `<title>`; failing both, by the file name.
 
@@ -125,6 +125,7 @@ No external URLs. Images, stylesheets and fonts from another site do load — no
 Put what the page uses beside it, and refer to each file by relative path: `style.css`, `app.js`, `img/chart.png`, `clip.mp4`. A path starting with `/` resolves against the deployment, not your document. Each file is stored once, a reader's browser keeps pictures, stylesheets and fonts between visits, and a revision sends only what changed.
 
 - **Through MCP**, put stylesheets, scripts, SVG, JSON and captions in `files` as text, exactly as you would have written them inline: it costs the same tokens. A small binary goes as base64, with `encoding: "base64"` and no `data:` prefix. A picture or a video you have on disk is not something to spell out in base64: publish its folder with the CLI.
+- **A large film** goes through the CLI too: `bikeshed publish <folder>` sends anything over the request size straight to storage, resumes a dropped connection, and on `update` names a film the document already stores instead of sending it again.
 - **From a shell**, write the folder and `bikeshed publish <folder>`. It leaves out dotfiles and node_modules, never follows a symbolic link, and refuses before sending anything over a limit.
 - **Video and audio** are a file and one line: `<video controls src="clip.mp4"></video>`, which works in Markdown too, as raw HTML. They play from a link that answers the ranges a player asks for, so they seek, in Safari as well.
 - **A script in its own file is blocked until somebody trusts the document**, exactly as an inline one is.

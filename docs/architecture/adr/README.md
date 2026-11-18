@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Thirty-five decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Thirty-six decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
 They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
@@ -43,6 +43,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0034](0034-a-reading-is-made-within-a-budget.md) | A reading is made in a worker, within a time and memory budget | Accepted |
 | [0035](0035-a-version-lists-its-files-each-stored-once.md) | A version lists its files, and each file is stored once per document | Accepted |
 | [0036](0036-a-pages-files-sit-beside-it.md) | A page's files sit beside it; video and audio go by a short-lived Storage link | Accepted |
+| [0037](0037-large-media-go-straight-to-storage.md) | Large media go straight to Storage through a server-issued session | Accepted |
 
 ## Format
 

@@ -916,7 +916,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="formats">
   <p class="eyebrow">05</p>
   <h2>What you can publish</h2>
-  <p class="answer">HTML as written, Markdown rendered on the server, or a page with the files it uses, as a folder, a zip or MCP <code>files</code>, up to 25 MB.</p>
+  <p class="answer">HTML as written, Markdown rendered on the server, or a page with the files it uses, as a folder, a zip or MCP <code>files</code>: up to 500 MB a version, 200 MB a picture, film or recording, and 25 MB any other file.</p>
 
   <div class="table-wrap">
     <table>
@@ -924,7 +924,7 @@ bikeshed update storage-migration proposal.md</code></pre>
       <tbody>
         <tr><td><code>.md</code> <code>.markdown</code></td><td>Rendered to HTML on the server; <code>get_document</code> returns the Markdown</td></tr>
         <tr><td><code>.html</code> <code>.htm</code></td><td>Stored as written; <code>get_document</code> reads it to an agent as Markdown, and <code>as: "source"</code> returns the file</td></tr>
-        <tr><td>A folder or a <code>.zip</code></td><td>A page and its files, referenced by relative path, with <code>index.html</code> or <code>index.md</code> at the root. <code>bikeshed publish &lt;folder&gt;</code> sends a folder; dotfiles such as <code>.env</code>, node_modules and symbolic links are left out</td></tr>
+        <tr><td>A folder or a <code>.zip</code></td><td>A page and its files, referenced by relative path, with <code>index.html</code> or <code>index.md</code> at the root. <code>bikeshed publish &lt;folder&gt;</code> sends a folder; dotfiles such as <code>.env</code>, node_modules and symbolic links are left out. A picture, film or recording over 25 MB goes straight to storage first, and resumes if the connection drops</td></tr>
         <tr><td>MCP <code>files</code></td><td><code>[{path, content, encoding?}]</code> beside <code>content</code>, up to 10 MB: stylesheets, scripts and SVG as text, pictures and fonts as base64</td></tr>
       </tbody>
     </table>
@@ -933,7 +933,7 @@ bikeshed update storage-migration proposal.md</code></pre>
   <ul class="ticks">
     <li><strong>Put an id on every section.</strong> A comment anchors to the nearest element with an id. Without one it anchors to the whole page, and any edit above shifts it. Markdown headings get ids for free.</li>
     <li>An update keeps the format. A folder or a zip replaces every file. One <code>.md</code> or <code>.html</code> replaces the entry and keeps the files beside it. <code>files</code>, or loose files given to <code>bikeshed update</code>, replace only the files of those names. Each file is stored once, so send only what changed.</li>
-    <li>Video and audio play from a link that answers the ranges a player asks for, so <code>&lt;video controls src="clip.mp4"&gt;</code> seeks, in Safari too.</li>
+    <li>Video and audio play from a link that answers the ranges a player asks for, so <code>&lt;video controls src="clip.mp4"&gt;</code> seeks, in Safari too. A film too large for MCP <code>files</code> goes through <code>bikeshed publish</code>, and <code>bikeshed update</code> names one the document already has instead of sending it again.</li>
     <li>Markdown is CommonMark with tables, strikethrough and task lists. Mermaid, math, footnotes and front matter show as typed.</li>
     <li>Scripts run only for a reader who chooses to run them, or for everyone once a deployment's superadmin who owns the document trusts it. Opened at its own file address, or embedded in another site, a page never runs its scripts. Each version published through the CLI or MCP sandboxes it again. Images, stylesheets and fonts from other sites load either way.</li>
     <li><strong>Embed one in another site's page</strong> with an iframe of <code>/embed/&lt;id&gt;</code>, the latest version, or <code>/embed/&lt;id&gt;/&lt;version&gt;</code>, one version. It takes a public document, or an unlisted one with <code>?k=</code>, counts its readers as the viewer does, and opens its links in a new tab. <a href="/d/docs-embed">Put a Bikeshed document on your web page</a> has the snippet.</li>

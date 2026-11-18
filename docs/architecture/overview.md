@@ -2,7 +2,7 @@
 
 `docs/architecture/spec.md` says what the system does and is normative. This file says why it is shaped this way, and — more usefully — what it deliberately is not.
 
-The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty-five records of about thirty lines each.
+The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty-six records of about thirty lines each.
 
 ## The one-paragraph version
 
@@ -80,7 +80,7 @@ Each line below is a decision, not a gap. If you want to change one, the bar is 
 - **No search index.** The workspace filter is client-side over a set that fits in memory.
 - **No mobile app.** The web app is responsive to 320px and touch-parity-tested, in Chrome and in WebKit, whose sandboxed frames deliver no events (SPEC §6).
 - **No admin console.** The CLIs are the admin surface, and they are auditable.
-- **No rate limiter.** CDN caching is the cost defence for public documents; App Check is the named hook if abuse appears.
+- **No rate limiter.** CDN caching is the cost defence for public documents; App Check is the named hook if abuse appears. Large uploads are bounded without one: an upload session holds at most 200 MB of one account's, under that account's own prefix, and the bucket deletes it after a day ([ADR 0037](adr/0037-large-media-go-straight-to-storage.md)).
 - **No deletion without a way back first.** Deleting moves a document, or a folder with everything in it, to the owner's Trash, where it is theirs alone and frozen until they restore it ([ADR 0024](adr/0024-deletion-goes-through-a-trash.md), SPEC §4). It is deleted forever 30 days later, or sooner by its owner in the browser with a code emailed to them, never by an agent; a deleted document leaves a tombstone so its id is never reused ([ADR 0025](adr/0025-the-trash-empties-on-one-daily-job.md)). A single version can still be withdrawn through a guarded CLI. A document's optional **expiry** is not a deletion date: when it passes the document becomes private, and the people it was shared with by name keep it (SPEC §17).
 - **Two scheduled jobs, and no scheduler.** Once a day `purgeExpiredTrash` deletes forever what has been in the Trash for 30 days, because nothing reads a Trash nobody opens ([ADR 0025](adr/0025-the-trash-empties-on-one-daily-job.md)). Once an hour `applyExpiries` makes private whatever has passed its date and clears the date, so the change is on the record and in its history ([ADR 0029](adr/0029-expiry-makes-it-private-on-an-hourly-job.md)). Neither is a queue. Until the hourly job runs, a passed date is still enforced when the document is READ, owner-only, so the job can be late without letting anyone in. Everything else that happens "at" a time is decided when something is read.
 - **No scopes on the agent surface.** An app connects by signing in, and a person can still mint a personal access token for a script. Either way the credential is exactly its owner, and it is revoked from one list by someone who has never heard of OAuth. This line used to say "no OAuth"; ADR 0014 records why that changed and what it cost.

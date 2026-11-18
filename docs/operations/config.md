@@ -163,7 +163,11 @@ Not environment variables. Changing one is a code change and a deploy, which is 
 | `REGION` | `us-central1` | **Fixed.** Hosting rewrites only reach functions in us-central1 |
 | `SESSION_EXPIRES_MS` | 5 days | Session cookie lifetime |
 | `SESSION_COOKIE_NAME` | `__session` | The only cookie Firebase Hosting forwards to a function |
-| `MAX_BUNDLE_BYTES` | 25 MB | Upper bound on a bundle held in memory at upload or commit |
+| `MAX_BUNDLE_BYTES` | 25 MB | Upper bound on a request body, on a file other than a picture, film or recording, and on a version zipped in memory for download |
+| `MAX_MEDIA_FILE_BYTES` | 200 MB | Upper bound on one picture, film or recording sent through an upload session; Storage refuses a byte past the length the session declared |
+| `MAX_VERSION_BYTES` | 500 MB | Upper bound on a version's files in all. A built download of that size still fits a zip without ZIP64 |
+| `STAGING_TTL_MS` | 1 day | How long a staged upload may wait for the publish that names it. The bucket's lifecycle rule deletes `staging/` and `downloads/` at the same age |
+| `UPLOAD_CHUNK_BYTES` | 8 MiB | The chunk size a session's answer suggests; a multiple of 256 KiB, as Storage requires of every chunk but the last |
 | `MAX_BUNDLE_FILES` | 2,000 | Upper bound on the files in one bundle, counted before any is decompressed: each is a Storage write at publish |
 | `MAX_BEAT_MS` | 5 min | Largest active-time delta one heartbeat may contribute. The client beats at most every 60 s, and only with new time to report, so more is a stale tab, a clock jump, or a forged payload — clamped, not trusted |
 | `MAX_SESSION_MS` | 8 h | Ceiling on one reading session, so a pinned tab cannot inflate totals |
