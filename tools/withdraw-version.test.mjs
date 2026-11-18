@@ -73,3 +73,47 @@ test('withdrawal advances the epoch in both views and captures only the retired 
   assert.equal(store.get('public/d').sourceEntry, null);
   assert.equal(store.get('public/d').fileCount, 1);
 });
+
+// A version that lists its files owns no prefix (SPEC §4, ADR 0035).
+const hex = (c) => c.repeat(64);
+const listed = (files, attempt) => ({ entry: 'index.html', format: 'html', layout: 'blobs', attempt,
+  files: files.map(([rel]) => rel), hashes: files.map(([, h]) => h), sizes: files.map(() => 1), publishedAt: null });
+test('withdrawing a version that lists its files marks and returns only the files no other version names', async () => {
+  const kept = listed([['img/chart.png', hex('a')], ['index.html', hex('b')]], 'one');
+  const doomed = listed([['img/chart.png', hex('a')], ['index.html', hex('c')], ['secret.png', hex('d')]], 'two');
+  const { db, store } = fakeFirestore({
+    'docs/d': { currentVersion: 'v2', visibility: 'private', stats: { commits: 2 } },
+    'docs/d/versions/v1': kept,
+    'docs/d/versions/v2': doomed,
+  });
+  assert.equal(withdrawalPrefix('d', 'v2', doomed), null, 'it owns no prefix to delete');
+  const result = await repointWithdrawal(db, db.doc('docs/d'), { currentVersion: 'v2', doomed: 'v2', repoint: 'v1', draft: null, version: doomed, keepStats: false });
+  assert.deepEqual(result.blobs.sort(), [`docs/d/blobs/${hex('c')}`, `docs/d/blobs/${hex('d')}`]);
+  const mark = store.get('docs/d').withdrawing;
+  assert.deepEqual(mark.hashes.sort(), [hex('c'), hex('d')], 'the chart v1 shares is never marked');
+  assert.ok(mark.until > Date.now() && mark.until <= Date.now() + 60 * 60 * 1000, 'the mark lapses within the hour');
+  assert.equal(store.get('docs/d').currentVersion, 'v1');
+});
+test('a version published before the repoint keeps every file it names', async () => {
+  const doomed = listed([['index.html', hex('c')]], 'two');
+  const { db } = fakeFirestore({
+    'docs/d': { currentVersion: 'v2', visibility: 'private', stats: { commits: 3 } },
+    'docs/d/versions/v1': listed([['index.html', hex('b')]], 'one'),
+    'docs/d/versions/v2': doomed,
+    // Published while the operator read the plan: it names the doomed version's page.
+    'docs/d/versions/v3': listed([['index.html', hex('c')]], 'three'),
+  });
+  const result = await repointWithdrawal(db, db.doc('docs/d'), { currentVersion: 'v2', doomed: 'v2', repoint: 'v1', draft: null, version: doomed, keepStats: false });
+  assert.deepEqual(result.blobs, []);
+});
+test('a withdrawal refuses a version replaced by another attempt since the plan was read', async () => {
+  const { db } = fakeFirestore({
+    'docs/d': { currentVersion: 'v2', visibility: 'private', stats: { commits: 2 } },
+    'docs/d/versions/v1': listed([['index.html', hex('b')]], 'one'),
+    'docs/d/versions/v2': listed([['index.html', hex('e')]], 'reminted'),
+  });
+  await assert.rejects(
+    repointWithdrawal(db, db.doc('docs/d'), { currentVersion: 'v2', doomed: 'v2', repoint: 'v1', draft: null, version: listed([['index.html', hex('c')]], 'two'), keepStats: false }),
+    /version bytes changed/,
+  );
+});

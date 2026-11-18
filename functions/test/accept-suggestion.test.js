@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const { fakeFirestore } = require("./fakes.js");
 const { TOOLS } = require("../lib/mcp/tools.js");
 const { renderMarkdown } = require("../lib/lib/markdown/render.js");
+const { versionObjectKey } = require("../lib/lib/storage.js");
 
 const tool = (name) => TOOLS.find((t) => t.name === name);
 
@@ -242,7 +243,7 @@ test("an approver's agent accepts two, rejects one, closes the thread, and publi
   assert.equal(published.deduped, false);
   assert.equal(w.doc().currentVersion, "v2");
   assert.equal(w.doc().draft, undefined, "the draft became the version");
-  const v2 = w.text(`${w.store.get("docs/d1/versions/v2").storagePrefix}/index.html`);
+  const v2 = w.text(versionObjectKey("d1", "v2", w.store.get("docs/d1/versions/v2"), "index.html"));
   assert.match(v2, /cut over in two weekends/);
   assert.match(v2, /Compare vs\. Codex/);
   assert.equal(w.draftText(), undefined);

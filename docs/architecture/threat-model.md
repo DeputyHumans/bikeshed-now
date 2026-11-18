@@ -160,6 +160,14 @@ An agent reads `get_changes` as its owner. The log could otherwise hand a reader
 - **"Mine" cannot be forged.** What the caller caused is skipped only when it came through an agent channel with the caller's own token. A browser cannot claim either: the rules pin its channel to `web` and its actor's fields.
 - **Cursors grant nothing.** A cursor carries no access, and every call checks access again. A forged one yields only events its holder could read anyway. Saved cursors are server-only (SPEC §4, §19, ADR 0016).
 
+### A version names bytes it should not
+
+**Attack.** Each file is stored once per document and versions name what they hold (SPEC §4, ADR 0035), so a version's record is a pointer. If a record could name another document's files, a reader of one document could be served another's bytes. If withdrawing a version deleted a file a newer version still names, a reader would get a hole where a picture was.
+
+**Mitigation.** Only the Admin SDK writes version records, and the key of a stored file is always built from the document the record sits under, never from the record: `blobKey(docId, sha256)` takes the document's id from the path, and the hash must be 64 hex characters. A record whose arrays disagree in length, repeat a path, carry an unsafe path or a malformed digest names no file at all. Files are scoped to their document, so no account can learn whether some bytes exist in a document it cannot read. Withdrawal reads every version in the transaction that repoints the head, deletes only the files no other version names, and marks them first so that a publish racing it cannot start naming one.
+
+**Residual, accepted.** Withdrawing a version no longer removes a file another version also holds. An operator taking a leaked file out of a document withdraws every version that names it; the dry run lists them. Files written by an attempt that was refused stay, unnamed and unreadable, until the document is deleted forever.
+
 ### Zip-slip and zip bombs
 
 A `.zip` upload is the only place attacker-controlled relative paths enter Storage.

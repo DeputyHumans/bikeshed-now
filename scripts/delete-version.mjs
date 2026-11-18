@@ -29,6 +29,8 @@
 
 import { parse, fail } from "./lib/args.mjs";
 import { withdrawalPrefix, repointWithdrawal } from "./lib/withdraw-version.mjs";
+import { isStoredLayout, onlyNamedBy } from "./lib/stored.mjs";
+import { FieldValue } from "./lib/firebase.mjs";
 import { finishOperatorReplacement } from "./lib/operator-writes.mjs";
 import {
   getBucket,
@@ -226,11 +228,18 @@ async function main() {
     }
   }
 
+  // A version from before files were stored once owns a prefix; a later one
+  // names stored files, and only those no other version names are deleted.
   const prefix = withdrawalPrefix(docId, doomed, target);
-  const [objects] = await bucket.getFiles({ prefix });
+  const stored = isStoredLayout(target)
+    ? onlyNamedBy(docId, target, versions.filter((v) => v.id !== doomed).map((v) => ({ id: v.id, record: v })))
+    : null;
+  const [objects] = prefix ? await bucket.getFiles({ prefix }) : [[]];
   const files = objects.filter((o) => !o.name.endsWith("/"));
-  const totalBytes = files.reduce((n, o) => n + Number(o.metadata.size ?? 0), 0);
-  if (target.fileCount != null && files.length !== target.fileCount) {
+  const totalBytes = stored
+    ? stored.deletes.reduce((n, f) => n + f.size, 0)
+    : files.reduce((n, o) => n + Number(o.metadata.size ?? 0), 0);
+  if (prefix && target.fileCount != null && files.length !== target.fileCount) {
     console.warn(
       `  warning: Storage lists ${files.length} object(s) under ${prefix} but ` +
         `versions/${doomed}.fileCount is ${target.fileCount}. Check the bucket first.`,
@@ -263,10 +272,17 @@ async function main() {
   if (meta.draft) {
     console.log(`  discard the draft (base=${meta.draft.baseVersion}) and its objects`);
   }
-  console.log(
-    `  delete Storage: gs://${bucketName}/${prefix} (${files.length} object(s), ${totalBytes} bytes)`,
-  );
-  for (const o of files) console.log(`      - gs://${bucketName}/${o.name}`);
+  if (stored) {
+    console.log(`  delete Storage: ${stored.deletes.length} stored file(s) only ${doomed} names (${totalBytes} bytes)`);
+    for (const f of stored.deletes) console.log(`      - gs://${bucketName}/${f.key}  ${f.paths.join(", ")}`);
+    console.log(`  keep: ${stored.keeps.length} stored file(s) other versions also name`);
+    for (const f of stored.keeps) console.log(`      = ${f.paths.join(", ")}  (used by ${f.usedBy.join(", ")})`);
+  } else {
+    console.log(
+      `  delete Storage: gs://${bucketName}/${prefix} (${files.length} object(s), ${totalBytes} bytes)`,
+    );
+    for (const o of files) console.log(`      - gs://${bucketName}/${o.name}`);
+  }
   console.log(
     `  delete Storage: gs://${bucketName}/${thumbsPrefix} (${thumbFiles.length} thumbnail(s))`,
   );
@@ -305,9 +321,19 @@ async function main() {
   console.log("  retiring the old live editing session and captured draft objects ...");
   await finishOperatorReplacement(docId, result, { bucket, project: values.project });
   console.log("    done.");
-  console.log(`  deleting gs://${bucketName}/${prefix} ...`);
-  await bucket.deleteFiles({ prefix, force: true });
-  console.log("    done.");
+  if (prefix) {
+    console.log(`  deleting gs://${bucketName}/${prefix} ...`);
+    await bucket.deleteFiles({ prefix, force: true });
+    console.log("    done.");
+  }
+  if (result.blobs?.length) {
+    // Exactly what the repoint transaction found only this version naming,
+    // not what the preview above found: a version may have been published since.
+    console.log(`  deleting ${result.blobs.length} stored file(s) only ${doomed} named ...`);
+    for (const key of result.blobs) await bucket.file(key).delete({ ignoreNotFound: true });
+    await docRef.update({ withdrawing: FieldValue.delete() });
+    console.log("    done.");
+  }
   console.log(`  deleting gs://${bucketName}/${thumbsPrefix} ...`);
   await bucket.deleteFiles({ prefix: thumbsPrefix, force: true });
   console.log("    done.");

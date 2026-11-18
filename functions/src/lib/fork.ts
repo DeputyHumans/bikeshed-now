@@ -19,7 +19,10 @@
  * the id alone can come to name different bytes.
  */
 
-import { versionStoragePrefix } from "./storage";
+import { blobKey, versionFiles, type VersionFile } from "./storage";
+import { randomUUID } from "node:crypto";
+import { sha256Hex, type ListedFile } from "./hash";
+import { storedRecord } from "./blobs";
 import { addEvent } from "./events";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -42,7 +45,7 @@ import { syncPublicProjection } from "./publicdoc";
 import { loadReadAccess } from "./reach";
 import { resolveMarking } from "./marking";
 import { syncPresenceAccess } from "./presence";
-import { CREATE_ONLY, placeNewDocument } from "./publish";
+import { CREATE_ONLY, claimDocument, isPreconditionFailure, placeNewDocument } from "./publish";
 
 type Db = admin.firestore.Firestore;
 type Caller = { uid: string; emailLower: string };
@@ -63,9 +66,44 @@ const MAX_TITLE = 200;
 
 /** The part of a Storage bucket a fork uses, so a test can stand in for it. */
 export interface ForkBucket {
-  getFiles(query: { prefix: string }): Promise<
-    [Array<{ name: string; copy(destination: string, options: typeof CREATE_ONLY): Promise<unknown> }>, ...unknown[]]
-  >;
+  getFiles(query: { prefix: string }): Promise<[Array<{ name: string; metadata?: { size?: unknown } }>, ...unknown[]]>;
+  file(name: string): {
+    copy(destination: string, options: typeof CREATE_ONLY): Promise<unknown>;
+    download(): Promise<[Buffer, ...unknown[]]>;
+    save(data: Buffer, options: Record<string, unknown>): Promise<unknown>;
+  };
+}
+
+/**
+ * Put a version's files into a new document's stored files and return its
+ * list. A stored file is copied once, server-side, however many paths name
+ * it. A version from before files were stored once is read, since its files
+ * have no recorded digest; it was published under the 25 MB cap.
+ */
+async function copyFilesInto(docId: string, files: readonly VersionFile[], bucket: ForkBucket): Promise<ListedFile[]> {
+  const listing: ListedFile[] = [];
+  const copied = new Set<string>();
+  for (const f of files) {
+    let sha256 = f.sha256;
+    let size = f.size;
+    if (sha256 && size !== undefined) {
+      if (!copied.has(sha256)) {
+        try { await bucket.file(f.key).copy(blobKey(docId, sha256), CREATE_ONLY); }
+        catch (e) { if (!isPreconditionFailure(e)) throw e; }
+      }
+    } else {
+      const [data] = await bucket.file(f.key).download();
+      sha256 = sha256Hex(data);
+      size = data.length;
+      if (!copied.has(sha256)) {
+        try { await bucket.file(blobKey(docId, sha256)).save(data, { resumable: false, ...CREATE_ONLY }); }
+        catch (e) { if (!isPreconditionFailure(e)) throw e; }
+      }
+    }
+    copied.add(sha256);
+    listing.push({ rel: f.rel, size, sha256 });
+  }
+  return listing;
 }
 
 export type Refusal = {
@@ -182,19 +220,14 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
   const target = await resolveFolderTarget(db, input.folderId, caller);
   if (!target.ok) return refuse(target.status, target.error);
 
-  const srcPrefix = `${versionStoragePrefix(input.sourceId, versionId, v)}/`;
-  const [listed] = await input.bucket.getFiles({ prefix: srcPrefix });
-  const objects = listed.filter((obj) => {
-    const rel = obj.name.slice(srcPrefix.length);
-    return rel.length > 0 && !rel.endsWith("/");
-  });
-  if (objects.length === 0) return refuse(409, "the source has no content to copy");
+  const files = await versionFiles(input.sourceId, versionId, v, input.bucket);
+  if (files.length === 0) return refuse(409, "the source has no content to copy");
 
   const title = wantedTitle || str(src.title, "Untitled");
-  const { docId, storagePrefix } = await placeNewDocument(db, slugify(title), async (prefix) => {
-    for (const obj of objects) {
-      await obj.copy(`${prefix}/${obj.name.slice(srcPrefix.length)}`, CREATE_ONLY);
-    }
+  let listing: ListedFile[] = [];
+  const { docId } = await placeNewDocument(db, slugify(title), async (id) => {
+    await claimDocument(id, input.bucket);
+    listing = await copyFilesInto(id, files, input.bucket);
   });
 
   // The fork's export marking is its NEW owner's policy, seeded from their
@@ -234,12 +267,9 @@ export async function forkDocument(input: ForkInput): Promise<ForkResult | Refus
     format: v.format === "markdown" ? "markdown" : "html",
     ...(typeof v.sourceEntry === "string" ? { sourceEntry: v.sourceEntry } : {}),
     ...(typeof v.rendererVersion === "string" ? { rendererVersion: v.rendererVersion } : {}),
-    storagePrefix,
     ...(typeof v.words === "number" ? { words: v.words } : {}), // the same bytes, so the same count
-    fileCount: typeof v.fileCount === "number" ? v.fileCount : objects.length,
-    bytes: typeof v.bytes === "number" ? v.bytes : 0,
-    contentHash: str(v.contentHash, ""),
-    ...(Array.isArray(v.files) ? { files: v.files } : {}),
+    // Its own list of the same bytes, hashed in v2 whatever the source was.
+    ...storedRecord(listing, randomUUID()),
     parentVersion: null,
     origin: "fork",
     publishedVia: publishedViaOf("fork", input.actor),

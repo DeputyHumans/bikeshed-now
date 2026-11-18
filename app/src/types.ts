@@ -436,12 +436,20 @@ export interface DocVersion {
   sourceEntry?: string;
   /** Pinned renderer identity, so "why did the hash move" has an answer. */
   rendererVersion?: string;
-  storagePrefix: string;
+  /** A version from before files were stored once: the prefix holding its copy of every file. */
+  storagePrefix?: string;
+  /** "blobs": the version lists its files, each stored once per document (SPEC §4). */
+  layout?: "blobs";
   fileCount: number;
   bytes: number;
-  /** sha256 over the bundle; identical bytes republish as a no-op (SPEC §9.1). */
+  /** sha256 over the version's files; identical bytes republish as a no-op (SPEC §9.1). */
   contentHash: string;
+  /** 2 when `contentHash` is taken over the file list; absent for v1, over the bytes. */
+  hashVersion?: 2;
+  /** Paths, in hash order; `hashes` and `sizes` hold each one's SHA-256 and size when `layout` is "blobs". */
   files?: string[];
+  hashes?: string[];
+  sizes?: number[];
   parentVersion?: string | null;
   /** "duplicate" is the legacy name of "fork", on copies made before lineage was recorded. */
   /** How the content arrived, apart from who sent it; absent on a version published before it was stored. */

@@ -1,0 +1,134 @@
+[
+  {
+    "name": "single html file",
+    "files": [
+      {
+        "rel": "index.html",
+        "utf8": "<!doctype html><p>hi</p>"
+      }
+    ],
+    "contentHash": "4991017459f53fd387e857007ec870959092034e8d29ff76b133db454dae83e0",
+    "fileCount": 1,
+    "bytes": 24
+  },
+  {
+    "name": "empty file",
+    "files": [
+      {
+        "rel": "empty.txt",
+        "utf8": ""
+      }
+    ],
+    "contentHash": "27062821eb3f512762c2fe9464e221c148002d0d2d9a9a877c222c7f78b87de0",
+    "fileCount": 1,
+    "bytes": 0
+  },
+  {
+    "name": "two files, order independent",
+    "files": [
+      {
+        "rel": "b.css",
+        "utf8": "body{}"
+      },
+      {
+        "rel": "a.html",
+        "utf8": "<p>a</p>"
+      }
+    ],
+    "contentHash": "daf764b716e9490f755efcb117bc5204939b57f31da57e1f962310edb6a749ed",
+    "fileCount": 2,
+    "bytes": 14
+  },
+  {
+    "name": "nested paths",
+    "files": [
+      {
+        "rel": "index.html",
+        "utf8": "<p>x</p>"
+      },
+      {
+        "rel": "assets/deck.css",
+        "utf8": "h1{}"
+      },
+      {
+        "rel": "assets/img/logo.svg",
+        "utf8": "<svg/>"
+      }
+    ],
+    "contentHash": "8b3fb6e2ade414fa20c4d72d9e299d5ffe992d2166665b43ab114329897f3fac",
+    "fileCount": 3,
+    "bytes": 18
+  },
+  {
+    "name": "trailing space in filename",
+    "files": [
+      {
+        "rel": "a b",
+        "utf8": "c"
+      }
+    ],
+    "contentHash": "2a43f4d1146c763587c0b42d155e9233b6368b39db1ed9a5ccf5c51b0ebaef41",
+    "fileCount": 1,
+    "bytes": 1
+  },
+  {
+    "name": "ambiguous split of the same bytes",
+    "files": [
+      {
+        "rel": "a",
+        "utf8": " bc"
+      }
+    ],
+    "contentHash": "529a3a5aa8c79b570bc144280056a6398c3a5f754c8656c292c4b30faad7b214",
+    "fileCount": 1,
+    "bytes": 3
+  },
+  {
+    "name": "non-ascii path",
+    "files": [
+      {
+        "rel": "été/résumé.md",
+        "utf8": "# café"
+      }
+    ],
+    "contentHash": "3cb0c777f46eb7a006c5227bcd85bfd0c725a05d85e3988aa3b449ed83ab6286",
+    "fileCount": 1,
+    "bytes": 7
+  },
+  {
+    "name": "markdown pair",
+    "files": [
+      {
+        "rel": "index.md",
+        "utf8": "# Title\n\nBody.\n"
+      },
+      {
+        "rel": "index.html",
+        "utf8": "<!DOCTYPE html>\n<h1>Title</h1>\n"
+      }
+    ],
+    "contentHash": "eeb5547249fcbea4f1748f39f4a7a5c88959ac8124aa7d7cd0726fa16d499b07",
+    "fileCount": 2,
+    "bytes": 46
+  },
+  {
+    "name": "sort order is UTF-16 code units, not UTF-8 bytes",
+    "files": [
+      {
+        "rel": "！.txt",
+        "utf8": "fullwidth"
+      },
+      {
+        "rel": "😀.txt",
+        "utf8": "emoji"
+      },
+      {
+        "rel": "z.txt",
+        "utf8": "z"
+      }
+    ],
+    "contentHash": "ea323d9c76b95ed631e12f0444c05998a580a780a2f40f7de1a0cfef4c6d8d0f",
+    "fileCount": 3,
+    "bytes": 15
+  }
+]

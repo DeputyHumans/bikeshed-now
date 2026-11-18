@@ -7,6 +7,8 @@ import { GRANT_LIST, computeMembership, grantLists, grantsOf, isTrashed, loadFol
 import { FieldValue, getRtdb } from './firebase.mjs';
 import { syncPresenceAccess } from './presence.mjs';
 import { withdrawalPrefix } from './withdraw-version.mjs';
+import { sha256Hex } from './hash.mjs';
+import { blobKey } from './stored.mjs';
 import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from './transaction-receipts.mjs';
 
 /** Adapt the existing read-only membership loaders to this transaction. */
@@ -63,17 +65,25 @@ export async function commitOperatorVersion(db, docRef, input, timestamp, delete
     // A retried callback can observe our already-committed upload. Preserve
     // its retirement receipt instead of calling it a duplicate and skipping
     // the mirror, old log and captured-draft cleanup still owed by this run.
-    if (attempted && versions.docs.some((version) => version.id === attempted.versionId && version.data().storagePrefix === input.version.storagePrefix)) return attempted;
-    const duplicate = versions.docs.find((version) => version.id === snap.data()?.currentVersion && version.data().contentHash === input.version.contentHash);
+    if (attempted && versions.docs.some((version) => version.id === attempted.versionId && version.data().attempt === input.version.attempt)) return attempted;
+    // The head's hash is compared in the framing it was minted with: v2 over the
+    // file list, or v1 over the bytes, which the operator has on disk (SPEC §9.1).
+    const duplicate = versions.docs.find((version) => version.id === snap.data()?.currentVersion &&
+      version.data().contentHash === (version.data().hashVersion === 2 ? input.version.contentHash : input.bytesHash));
     if (duplicate) return { duplicate: true, versionId: duplicate.id };
     const current = snap.data() || {};
     if (snap.exists !== input.existed || (current.currentVersion ?? null) !== input.baseVersion) {
       throw new Error('document advanced while uploading; rerun against its current version');
     }
+    const mark = current.withdrawing;
+    if (mark && Array.isArray(mark.hashes) && typeof mark.until === 'number' && mark.until > Date.now() &&
+        input.version.hashes.some((hash) => mark.hashes.includes(hash))) {
+      throw new Error('a version of this document is being withdrawn and one of these files is being deleted; rerun in a minute');
+    }
     const retiredEpoch = current.liveEpoch ?? 'initial';
     if (typeof retiredEpoch !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(retiredEpoch)) throw new Error('invalid live editing epoch');
     const draftPrefix = current.draft ? withdrawalPrefix(docRef.id, 'draft', current.draft) : null;
-    if (draftPrefix && (versions.docs.some((version) => withdrawalPrefix(docRef.id, version.id, version.data()) === draftPrefix) || `${input.version.storagePrefix}/` === draftPrefix)) {
+    if (draftPrefix && versions.docs.some((version) => withdrawalPrefix(docRef.id, version.id, version.data()) === draftPrefix)) {
       throw new Error('draft bytes are still referenced by a version');
     }
     const publicRef = db.collection('public').doc(docRef.id);
@@ -138,15 +148,29 @@ export async function finishOperatorReplacement(docId, result, { bucket, project
   if (draftPrefix) await bucket.deleteFiles({ prefix: draftPrefix, force: true });
 }
 
-/** Each upload owns immutable objects before its metadata transaction competes. */
-export async function uploadOperatorBundle(bucket, docId, files) {
-  const storagePrefix = `docs/${docId}/bundles/${randomUUID()}`;
+/**
+ * Store each file's bytes once for the document, before the metadata
+ * transaction competes (SPEC §4). Create-only: a 412 means those bytes are
+ * already stored, which is the point. Nothing here is ever deleted on a
+ * refusal, since another version may name the same file.
+ */
+export async function storeOperatorFiles(bucket, docId, files) {
+  const done = new Set();
+  let written = 0;
   for (const file of files) {
-    await bucket.file(`${storagePrefix}/${file.rel}`).save(file.data, {
-      contentType: mime.getType(file.rel) || 'application/octet-stream',
-      resumable: false,
-      preconditionOpts: { ifGenerationMatch: 0 },
-    });
+    const sha256 = sha256Hex(file.data);
+    if (done.has(sha256)) continue;
+    done.add(sha256);
+    try {
+      await bucket.file(blobKey(docId, sha256)).save(file.data, {
+        contentType: mime.getType(file.rel) || 'application/octet-stream',
+        resumable: false,
+        preconditionOpts: { ifGenerationMatch: 0 },
+      });
+      written += 1;
+    } catch (error) {
+      if (error?.code !== 412) throw error;
+    }
   }
-  return storagePrefix;
+  return written;
 }

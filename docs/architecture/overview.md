@@ -2,11 +2,11 @@
 
 `docs/architecture/spec.md` says what the system does and is normative. This file says why it is shaped this way, and — more usefully — what it deliberately is not.
 
-The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty records of about thirty lines each.
+The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty-four records of about thirty lines each.
 
 ## The one-paragraph version
 
-A document is an immutable bundle of bytes in a private bucket. The only path those bytes take to a browser is one Cloud Function that authenticates the caller, checks an ACL, and streams. The browser renders them in a **same-origin** iframe, which is what makes highlight-anchored commenting possible at all: the parent app can drive annotation directly on `contentDocument` without injecting anything into the document. Everything else — versions, folders, teams, presence, provenance — exists to make that one arrangement safe and useful.
+A document is a series of immutable versions, each a list of files stored once in a private bucket. The only path those bytes take to a browser is one Cloud Function that authenticates the caller, checks an ACL, and streams. The browser renders them in a **same-origin** iframe, which is what makes highlight-anchored commenting possible at all: the parent app can drive annotation directly on `contentDocument` without injecting anything into the document. Everything else — versions, folders, teams, presence, provenance — exists to make that one arrangement safe and useful.
 
 ## Five load-bearing decisions
 
@@ -38,9 +38,9 @@ See `adr/0006-denormalized-members.md` and `adr/0004-email-keyed-acl.md`.
 
 ### 4. Content-hash idempotency, with two implementations held together by a fixture
 
-Re-publishing identical bytes is a no-op. That makes `publish` safe to run in a loop, safe in CI, and safe for an agent that cannot remember what it already did.
+Re-publishing identical bytes is a no-op. That makes `publish` safe to run in a loop, safe in CI, and safe for an agent that cannot remember what it already did. A version lists its files and each file is stored once per document, so the hash is taken over that list, and a version that changes one file reads and writes only that file ([ADR 0035](adr/0035-a-version-lists-its-files-each-stored-once.md)).
 
-The hash has two implementations — ESM for the scripts, CommonJS for the functions — because those runtimes cannot share a module. They are pinned to a **shared golden-vector fixture**, not to each other: a port-vs-port comparison drifts together, a fixture does not. The byte layout is frozen in SPEC §9.1.
+The hash has two implementations — ESM for the scripts, CommonJS for the functions — because those runtimes cannot share a module. They are pinned to a **shared golden-vector fixture**, not to each other: a port-vs-port comparison drifts together, a fixture does not. Both framings, v2 over the file list and v1 over the bytes for older versions, are frozen in SPEC §9.1.
 
 ### 5. Generated security rules
 

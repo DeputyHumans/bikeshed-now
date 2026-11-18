@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Operator deltas compose, version selection retries, and competing uploads never share bytes (SPEC §9, §13).
+// Operator deltas compose, version selection retries, and each file is stored once and never overwritten (SPEC §4, §9, §13).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { persistOperatorAccess, commitOperatorVersion as runCommit, finishOperatorReplacement, uploadOperatorBundle } from '../scripts/lib/operator-writes.mjs';
+import { persistOperatorAccess, commitOperatorVersion as runCommit, finishOperatorReplacement, storeOperatorFiles } from '../scripts/lib/operator-writes.mjs';
+import { sha256Hex } from '../scripts/lib/hash.mjs';
 const require = createRequire(import.meta.url);
 const { fakeFirestore: createFakeFirestore } = require('../functions/test/fakes.js');
 import { FieldValue } from '../scripts/lib/firebase.mjs';
@@ -12,7 +13,11 @@ const fakeFirestore = data => createFakeFirestore(data, { FieldValue });
 const commitOperatorVersion = (db, ref, input, stamp) => runCommit(db, ref, input, stamp, () => FieldValue.delete());
 const owner = 'owner@example.com';
 const node = { ownerEmail: owner, viewers: [], editors: [], suggesters: [], approvers: [], members: [owner], editorMembers: [owner], currentVersion: 'v1' };
-const input = (hash, prefix) => ({ existed: true, baseVersion: 'v1', ownerEmail: owner, title: 'document', slug: 'd', viewers: [], editors: [], version: { contentHash: hash, storagePrefix: prefix } });
+// A version listing its files (SPEC §4): `hash` is its v2 content hash, and
+// `bytesHash` the v1 hash of the same bytes, which a head minted before v2 is
+// compared with. `attempt` is how a retried transaction knows its own commit.
+const input = (hash, attempt) => ({ existed: true, baseVersion: 'v1', ownerEmail: owner, title: 'document', slug: 'd', viewers: [], editors: [],
+  version: { contentHash: hash, hashVersion: 2, layout: 'blobs', files: [], hashes: [], sizes: [], attempt }, bytesHash: `v1:${hash}` });
 
 test('an operator restoration mints a new current version despite a matching historical hash', async () => {
   const { db, store } = fakeFirestore({
@@ -20,7 +25,7 @@ test('an operator restoration mints a new current version despite a matching his
     'docs/d/versions/v1': { contentHash: 'old', storagePrefix: 'docs/d/bundles/old' },
     'docs/d/versions/v2': { contentHash: 'new', storagePrefix: 'docs/d/bundles/new' },
   });
-  const restored = { ...input('old', 'docs/d/bundles/restored'), baseVersion: 'v2' };
+  const restored = { ...input('old', 'restored'), baseVersion: 'v2' };
   const result = await commitOperatorVersion(db, db.doc('docs/d'), restored, null);
   assert.equal(result.duplicate, false, 'an operator restoration must not disappear into a historical match');
   assert.equal(result.versionId, 'v3');
@@ -44,34 +49,35 @@ test('operator access deltas compose and preserve inherited and team membership'
   assert.deepEqual(store.get('docs/d').members, ['folder@example.com', owner, 'team@example.com']);
 });
 
-test('competing operator uploads own different immutable objects', async () => {
+test('operator uploads store each file once, by its bytes, whoever else is storing it', async () => {
   const objects = new Map();
   const bucket = { file: (path) => ({ save: async (bytes, options) => {
-    if (options.preconditionOpts?.ifGenerationMatch === 0 && objects.has(path)) throw new Error('precondition failed');
+    if (options.preconditionOpts?.ifGenerationMatch === 0 && objects.has(path)) throw Object.assign(new Error('precondition failed'), { code: 412 });
     objects.set(path, Buffer.from(bytes));
   } }) };
-  const prefixes = await Promise.all(['first', 'second'].map((body) => uploadOperatorBundle(bucket, 'd', [{ rel: 'index.html', data: Buffer.from(body) }])));
-  assert.notEqual(prefixes[0], prefixes[1]);
-  assert.equal(objects.get(`${prefixes[0]}/index.html`).toString(), 'first');
-  assert.equal(objects.get(`${prefixes[1]}/index.html`).toString(), 'second');
+  const written = await Promise.all(['first', 'second', 'first'].map((body) => storeOperatorFiles(bucket, 'd', [{ rel: 'index.html', data: Buffer.from(body) }])));
+  assert.deepEqual([...objects.keys()].sort(), [`docs/d/blobs/${sha256Hex(Buffer.from('first'))}`, `docs/d/blobs/${sha256Hex(Buffer.from('second'))}`].sort());
+  assert.equal(written.reduce((n, w) => n + w, 0), 2, 'the second store of the same bytes finds them there');
+  const twice = await storeOperatorFiles(bucket, 'd', [{ rel: 'a.png', data: Buffer.from('same') }, { rel: 'b.png', data: Buffer.from('same') }]);
+  assert.equal(twice, 1, 'one file at two paths is stored once');
 });
 
 test('competing operator publishes cannot replace a winner or advance from its stale base', async () => {
   const { db, store } = fakeFirestore({ 'docs/d': node, 'docs/d/versions/v1': { contentHash: 'old' } });
-  const results = await Promise.allSettled(['one', 'two'].map((hash) => commitOperatorVersion(db, db.doc('docs/d'), input(hash, `docs/d/bundles/${hash}`), null)));
+  const results = await Promise.allSettled(['one', 'two'].map((hash) => commitOperatorVersion(db, db.doc('docs/d'), input(hash, hash), null)));
   assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
   assert.match(results.find((r) => r.status === 'rejected').reason.message, /advanced while uploading/);
   assert.equal(store.get('docs/d').currentVersion, 'v2');
   assert.equal([...store.keys()].filter((p) => p.startsWith('docs/d/versions/')).length, 2);
   const winner = store.get('docs/d/versions/v2');
-  assert.equal(winner.storagePrefix, `docs/d/bundles/${winner.contentHash}`);
+  assert.equal(winner.attempt, winner.contentHash, 'the winner is one attempt whole, not a mix of two');
 });
 
 test('duplicate operator uploads resolve to one version and preserve concurrent sharing', async () => {
   const { db, store } = fakeFirestore({ 'docs/d': node, 'docs/d/versions/v1': { contentHash: 'old' } });
   const [one, two] = await Promise.all([
-    commitOperatorVersion(db, db.doc('docs/d'), input('same', 'docs/d/bundles/one'), null),
-    commitOperatorVersion(db, db.doc('docs/d'), input('same', 'docs/d/bundles/two'), null),
+    commitOperatorVersion(db, db.doc('docs/d'), input('same', 'one'), null),
+    commitOperatorVersion(db, db.doc('docs/d'), input('same', 'two'), null),
     persistOperatorAccess(db, db.doc('docs/d'), { add: ['new@example.com'], remove: [], role: 'editor' }, null),
   ]);
   assert.equal(one.versionId, two.versionId);
@@ -80,14 +86,16 @@ test('duplicate operator uploads resolve to one version and preserve concurrent 
   assert.equal(store.get('docs/d/versions/v2').parentVersion, 'v1');
 });
 
-test('operator uploads refuse an existing object instead of overwriting it', async () => {
+test('operator uploads never overwrite a stored object, and fail on any other refusal', async () => {
   let bytes = Buffer.from('winner');
-  const bucket = { file: () => ({ save: async (incoming, options) => {
-    if (options.preconditionOpts?.ifGenerationMatch === 0) throw new Error('precondition failed');
+  const there = { file: () => ({ save: async (incoming, options) => {
+    if (options.preconditionOpts?.ifGenerationMatch === 0) throw Object.assign(new Error('precondition failed'), { code: 412 });
     bytes = incoming;
   } }) };
-  await assert.rejects(uploadOperatorBundle(bucket, 'd', [{ rel: 'index.html', data: Buffer.from('loser') }]), /precondition failed/);
+  assert.equal(await storeOperatorFiles(there, 'd', [{ rel: 'index.html', data: Buffer.from('winner') }]), 0, 'already stored is success');
   assert.equal(bytes.toString(), 'winner');
+  const quota = { file: () => ({ save: async () => { throw Object.assign(new Error('quota'), { code: 429 }); } }) };
+  await assert.rejects(storeOperatorFiles(quota, 'd', [{ rel: 'index.html', data: Buffer.from('x') }]), /quota/);
 });
 
 test('operator replacement advances its live epoch, clears the captured draft and repoints public readers atomically', async () => {
@@ -97,7 +105,7 @@ test('operator replacement advances its live epoch, clears the captured draft an
     'docs/d/versions/v1': { contentHash: 'old' },
     'public/d': { currentVersion: 'v1', liveEpoch: 'old-epoch', marking: { enabled: true, label: 'Internal', footer: '' } },
   });
-  const next = input('new', 'docs/d/bundles/new');
+  const next = input('new', 'new');
   Object.assign(next.version, { entry: 'index.html', format: 'markdown', sourceEntry: 'index.md', fileCount: 2 });
   const out = await commitOperatorVersion(db, db.doc('docs/d'), next, null);
   const current = store.get('docs/d');
@@ -121,7 +129,7 @@ test('operator retry captures the epoch and draft of the transaction that actual
     }
     return snap;
   } }));
-  const out = await commitOperatorVersion(db, db.doc('docs/d'), input('new', 'docs/d/bundles/new'), null);
+  const out = await commitOperatorVersion(db, db.doc('docs/d'), input('new', 'new'), null);
   assert.equal(out.retiredEpoch, 'racing-save');
   assert.equal(out.draftPrefix, 'docs/d/bundles/racing-draft/');
   assert.equal(store.get('docs/d').draft, undefined);
@@ -129,9 +137,10 @@ test('operator retry captures the epoch and draft of the transaction that actual
 
 test('operator duplicate leaves the live epoch and draft unchanged', async () => {
   const current = { ...node, liveEpoch: 'untouched', draft: { storagePrefix: 'docs/d/bundles/retained' } };
-  const { db, store } = fakeFirestore({ 'docs/d': current, 'docs/d/versions/v1': { contentHash: 'same' } });
+  // A head from before v2 is compared with the v1 hash of the operator's bytes.
+  const { db, store } = fakeFirestore({ 'docs/d': current, 'docs/d/versions/v1': { contentHash: 'v1:same' } });
   const before = structuredClone(store.get('docs/d'));
-  const out = await commitOperatorVersion(db, db.doc('docs/d'), input('same', 'docs/d/bundles/unused'), null);
+  const out = await commitOperatorVersion(db, db.doc('docs/d'), input('same', 'unused'), null);
   assert.equal(out.duplicate, true);
   assert.deepEqual(store.get('docs/d'), before);
   assert.equal(out.retiredEpoch, undefined);
@@ -140,7 +149,7 @@ test('operator duplicate leaves the live epoch and draft unchanged', async () =>
 test('operator replacement refuses a missing public projection before changing the document', async () => {
   const { db, store } = fakeFirestore({ 'docs/d': { ...node, visibility: 'public' }, 'docs/d/versions/v1': { contentHash: 'old' } });
   const before = structuredClone(store);
-  await assert.rejects(commitOperatorVersion(db, db.doc('docs/d'), input('new', 'docs/d/bundles/new'), null), /public projection.*missing/);
+  await assert.rejects(commitOperatorVersion(db, db.doc('docs/d'), input('new', 'new'), null), /public projection.*missing/);
   assert.deepEqual(store, before);
 });
 
@@ -194,6 +203,6 @@ test('operator replacement refuses draft cleanup that would delete retained vers
   const prefix = 'docs/d/bundles/shared';
   const { db, store } = fakeFirestore({ 'docs/d': { ...node, draft: { storagePrefix: prefix } }, 'docs/d/versions/v1': { contentHash: 'old', storagePrefix: prefix } });
   const before = structuredClone(store);
-  await assert.rejects(commitOperatorVersion(db, db.doc('docs/d'), input('new', 'docs/d/bundles/new'), null), /draft bytes.*referenced/);
+  await assert.rejects(commitOperatorVersion(db, db.doc('docs/d'), input('new', 'new'), null), /draft bytes.*referenced/);
   assert.deepEqual(store, before);
 });

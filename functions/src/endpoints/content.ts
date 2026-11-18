@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // A document's bytes: the content proxy, stored thumbnails and the bundle download (SPEC §2, §6).
 
-import { versionStoragePrefix } from "../lib/storage";
+import { versionFiles, versionObjectKey, type ListingBucket } from "../lib/storage";
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as mime from "mime-types";
@@ -308,11 +308,12 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
     return;
   }
 
-  const prefix = `${versionStoragePrefix(docId, versionId, versionSnap.data() ?? {})}/`;
-  const objectKey = `${prefix}${relPath}`;
-  // Defence in depth: the resolved key must stay under the version prefix even
-  // if a segment check above were ever loosened.
-  if (!objectKey.startsWith(prefix) || objectKey.includes("..")) {
+  // The version's own object for this path, in whichever layout it was
+  // stored (SPEC §4). A file the version does not list is a 404 here.
+  const objectKey = versionObjectKey(docId, versionId, versionSnap.data() ?? {}, relPath);
+  // Defence in depth: the resolved key must stay inside this document even if
+  // a segment check above were ever loosened.
+  if (!objectKey || !objectKey.startsWith(`docs/${docId}/`) || objectKey.includes("..")) {
     res.status(404).end();
     return;
   }
@@ -503,14 +504,16 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const prefix = `${versionStoragePrefix(docId, versionId, versionSnap.data() ?? {})}/`;
-  const [objects] = await bucket().getFiles({ prefix });
+  const listed = await versionFiles(docId, versionId, versionSnap.data() ?? {}, bucket() as unknown as ListingBucket);
   const files: BundleEntry[] = [];
   let total = 0;
-  for (const obj of objects) {
-    const rel = obj.name.slice(prefix.length);
-    if (rel.length === 0 || rel.endsWith("/")) continue;
-    const [bytes] = await obj.download();
+  for (const { rel, key, size } of listed) {
+    // Refused before reading when the list already says it is too big.
+    if (size !== undefined && total + size > MAX_BUNDLE_BYTES) {
+      res.status(409).json({ error: "bundle too large to download" });
+      return;
+    }
+    const [bytes] = await bucket().file(key).download();
     total += bytes.length;
     if (total > MAX_BUNDLE_BYTES) {
       res.status(409).json({ error: "bundle too large to download" });

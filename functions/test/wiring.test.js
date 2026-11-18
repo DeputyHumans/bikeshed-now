@@ -3,7 +3,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { existsSync, readFileSync } = require("node:fs");
+const { existsSync, readdirSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { endpointFiles, toolFiles, sourceDeclaring } = require("./sources");
 
@@ -41,6 +41,33 @@ test("SPEC §2's table lists every rewrite and trigger, in order", async () => {
     ...SCHEDULED.map((fn) => `— (${CADENCE[fn]} schedule) -> ${fn}`),
   ];
   assert.deepEqual(rows, expected);
+});
+
+/**
+ * A version's files are in its own prefix (older versions) or the document's
+ * stored files (SPEC §4, ADR 0036). Every reader asks `versionObjectKey` or
+ * `versionFiles`, so none of them can read a stored version as if it had a
+ * prefix. Only a draft, which still owns one, may be addressed by prefix, and
+ * only `storage.ts` and the base reader in `blobs.ts` turn a version into one.
+ */
+test("no reader turns a version into a prefix of its own", () => {
+  const offenders = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, name.name);
+      if (name.isDirectory()) { if (name.name !== "generated") walk(full); continue; }
+      if (!full.endsWith(".ts")) continue;
+      const rel = full.slice(full.indexOf("src/"));
+      if (rel === "src/lib/storage.ts" || rel === "src/lib/blobs.ts") continue;
+      const src = readFileSync(full, "utf8");
+      for (const m of src.matchAll(/versionStoragePrefix\(([^,]+),\s*([^,]+),/g)) {
+        if (m[2].trim() !== '"draft"') offenders.push(`${rel}: ${m[0]}`);
+      }
+      if (/\$\{[^}]*\.storagePrefix\}\//.test(src)) offenders.push(`${rel}: joins a record's storagePrefix into a key`);
+    }
+  };
+  walk(join(__dirname, "..", "src"));
+  assert.deepEqual(offenders, []);
 });
 
 test("SPEC §8 accounts for every source file in functions/src", () => {
@@ -335,7 +362,7 @@ test("noStore is exactly private, no-store — not merely no-cache", () => {
   // `no-cache` still permits a SHARED cache to store the response and
   // revalidate. For a response whose whole point is that it must not be held
   // by a CDN keyed on a URL rather than on a cookie, that is not enough.
-  const { readFileSync } = require("node:fs");
+  const { readdirSync, readFileSync } = require("node:fs");
   const { join } = require("node:path");
   const http = readFileSync(join(__dirname, "..", "src", "lib", "http.ts"), "utf8");
   const fn = http.slice(http.indexOf("export function noStore"));
@@ -364,16 +391,26 @@ test("every write of a new document's bytes refuses to overwrite", () => {
     return src.slice(start, next === -1 ? undefined : next);
   };
 
+  // A new document claims its id with one CREATE_ONLY object before anything
+  // else is written; stored files are shared, so only the claim can refuse.
+  const claim = bodyOf(publish, "export async function claimDocument(");
+  assert.match(claim, /docs\/\$\{docId\}\/claim[\s\S]*\.\.\.CREATE_ONLY/);
   const create = bodyOf(publish, "export async function publishNewDocument(");
-  assert.match(create, /placeNewDocument\([\s\S]*uploadBundle\(prefix, compiled\.files, CREATE_ONLY\)/);
+  assert.match(create, /placeNewDocument\([\s\S]*claimDocument\(id\);\s*await storeFiles\(id, compiled\.files\)/);
   assert.doesNotMatch(create, /uniqueDocId\(/);
 
-  const fork = bodyOf(
-    readFileSync(join(__dirname, "..", "src", "lib", "fork.ts"), "utf8"),
-    "export async function forkDocument(",
-  );
-  assert.match(fork, /placeNewDocument\([\s\S]*\.copy\([^;]*CREATE_ONLY\)/);
+  // Every stored file is written create-only: a 412 means those bytes are there.
+  const blobs = readFileSync(join(__dirname, "..", "src", "lib", "blobs.ts"), "utf8");
+  const store = bodyOf(blobs, "export async function storeFiles(");
+  assert.match(store, /\.save\(f\.data, \{[\s\S]*preconditionOpts: \{ ifGenerationMatch: 0 \}/);
+
+  const forkSrc = readFileSync(join(__dirname, "..", "src", "lib", "fork.ts"), "utf8");
+  const fork = bodyOf(forkSrc, "export async function forkDocument(");
+  assert.match(fork, /placeNewDocument\([\s\S]*claimDocument\(id, input\.bucket\);\s*listing = await copyFilesInto\(/);
   assert.doesNotMatch(fork, /uniqueDocId\(/);
+  const copies = forkSrc.slice(forkSrc.indexOf("async function copyFilesInto("), forkSrc.indexOf("export type Refusal"));
+  assert.match(copies, /\.copy\(blobKey\(docId, sha256\), CREATE_ONLY\)/);
+  assert.match(copies, /\.save\(data, \{ resumable: false, \.\.\.CREATE_ONLY \}\)/);
   // The endpoint forks only through the shared path, which is what the pin covers.
   const endpoint = bodyOf(index, "export const forkDoc = onRequest(");
   assert.match(endpoint, /forkDocument\(/);

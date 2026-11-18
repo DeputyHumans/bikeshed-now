@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // What a stranger or a crawler can reach: the sitemap, the document shell, its Markdown, the embed (SPEC §2, §17).
 
-import { versionStoragePrefix } from "../lib/storage";
+import { versionObjectKey, versionStorageIdentity } from "../lib/storage";
 import { onRequest, type Request } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { PUBLIC_CACHE_SECONDS, publicOrigin } from "../config";
@@ -317,8 +317,10 @@ export const docShell = onRequest(WARM, async (req, res) => {
     // Only the prefix the scanner reads; `collectPrefix` enforces the cap
     // even where the range is ignored.
     stage = "stream";
+    const entryKey = versionObjectKey(docId, decision.versionId, data, entry);
+    if (!entryKey) throw new Error("the version lists no entry");
     const stream = bucket()
-      .file(`${versionStoragePrefix(docId, decision.versionId, data)}/${entry}`)
+      .file(entryKey)
       .createReadStream({ start: 0, end: HEAD_SCAN_BYTES - 1 });
     const bytes = await collectPrefix(stream, HEAD_SCAN_BYTES);
     stage = "scan";
@@ -410,7 +412,12 @@ export const docMarkdown = onRequest({ ...PLAIN, ...READS_PAGES }, async (req, r
     // A Markdown document's original is its Markdown; the reading is made
     // from the HTML either way, so its addresses are absolute.
     const sourceRel = typeof v.sourceEntry === "string" && safeRelPath(v.sourceEntry) ? v.sourceEntry : entry;
-    const storagePrefix = versionStoragePrefix(docId, versionId, v);
+    const storagePrefix = versionStorageIdentity(docId, versionId, v);
+    const entryKey = versionObjectKey(docId, versionId, v, entry);
+    if (!entryKey) {
+      res.status(404).end();
+      return;
+    }
 
     const keyed = gate.basis === "link" || gate.basis === "folder-link" ? k : null;
     const origin = publicOrigin();
@@ -422,7 +429,7 @@ export const docMarkdown = onRequest({ ...PLAIN, ...READS_PAGES }, async (req, r
       version: v,
       storagePrefix,
       source: async () => {
-        const [bytes] = await bucket().file(`${storagePrefix}/${entry}`).download();
+        const [bytes] = await bucket().file(entryKey).download();
         return bytes.toString("utf8");
       },
     });

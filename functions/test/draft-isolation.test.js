@@ -6,6 +6,7 @@ const admin = require("firebase-admin");
 const { fakeFirestore, withFakeAdmin } = require("./fakes.js");
 const { writeDraft, commitDraft, readWorkingCopy } = require("../lib/lib/draft.js");
 const { hashBundleFiles } = require("../lib/lib/hash.js");
+const { versionBytes } = require("./stored.js");
 const actor = { uid: "u", email: "owner@example.com", channel: "mcp" };
 async function world(fn) {
   const w = fakeFirestore({
@@ -55,7 +56,7 @@ test("post-commit cleanup deletes only the observed draft and the reader follows
   const copy = await readWorkingCopy(w.docRef, w.store.get("docs/d"));
   assert.equal(copy.html, "newer draft");
   const version = w.store.get("docs/d/versions/v2");
-  assert.equal(w.objects.get(`${version.storagePrefix}/index.html`).toString(), "draft");
+  assert.equal(versionBytes(w.objects, "d", "v2", version, "index.html").toString(), "draft");
 }));
 test("a deduplicated commit cannot clear a newer draft", () => world(async w => {
   w.store.get("docs/d/versions/v1").contentHash = hashBundleFiles([{ rel: "index.html", data: Buffer.from("draft") }]).contentHash;

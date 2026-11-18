@@ -267,6 +267,8 @@ Seven refusals guard it, each with its own override flag, so removing one guard 
 
 The order is load-bearing: `currentVersion` is repointed **first**, in a transaction that aborts if anything published mid-run, because the viewer resolves a bare `/d/{docId}` from that field. Then the Storage bytes, then the Firestore record.
 
+A version minted since files are stored once per document (SPEC §4) owns no prefix: it names stored files, and a file unchanged between versions is one object. Withdrawing it deletes only the files no other version names. The dry run lists both, `- <object>  <paths>` for what goes and `= <paths>  (used by v3, v5)` for what stays. To take one file out of a document entirely, a picture with a secret in it, say, withdraw every version the dry run says uses it. While the run deletes, the document is marked so a publish that would reuse one of those files is refused; the mark is cleared at the end and lapses on its own an hour later if the run dies first.
+
 ### Upgrading
 
 ```bash

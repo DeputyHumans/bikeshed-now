@@ -4,7 +4,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { compileBundle, compileRevision, placeNewDocument } = require("../lib/lib/publish.js");
+const { claimDocument, compileBundle, compileRevision, placeNewDocument } = require("../lib/lib/publish.js");
 const { HEAD_SCAN_BYTES } = require("../lib/lib/head.js");
 const { hashBundleFiles } = require("../lib/lib/hash.js");
 
@@ -155,13 +155,19 @@ const noRecords = {
 /** What Storage throws when a CREATE_ONLY write finds the object already there. */
 const preconditionFailed = () => Object.assign(new Error("412 Precondition Failed"), { code: 412 });
 
-test("a new document's bytes go under the wanted id's v1", async () => {
+test("a new document's bytes go under the wanted id", async () => {
   const puts = [];
-  const placed = await placeNewDocument(noRecords, "01-platform", async (prefix) => {
-    puts.push(prefix);
+  const placed = await placeNewDocument(noRecords, "01-platform", async (docId) => {
+    puts.push(docId);
   });
-  assert.deepEqual(puts, ["docs/01-platform/v1"]);
-  assert.deepEqual(placed, { docId: "01-platform", storagePrefix: "docs/01-platform/v1" });
+  assert.deepEqual(puts, ["01-platform"]);
+  assert.deepEqual(placed, { docId: "01-platform" });
+});
+
+test("the claim is one empty CREATE_ONLY object, so a taken id is refused by Storage", async () => {
+  const writes = [];
+  await claimDocument("01-platform", { file: (name) => ({ save: async (data, opts) => { writes.push({ name, size: data.length, opts }); } }) });
+  assert.deepEqual(writes, [{ name: "docs/01-platform/claim", size: 0, opts: { contentType: "text/plain", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } } }]);
 });
 
 test("a refused write moves the document to a suffixed id instead of failing", async () => {
@@ -171,15 +177,14 @@ test("a refused write moves the document to a suffixed id instead of failing", a
    * id is taken, and the publisher still gets a document.
    */
   const puts = [];
-  const placed = await placeNewDocument(noRecords, "01-platform", async (prefix) => {
-    puts.push(prefix);
+  const placed = await placeNewDocument(noRecords, "01-platform", async (docId) => {
+    puts.push(docId);
     if (puts.length === 1) throw preconditionFailed();
   });
   assert.equal(puts.length, 2);
-  assert.equal(puts[0], "docs/01-platform/v1");
+  assert.equal(puts[0], "01-platform");
   assert.match(placed.docId, /^01-platform-[a-z0-9]{6}$/);
-  assert.equal(placed.storagePrefix, `docs/${placed.docId}/v1`);
-  assert.equal(puts[1], placed.storagePrefix);
+  assert.equal(puts[1], placed.docId);
 });
 
 test("any other storage failure is not mistaken for a taken id", async () => {

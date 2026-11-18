@@ -7,7 +7,7 @@ import {
   recordReceipt,
   clearReceipt,
 } from "../../lib/transaction-receipts";
-import { versionStoragePrefix } from "../../lib/storage";
+import { versionObjectKey } from "../../lib/storage";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { mutationVersion } from "../../lib/versions";
@@ -282,7 +282,9 @@ export async function locateInCurrentVersion(
   const entry = String(vSnap.data()?.entry ?? "index.html");
   let html = "";
   try {
-    const [bytes] = await admin.storage().bucket(bucketName()).file(`${versionStoragePrefix(ref.id, versionId, vSnap.data() ?? {})}/${entry}`).download();
+    const key = versionObjectKey(ref.id, versionId, vSnap.data() ?? {}, entry);
+    if (!key) throw new Error("the version lists no entry");
+    const [bytes] = await admin.storage().bucket(bucketName()).file(key).download();
     html = bytes.toString("utf8");
   } catch {
     throw new Error("could not read the current version");

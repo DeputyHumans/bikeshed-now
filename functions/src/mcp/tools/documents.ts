@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The document tools: listing, reading, publishing, forking and revising (SPEC §19, §21).
 
-import { versionStoragePrefix } from "../../lib/storage";
+import { versionObjectKey, versionStorageIdentity } from "../../lib/storage";
 import * as admin from "firebase-admin";
 import { FieldPath } from "firebase-admin/firestore";
 import { mutationVersion, originOf, selectedVersion } from "../../lib/versions";
@@ -256,11 +256,13 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
       const sourceRel =
         typeof v.sourceEntry === "string" ? v.sourceEntry : String(v.entry ?? "index.html");
       if (!safeRelPath(sourceRel)) throw new Error("invalid source path");
-      const storagePrefix = versionStoragePrefix(ref.id, versionId, v);
+      const storagePrefix = versionStorageIdentity(ref.id, versionId, v);
+      const sourceKey = versionObjectKey(ref.id, versionId, v, sourceRel);
       const bucket = admin.storage().bucket(bucketName());
       const loadSource = async () => {
         try {
-          const [bytes] = await bucket.file(`${storagePrefix}/${sourceRel}`).download();
+          if (!sourceKey) throw new Error("not listed");
+          const [bytes] = await bucket.file(sourceKey).download();
           return bytes.toString("utf8");
         } catch {
           throw new Error(`could not read source for version "${versionId}"`);

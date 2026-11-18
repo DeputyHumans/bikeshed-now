@@ -7,17 +7,28 @@ import { setTimeout as delay } from "node:timers/promises";
 import { causalOrder, readStoredCausalStamp, storedCausalStamp, type CausalStamp } from "./causal";
 import { clearEditLog, syncPresenceAccess } from "./presence";
 import { FieldValue } from "firebase-admin/firestore";
-import { newBundlePrefix, versionStoragePrefix } from "./storage";
+import { newBundlePrefix, versionObjectKey, versionStoragePrefix, type StoredVersionFields } from "./storage";
 import { assertDocumentWriteAuthority, assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
-import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { type DocAclData } from "./acl";
 import type { Actor } from "./actor";
 import { publishedViaOf } from "./versions";
-import { hashBundleFiles, type BundleFile } from "./hash";
 import { safeRelPath } from "./http";
 import { renderMarkdown } from "./markdown/render";
 import { readPrefix, readTrustGrants, withdrawTrust } from "./publish";
+import {
+  assertNotWithdrawing,
+  baseFilesOf,
+  changesFrom,
+  headListing,
+  listingOf,
+  sameAsHead,
+  sizeOf,
+  storeFiles,
+  storedRecord,
+  WITHDRAWING_MESSAGE,
+  type NextFile,
+} from "./blobs";
 import { syncPublicProjection } from "./publicdoc";
 import { anyOpenThread, pendingSuggestions, pendingSuggestionsMessage } from "./review";
 import { clearReceipt, freshReceiptId, readReceipt, recordReceipt } from "./transaction-receipts";
@@ -39,7 +50,15 @@ export interface VersionMeta {
   entry: string;
   format: "html" | "markdown";
   sourceEntry?: string;
-  storagePrefix?: string;
+  /** The version's id and record, so its files can be found in either layout (SPEC §4). */
+  versionId?: string;
+  record?: StoredVersionFields & { contentHash?: unknown; hashVersion?: unknown };
+}
+
+/** The object holding `rel` in this version, or null when it has no such file. */
+export function versionKey(docId: string, version: VersionMeta, rel: string): string | null {
+  if (!version.versionId || !version.record) return null;
+  return versionObjectKey(docId, version.versionId, version.record, rel);
 }
 
 export async function loadVersionMeta(docRef: DocRef, versionId: string): Promise<VersionMeta | null> {
@@ -48,9 +67,13 @@ export async function loadVersionMeta(docRef: DocRef, versionId: string): Promis
   const v = snap.data() || {};
   const entry = typeof v.entry === "string" ? safeRelPath(v.entry) : null;
   if (!entry) return null;
+  // The entry must be where the record says, in either layout. A prefix that
+  // is not this document's throws here, as it always has (SPEC §4).
+  if (!versionObjectKey(docRef.id, versionId, v, entry)) return null;
   return {
     entry,
-    storagePrefix: versionStoragePrefix(docRef.id, versionId, v),
+    versionId,
+    record: v,
     format: v.format === "markdown" ? "markdown" : "html",
     sourceEntry: typeof v.sourceEntry === "string" ? (safeRelPath(v.sourceEntry) ?? undefined) : undefined,
   };
@@ -389,11 +412,13 @@ export async function readWorkingCopy(
   if (!version) return null;
   // A draft of an older version is not the working copy of this one.
   const hasDraft = data.draft?.baseVersion === baseVersion;
-  const read = (rel: string) =>
-    readFirst([
+  const read = (rel: string) => {
+    const baseKey = versionKey(docRef.id, version, rel);
+    return readFirst([
       ...(hasDraft ? [`${versionStoragePrefix(docRef.id, "draft", data.draft ?? {})}/${rel}`] : []),
-      ...(!hasDraft ? [`${version.storagePrefix}/${rel}`] : []),
+      ...(!hasDraft && baseKey ? [baseKey] : []),
     ]);
+  };
   if (version.format === "markdown") {
     const markdown = await read(version.sourceEntry ?? "index.md");
     return markdown == null ? null : { baseVersion, version, format: "markdown", markdown };
@@ -467,25 +492,29 @@ export async function commitDraft(args: {
 
   // Assemble: base assets, with anything the draft carries overriding it. That
   // one rule covers both formats — for Markdown the draft carries index.md and
-  // index.html, for HTML just the entry — with no branch here.
-  const basePrefix = `${version.storagePrefix}/`;
+  // index.html, for HTML just the entry — with no branch here. The base's
+  // files are carried by name: only what the draft holds is read (SPEC §4).
   const draftPrefix = `${versionStoragePrefix(docId, "draft", draft)}/`;
-  const baseFiles = await readPrefix(basePrefix);
+  const baseFiles = await baseFilesOf(docId, baseVersion, version.record ?? {});
   const draftFiles = await readPrefix(draftPrefix);
-  const byRel = new Map<string, Buffer>();
-  for (const f of baseFiles) byRel.set(f.rel, f.data);
-  for (const f of draftFiles) byRel.set(f.rel, f.data);
-  const files: BundleFile[] = [...byRel].map(([rel, data]) => ({ rel, data }));
-  const totalBytes = files.reduce((n, f) => n + f.data.length, 0);
+  const byRel = new Map<string, NextFile>();
+  for (const f of baseFiles) byRel.set(f.rel, f);
+  for (const f of draftFiles) byRel.set(f.rel, f);
+  const files: NextFile[] = [...byRel.values()];
+  const totalBytes = files.reduce((n, f) => n + sizeOf(f), 0);
   if (totalBytes > MAX_BUNDLE_BYTES) return { status: 409, body: { error: "bundle too large to publish" } };
   if (files.length === 0) return { status: 409, body: { error: "base version has no content to publish" } };
 
-  const { contentHash, fileCount, bytes } = hashBundleFiles(files);
+  const listing = listingOf(files);
+  const attempt = randomUUID();
+  const stored = storedRecord(listing, attempt);
+  const { contentHash, fileCount, bytes } = stored;
   const versionsRef = docRef.collection("versions");
 
   let retiredEpoch = "initial";
   const dup = await versionsRef.doc(baseVersion).get();
-  if (dup.exists && dup.data()?.contentHash === contentHash) {
+  const changes = changesFrom(headListing(docId, dup.data()), listing);
+  if (dup.exists && sameAsHead(dup.data(), files, listing)) {
     const retirementEpoch = randomUUID();
     const retirement = freshReceiptId();
     try {
@@ -517,7 +546,7 @@ export async function commitDraft(args: {
     await retireLiveSession(db, docId, retiredEpoch);
     return {
       status: 200,
-      body: { versionId: dup.id, contentHash, fileCount, bytes, deduped: true },
+      body: { versionId: dup.id, contentHash: String(dup.data()?.contentHash), fileCount, bytes, deduped: true, ...(changes ? { changes } : {}) },
     };
   }
 
@@ -531,15 +560,9 @@ export async function commitDraft(args: {
     if (m) maxN = Math.max(maxN, Number(m[1]));
   }
   const versionId = `v${maxN + 1}`;
-  const storagePrefix = newBundlePrefix(docId);
-
-  for (const f of files) {
-    await bucket().file(`${storagePrefix}/${f.rel}`).save(f.data, {
-      contentType: mime.lookup(f.rel) || "application/octet-stream",
-      resumable: false,
-      preconditionOpts: { ifGenerationMatch: 0 },
-    });
-  }
+  // The draft's page, and any file of a version from before files were stored
+  // once; everything else is already stored and is only named.
+  await storeFiles(docId, files);
 
   const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
   let candidateMayHaveCommitted = false;
@@ -549,10 +572,11 @@ export async function commitDraft(args: {
       const cur = await tx.get(docRef);
       const vRef = versionsRef.doc(versionId);
       const candidate = await tx.get(vRef);
-      // A unique immutable prefix proves this request already published, even
+      // This attempt's own id proves this request already published, even
       // if another writer has advanced the head since its acknowledgement was lost.
-      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
+      if (candidateMayHaveCommitted && candidate.data()?.attempt === attempt) return;
       if ((cur.data()?.currentVersion as string) !== baseVersion) throw new Error("STALE");
+      assertNotWithdrawing(cur.data(), listing);
       await assertWriteAuthority(tx, docRef, cur.data() as DocAclData, { uid: actor.uid ?? "", emailLower: args.emailLower });
       checkDraftSnapshot(cur.data(), draft);
       retiredEpoch = String(cur.data()?.liveEpoch ?? "initial");
@@ -572,11 +596,7 @@ export async function commitDraft(args: {
         format: version.format,
         ...(version.sourceEntry ? { sourceEntry: version.sourceEntry } : {}),
         ...(version.format === "markdown" ? { rendererVersion: renderMarkdown("", {}).rendererVersion } : {}),
-        storagePrefix,
-        fileCount,
-        bytes,
-        contentHash,
-        files: files.map((f) => f.rel),
+        ...stored,
         parentVersion: baseVersion,
         origin: "edit",
         publishedVia: publishedViaOf("edit", actor),
@@ -604,13 +624,10 @@ export async function commitDraft(args: {
       candidateMayHaveCommitted = true;
     });
   } catch (e) {
-    // These refusals precede this callback's writes, but an earlier callback
-    // may already have committed. Prove staged candidates are unreferenced.
-    if (e instanceof DraftConflict || e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "OPEN"].includes((e as Error).message)) {
-      if (candidateMayHaveCommitted) await removeUnreferencedCandidate(db, docRef, storagePrefix);
-      else await removeDraftSnapshot(docId, { storagePrefix });
-    }
+    // Nothing stored above is removed on a refusal: stored files are shared
+    // with other versions and with any concurrent publish of the same bytes.
     if (e instanceof WriteAuthorityError) return { status: e.status, body: e.detail };
+    if ((e as Error).message === "WITHDRAWING") return { status: 409, body: { error: WITHDRAWING_MESSAGE } };
     if (e instanceof DraftConflict) return { status: 409, body: e.detail };
     const reason = (e as Error).message;
     if (reason === "OPEN") {
@@ -634,6 +651,6 @@ export async function commitDraft(args: {
   await removeDraftSnapshot(docId, draft);
   await retireLiveSession(db, docId, retiredEpoch);
 
-  return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false } };
+  return { status: 200, body: { versionId, contentHash, fileCount, bytes, deduped: false, ...(changes ? { changes } : {}) } };
 
 }

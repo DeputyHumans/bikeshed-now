@@ -6,6 +6,9 @@ const assert = require("node:assert/strict");
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 
 const { forkDocument, lineageFor } = require("../lib/lib/fork.js");
+const { versionObjectKey } = require("../lib/lib/storage.js");
+const { sha256Hex } = require("../lib/lib/hash.js");
+const { listedHash } = require("./stored.js");
 
 const OWNER = { uid: "u-owner", emailLower: "owner@example.com" };
 const READER = { uid: "u-reader", emailLower: "reader@example.com" };
@@ -89,28 +92,38 @@ function fakeDb(initial = {}) {
   return { db, store, commits };
 }
 
-/** Storage, as far as `getFiles` and a create-only `copy`. */
+/** Storage, as far as a listing and a create-only `copy` and `save`. Objects hold text. */
 function fakeBucket(objects = {}) {
   const store = new Map(Object.entries(objects));
+  const refuseIfThere = (dest, opts) => {
+    if (opts?.preconditionOpts?.ifGenerationMatch === 0 && store.has(dest)) {
+      const e = new Error("precondition failed");
+      e.code = 412;
+      throw e;
+    }
+  };
+  const file = (name) => ({
+    name,
+    async copy(dest, opts) { refuseIfThere(dest, opts); store.set(dest, store.get(name)); },
+    async download() {
+      if (!store.has(name)) throw Object.assign(new Error("not found"), { code: 404 });
+      return [Buffer.from(store.get(name))];
+    },
+    async save(data, opts) { refuseIfThere(name, opts); store.set(name, Buffer.from(data).toString()); },
+  });
   return {
     store,
+    file,
     async getFiles({ prefix }) {
-      const files = [...store.keys()]
-        .filter((name) => name.startsWith(prefix))
-        .map((name) => ({
-          name,
-          async copy(dest, opts) {
-            if (opts?.preconditionOpts?.ifGenerationMatch === 0 && store.has(dest)) {
-              const e = new Error("precondition failed");
-              e.code = 412;
-              throw e;
-            }
-            store.set(dest, store.get(name));
-          },
-        }));
-      return [files];
+      return [[...store.keys()].filter((name) => name.startsWith(prefix)).map(file)];
     },
   };
+}
+
+/** A forked document's bytes at `rel`, through the list its first version records. */
+function forkedText(w, docId, rel = "index.html") {
+  const record = writeTo(w.commits[0], `docs/${docId}/versions/v1`).data;
+  return w.bucket.store.get(versionObjectKey(docId, "v1", record, rel));
 }
 
 /**
@@ -190,7 +203,7 @@ test("a fork copies the version asked for, into a private document the caller ow
   // The same title as the original; the id comes from it.
   assert.equal(out.title, "Notes");
   assert.equal(out.docId, "notes");
-  assert.equal(w.bucket.store.get("docs/notes/v1/index.html"), "two", "v2's bytes, not current");
+  assert.equal(forkedText(w, "notes"), "two", "v2's bytes, not current");
 
   assert.equal(w.commits.length, 1);
   const [commit] = w.commits;
@@ -206,7 +219,11 @@ test("a fork copies the version asked for, into a private document the caller ow
   const v1 = writeTo(commit, "docs/notes/versions/v1").data;
   assert.equal(v1.origin, "fork");
   assert.equal(v1.publishedVia, "fork");
-  assert.equal(v1.contentHash, "h2");
+  // Its own list of the same bytes, hashed from that list (SPEC §9.1 v2); the
+  // source's own hash is what the lineage pointer pins.
+  assert.equal(v1.contentHash, listedHash([{ rel: "index.html", data: Buffer.from("two") }]));
+  assert.equal(v1.hashVersion, 2);
+  assert.equal(writeTo(commit, "forks/notes").data.parentContentHash, "h2");
   assert.equal(v1.parentVersion, null);
 });
 
@@ -259,7 +276,7 @@ test("a fork's first version keeps its source's word count, since its bytes are 
 test("a fork defaults to the current version", async () => {
   const w = world();
   const out = await fork(w, READER);
-  assert.equal(w.bucket.store.get(`docs/${out.docId}/v1/index.html`), "three");
+  assert.equal(forkedText(w, out.docId), "three");
   assert.equal(writeTo(w.commits[0], `forks/${out.docId}`).data.parentVersion, "v3");
 });
 
@@ -565,7 +582,11 @@ test("forking one older version copies neither feedback nor other version record
   assert.equal(out.ok, true);
   const prefix = `docs/${out.docId}/`;
   assert.deepEqual([...w.store.keys()].filter((p) => p.startsWith(prefix)).sort(), [`${prefix}versions/v1`], "only the selected version record, with no feedback");
-  assert.deepEqual([...w.bucket.store.keys()].filter((p) => p.startsWith(prefix)).sort(), [`${prefix}v1/index.html`], "only the selected bundle objects");
+  assert.deepEqual(
+    [...w.bucket.store.keys()].filter((p) => p.startsWith(prefix)).sort(),
+    [`${prefix}blobs/${sha256Hex(Buffer.from("two"))}`, `${prefix}claim`],
+    "only the selected version's bytes, stored once, and the claim on its id",
+  );
 });
 
 test("editors and approvers do not receive the owner's descendant inventory", async () => {

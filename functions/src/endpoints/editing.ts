@@ -13,6 +13,7 @@ import {
   DraftConflict,
   draftRevision,
   loadVersionMeta,
+  versionKey,
   writeDraft,
 } from "../lib/draft";
 import { WriteAuthorityError } from "../lib/writeAuthority";
@@ -248,7 +249,7 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
   const draftKey = `${versionStoragePrefix(docId, "draft", docData.draft ?? {})}/${relPath}`;
   const version = await loadVersionMeta(docSnap.ref, baseVersion);
   if (!version) { res.status(404).end(); return; }
-  const baseKey = `${version.storagePrefix}/${relPath}`;
+  const baseKey = versionKey(docId, version, relPath);
   let objectKey = draftKey;
   const [draftExists] = hasDraft ? await bucket().file(draftKey).exists() : [false];
   if (hasDraft && !draftExists && (relPath === docData.draft?.entry || relPath === docData.draft?.sourceEntry)) {
@@ -256,6 +257,10 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     return;
   }
   if (!draftExists) {
+    if (!baseKey) {
+      res.status(404).end();
+      return;
+    }
     objectKey = baseKey;
     const [baseExists] = await bucket().file(baseKey).exists();
     if (!baseExists) {

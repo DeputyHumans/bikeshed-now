@@ -7,6 +7,7 @@ const admin = require("firebase-admin");
 const { fakeFirestore, withFakeAdmin } = require("./fakes.js");
 const { commitNewVersion } = require("../lib/lib/publish.js");
 const { hashBundleFiles } = require("../lib/lib/hash.js");
+const { versionBytes, listedHash } = require("./stored.js");
 
 const actor = { uid: "owner", email: "owner@example.com", channel: "mcp" };
 
@@ -50,9 +51,10 @@ test("concurrent uploads cannot replace the winning version's bytes", async () =
       assert.equal(results.filter((r) => r.versionId === "v2").length, 1);
       assert.equal(results.filter((r) => r.status === 409).length, 1);
       const version = store.get("docs/d/versions/v2");
-      const prefix = `${version.storagePrefix}/`;
-      const bytes = [...objects].filter(([name]) => name.startsWith(prefix)).map(([name, data]) => ({ rel: name.slice(prefix.length), data }));
-      assert.equal(hashBundleFiles(bytes).contentHash, version.contentHash, "published hash belongs to the bytes actually served");
+      // What a reader is served: each listed file, through the resolver every reader uses.
+      const bytes = version.files.map((rel) => ({ rel, data: versionBytes(objects, "d", "v2", version, rel) }));
+      assert.ok(bytes.every((f) => Buffer.isBuffer(f.data)), "every listed file is stored");
+      assert.equal(listedHash(bytes), version.contentHash, "published hash belongs to the bytes actually served");
       assert.equal(bytes.length, version.fileCount);
       assert.equal(bytes.reduce((n, f) => n + f.data.length, 0), version.bytes);
     });

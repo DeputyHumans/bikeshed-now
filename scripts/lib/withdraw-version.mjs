@@ -5,9 +5,16 @@ import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from './firebase.mjs';
 import { freshReceiptId, readReceipt, recordReceipt, clearReceipt } from './transaction-receipts.mjs';
+import { isStoredLayout, onlyNamedBy, WITHDRAWING_HOLD_MS } from './stored.mjs';
 
+/**
+ * The prefix a version owns, or null for a version whose files are stored once
+ * per document (SPEC §4): it owns no prefix, and what withdrawing it deletes is
+ * the stored files no other version names (`onlyNamedBy`).
+ */
 export function withdrawalPrefix(docId, versionId, record) {
   if (!/^[a-zA-Z0-9_-]+$/.test(docId) || !/^(v[0-9]+|draft)$/.test(versionId)) throw new Error('invalid withdrawal prefix');
+  if (versionId !== 'draft' && isStoredLayout(record)) return null;
   const prefix = record?.storagePrefix ?? `docs/${docId}/${versionId}`;
   const legacy = `docs/${docId}/${versionId}`;
   const bundle = `docs/${docId}/bundles/`;
@@ -36,14 +43,22 @@ export async function repointWithdrawal(db, docRef, plan, deleteField = () => Fi
     const repoint = await tx.get(docRef.collection('versions').doc(plan.repoint));
     if (!doomed.exists || !repoint.exists) throw new Error('a version disappeared mid-run; aborted without deleting anything');
     const prefix = withdrawalPrefix(docRef.id, plan.doomed, doomed.data());
-    if (prefix !== withdrawalPrefix(docRef.id, plan.doomed, plan.version)) throw new Error('version bytes changed mid-run; aborted without deleting anything');
+    if (prefix !== withdrawalPrefix(docRef.id, plan.doomed, plan.version) || doomed.data().attempt !== plan.version?.attempt) {
+      throw new Error('version bytes changed mid-run; aborted without deleting anything');
+    }
     const draftPrefix = plan.draft ? withdrawalPrefix(docRef.id, 'draft', plan.draft) : null;
     const versions = await tx.get(docRef.collection('versions'));
     for (const version of versions.docs) {
       if (version.id === plan.doomed) continue;
       const retained = withdrawalPrefix(docRef.id, version.id, version.data());
-      if (retained === prefix || retained === draftPrefix) throw new Error('withdrawal bytes are still referenced by another version');
+      if (retained !== null && (retained === prefix || retained === draftPrefix)) throw new Error('withdrawal bytes are still referenced by another version');
     }
+    // Read here, with every other version, so a version published before this
+    // transaction keeps every file it names; the mark stops one published
+    // after it from reusing a file about to be deleted (SPEC §4).
+    const others = versions.docs.filter((v) => v.id !== plan.doomed).map((v) => ({ id: v.id, record: v.data() }));
+    const { deletes } = onlyNamedBy(docRef.id, doomed.data(), others);
+    const blobs = deletes.map((f) => f.key);
     const publicRef = db.collection('public').doc(docRef.id);
     const projection = await tx.get(publicRef);
     if (data.visibility === 'public' && !projection.exists) throw new Error('public projection is missing; repair it before withdrawing');
@@ -59,7 +74,8 @@ export async function repointWithdrawal(db, docRef, plan, deleteField = () => Fi
       update['stats.lastEditedAt'] = version.publishedAt ?? deleteField();
       update['stats.lastEditedByEmail'] = typeof version.publishedByEmail === 'string' ? version.publishedByEmail : deleteField();
     }
-    const result = { retiredEpoch, draftPrefix };
+    if (deletes.length > 0) update.withdrawing = { hashes: deletes.map((f) => f.sha256), until: Date.now() + WITHDRAWING_HOLD_MS };
+    const result = { retiredEpoch, draftPrefix, blobs };
     recordReceipt(tx, docRef, fresh, receipt, result);
     tx.update(docRef, update);
     if (data.visibility === 'public') {

@@ -8,6 +8,14 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Changed
+
+- **A new version stores only the files it changes.** Each version used to be a full copy of every file, so changing one picture in a deck read every file back, uploaded every one again and kept a second copy of each. Each file's bytes are now stored once for the whole document, and a version lists which file sits at which path. An update, an in-app commit, an agent's commit and a fork write only what they bring and name the rest. Every way of publishing answers how many files changed, stayed the same and were left out. Versions published before this keep their own copies and read exactly as before; the first version made over one stores its files once (SPEC §4, ADR 0035).
+- **Breaking: the content hash covers the file list.** SPEC §9.1 v2 hashes each file's path, size and SHA-256 rather than every byte, so a version is hashed from the list it records and minting reads nothing it carries over. Versions minted before keep their v1 hash, and publishing the same bytes again still mints nothing, compared with the current version in its own framing. A content hash a client stored earlier does not equal the v2 hash of the same bytes. §9.1 used to say the paths were sorted in byte order; they always were sorted as UTF-16 code units, and the text and a new golden vector now say so.
+- **Withdrawing a version deletes only the files no other version uses.** Its dry run lists what it deletes, with the paths that name each file, and what it keeps, with the versions that share it. To take a file out of a document entirely, withdraw every version that uses it.
+
 ## 0.38.1 — 2026-11-18
 
 ### Changed

@@ -134,7 +134,7 @@ test("both version-minting endpoints ask about pending suggestions, in the right
   const update = between(src("lib", "publish.ts"), "export async function commitNewVersion(", "\nexport ");
   const dedup = update.indexOf("if (dup?.exists");
   const gate = update.indexOf("refuseIfPending(");
-  const upload = update.indexOf("uploadBundle(");
+  const upload = update.indexOf("storeFiles(");
   assert.ok(dedup >= 0 && gate > dedup, "the gate must come after the dedup, so a retry stays a no-op");
   assert.ok(upload > gate, "the gate must come before the upload, so a refusal leaves no bytes");
 

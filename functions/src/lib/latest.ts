@@ -7,7 +7,7 @@ import { bucketName } from "../config";
 import { WORDS_SCAN_CHARS, countWords } from "./head";
 import { safeRelPath } from "./http";
 import { originOf } from "./versions";
-import { versionStoragePrefix } from "./storage";
+import { versionObjectKey } from "./storage";
 
 type Db = admin.firestore.Firestore;
 type Data = Record<string, unknown>;
@@ -94,7 +94,9 @@ export function summaryOf(data: Data): { at: Timestamp | null; words: number | n
 async function countEntryWords(docId: string, versionId: string, v: Data): Promise<number | null> {
   const entry = safeRelPath(typeof v.entry === "string" ? v.entry : "index.html");
   if (!entry) return null;
-  const file = admin.storage().bucket(bucketName()).file(`${versionStoragePrefix(docId, versionId, v)}/${entry}`);
+  const key = versionObjectKey(docId, versionId, v, entry);
+  if (!key) return null;
+  const file = admin.storage().bucket(bucketName()).file(key);
   try {
     const [bytes] = await file.download({ start: 0, end: WORDS_SCAN_CHARS - 1, validation: false });
     return countWords(bytes.toString("utf8"));

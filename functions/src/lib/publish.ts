@@ -22,15 +22,28 @@ import * as admin from "firebase-admin";
 import { syncPublicProjection } from "./publicdoc";
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
-import { newBundlePrefix, versionStoragePrefix } from "./storage";
-import { removeDraftSnapshot, removeUnreferencedCandidate, retireLiveSession } from "./draft";
+import { removeDraftSnapshot, retireLiveSession } from "./draft";
 import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
-import * as mime from "mime-types";
 import { MAX_BUNDLE_BYTES, bucketName } from "../config";
 import { emptyGrants } from "./access";
 import type { Actor } from "./actor";
 import { publishedViaOf } from "./versions";
-import { hashBundleFiles, type BundleFile } from "./hash";
+import { type BundleFile } from "./hash";
+import {
+  assertNotWithdrawing,
+  baseFilesOf,
+  changesFrom,
+  headListing,
+  listingOf,
+  sameAsHead,
+  sizeOf,
+  storeFiles,
+  storedRecord,
+  WITHDRAWING_MESSAGE,
+  type FileChanges,
+  type NextFile,
+  type StoreBucket,
+} from "./blobs";
 import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
 import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
 import { renderMarkdown, titleFromMarkdown } from "./markdown/render";
@@ -66,7 +79,8 @@ type Db = admin.firestore.Firestore;
 const now = () => FieldValue.serverTimestamp();
 
 export interface CompiledBundle {
-  files: BundleFile[];
+  /** Bytes in hand for what this version brings; list entries for what it carries over. */
+  files: NextFile[];
   entry: string;
   sourceEntry?: string;
   format: "html" | "markdown";
@@ -128,7 +142,7 @@ export function compileBundle(
 
 /** What an update is laid over: the current version's files and where its entry is. */
 export interface BaseBundle {
-  files: BundleFile[];
+  files: NextFile[];
   entry: string;
   sourceEntry?: string;
   format: "html" | "markdown";
@@ -172,15 +186,14 @@ export function compileRevision(
     { files: [{ rel: at, data: sent?.data ?? Buffer.alloc(0) }], entry: at, format: extracted.format },
     fallbackTitle,
   );
-  const byRel = new Map<string, Buffer>();
-  for (const f of base.files) byRel.set(f.rel, f.data);
-  for (const f of compiled.files) byRel.set(f.rel, f.data);
-  const files = [...byRel].map(([rel, data]) => ({ rel, data }));
-  return withinCap({ ...compiled, files }, maxBytes);
+  const byRel = new Map<string, NextFile>();
+  for (const f of base.files) byRel.set(f.rel, f);
+  for (const f of compiled.files) byRel.set(f.rel, f);
+  return withinCap({ ...compiled, files: [...byRel.values()] }, maxBytes);
 }
 
 function withinCap(compiled: CompiledBundle, maxBytes: number): CompiledBundle | { error: string } {
-  const total = compiled.files.reduce((n, f) => n + f.data.length, 0);
+  const total = compiled.files.reduce((n, f) => n + sizeOf(f), 0);
   return total > maxBytes ? { error: "bundle is too large" } : compiled;
 }
 
@@ -226,8 +239,10 @@ export async function reviseDocument(args: {
     entry,
     format: v.format === "markdown" ? "markdown" : "html",
     ...(sourceEntry ? { sourceEntry } : {}),
-    // An archive replaces everything, so the base's bytes are not read for it.
-    files: extracted.archive ? [] : await readPrefix(`${versionStoragePrefix(docRef.id, baseVersion, v)}/`),
+    // An archive replaces everything, so the base's files are not needed for it.
+    // Otherwise they are carried: named, for a stored version, and read once
+    // for a version from before files were stored once (SPEC §4).
+    files: extracted.archive ? [] : await baseFilesOf(docRef.id, baseVersion, v),
   };
 
   const compiled = compileRevision(base, extracted, args.title, MAX_BUNDLE_BYTES);
@@ -291,44 +306,41 @@ export function isPreconditionFailure(e: unknown): boolean {
 }
 
 /**
+ * Claim a new document's id in Storage: one empty object, `docs/{id}/claim`,
+ * CREATE_ONLY. Stored files are shared by design, so writing them can never
+ * tell two creates of one id apart; the claim can, and it comes first.
+ */
+export async function claimDocument(docId: string, bucket: StoreBucket = admin.storage().bucket(bucketName()) as unknown as StoreBucket): Promise<void> {
+  await bucket.file(`docs/${docId}/claim`).save(Buffer.alloc(0), {
+    contentType: "text/plain",
+    resumable: false,
+    ...CREATE_ONLY,
+  });
+}
+
+/**
  * Allocate an id for a NEW document and put its v1 bytes there.
  *
- * `put` writes under the prefix it is given, CREATE_ONLY. If Storage refuses,
- * the id is in use even though no record says so yet: a create racing this
- * one, or bytes a failed create left behind. Both mean "taken", so the id gets
- * a random suffix and `put` runs once more.
+ * `put` claims the id it is given with `claimDocument`, then stores the files.
+ * If the claim is refused, the id is in use even though no record says so
+ * yet: a create racing this one, or a claim a failed create left behind. Both
+ * mean "taken", so the id gets a random suffix and `put` runs once more.
  */
 export async function placeNewDocument(
   db: Db,
   wanted: string,
-  put: (storagePrefix: string) => Promise<void>,
-): Promise<{ docId: string; storagePrefix: string }> {
+  put: (docId: string) => Promise<void>,
+): Promise<{ docId: string }> {
   const docId = await uniqueDocId(db, wanted);
   try {
-    await put(`docs/${docId}/v1`);
-    return { docId, storagePrefix: `docs/${docId}/v1` };
+    await put(docId);
+    return { docId };
   } catch (e) {
     if (!isPreconditionFailure(e)) throw e;
   }
   const retryId = await uniqueDocId(db, wanted, true);
-  await put(`docs/${retryId}/v1`);
-  return { docId: retryId, storagePrefix: `docs/${retryId}/v1` };
-}
-
-/** Upload every file of a bundle under a version prefix. */
-async function uploadBundle(
-  storagePrefix: string,
-  files: readonly BundleFile[],
-  preconditions: Partial<typeof CREATE_ONLY> = {},
-): Promise<void> {
-  const bucket = admin.storage().bucket(bucketName());
-  for (const f of files) {
-    await bucket.file(`${storagePrefix}/${f.rel}`).save(f.data, {
-      contentType: mime.lookup(f.rel) || "application/octet-stream",
-      resumable: false,
-      ...preconditions,
-    });
-  }
+  await put(retryId);
+  return { docId: retryId };
 }
 
 export interface PublishInput {
@@ -356,6 +368,7 @@ export interface PublishResult {
   fileCount: number;
   bytes: number;
   format: "html" | "markdown";
+  changes: FileChanges;
 }
 
 /**
@@ -372,14 +385,19 @@ export async function publishNewDocument(
   const { db, compiled } = input;
   const slug = slugify(input.title);
   const versionId = "v1";
-  const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
+  const listing = listingOf(compiled.files);
+  const stored = storedRecord(listing, randomUUID());
+  const { fileCount, bytes } = stored;
 
   // Bytes first, then Firestore, so `currentVersion` can never point at a
   // version whose objects are missing.
-  const { docId, storagePrefix } = await placeNewDocument(
+  const { docId } = await placeNewDocument(
     db,
     input.docId ?? slug,
-    (prefix) => uploadBundle(prefix, compiled.files, CREATE_ONLY),
+    async (id) => {
+      await claimDocument(id);
+      await storeFiles(id, compiled.files);
+    },
   );
 
   const membership = computeDocMembership(
@@ -419,11 +437,7 @@ export async function publishNewDocument(
     format: compiled.format,
     ...(compiled.sourceEntry ? { sourceEntry: compiled.sourceEntry } : {}),
     ...(compiled.rendererVersion ? { rendererVersion: compiled.rendererVersion } : {}),
-    storagePrefix,
-    fileCount,
-    bytes,
-    contentHash,
-    files: compiled.files.map((f) => f.rel),
+    ...stored,
     parentVersion: null,
     origin: "upload",
     publishedVia: publishedViaOf("upload", input.actor),
@@ -445,6 +459,7 @@ export async function publishNewDocument(
     fileCount,
     bytes,
     format: compiled.format,
+    changes: { changed: fileCount, unchanged: 0, removed: 0 },
   };
 }
 
@@ -454,6 +469,8 @@ export interface UpdateResult {
   fileCount: number;
   bytes: number;
   deduped: boolean;
+  /** Against the version it replaces, when that version's list is known without reading it. */
+  changes?: FileChanges;
 }
 
 /**
@@ -483,18 +500,24 @@ export async function commitNewVersion(args: {
   baseVersion: string | null;
 }): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal> {
   const { db, docRef, compiled } = args;
-  const { contentHash, fileCount, bytes } = hashBundleFiles(compiled.files);
+  const listing = listingOf(compiled.files);
+  const attempt = randomUUID();
+  const stored = storedRecord(listing, attempt);
+  const { contentHash, fileCount, bytes } = stored;
   const versionsRef = docRef.collection("versions");
 
   const currentVersion = args.baseVersion ?? (await docRef.get()).data()?.currentVersion;
   const dup = typeof currentVersion === "string" && currentVersion ? await versionsRef.doc(currentVersion).get() : null;
-  if (dup?.exists && dup.data()?.contentHash === contentHash) {
+  const changes = changesFrom(headListing(docRef.id, dup?.data()), listing);
+  if (dup?.exists && sameAsHead(dup.data(), compiled.files, listing)) {
+    // The head's own hash, in whichever framing it was minted with.
     return {
       versionId: dup.id,
-      contentHash,
+      contentHash: String(dup.data()?.contentHash),
       fileCount,
       bytes,
       deduped: true,
+      ...(changes ? { changes } : {}),
     };
   }
 
@@ -517,8 +540,8 @@ export async function commitNewVersion(args: {
     if (m) maxN = Math.max(maxN, Number(m[1]));
   }
   const versionId = `v${maxN + 1}`;
-  const storagePrefix = newBundlePrefix(docRef.id);
-  await uploadBundle(storagePrefix, compiled.files, CREATE_ONLY);
+  // Only what this version brings is written; what it carries is already stored.
+  await storeFiles(docRef.id, compiled.files);
 
   const base = args.baseVersion ?? "";
   let replacedDraft: unknown;
@@ -530,8 +553,9 @@ export async function commitNewVersion(args: {
       // above ran before the upload, and either may have changed during it.
       const cur = await tx.get(docRef);
       const candidate = await tx.get(versionsRef.doc(versionId));
-      if (candidateMayHaveCommitted && candidate.data()?.storagePrefix === storagePrefix) return;
+      if (candidateMayHaveCommitted && candidate.data()?.attempt === attempt) return;
       if (base && cur.data()?.currentVersion !== base) throw new Error("STALE");
+      assertNotWithdrawing(cur.data(), listing);
       await assertWriteAuthority(tx, docRef, cur.data() ?? {}, { uid: args.actor.uid ?? "", emailLower: args.authorEmail }, { k: args.k, editorsOnly: args.editorsOnly });
       if (await anyOpenThread(tx, docRef, base, "suggestions")) throw new Error("PENDING");
       if (await anyAcceptedInDraft(tx, docRef, base, cur.data())) throw new Error("ACCEPTED");
@@ -541,14 +565,12 @@ export async function commitNewVersion(args: {
       candidateMayHaveCommitted = true;
     });
   } catch (e) {
-    // A retry-only refusal cannot disprove an earlier acknowledged-lost commit.
-    // Staged candidates need a fresh proof that no durable pointer selects them.
-    if (e instanceof WriteAuthorityError || ["STALE", "CONFLICT", "PENDING", "ACCEPTED"].includes((e as Error).message)) {
-      if (candidateMayHaveCommitted) await removeUnreferencedCandidate(db, docRef, storagePrefix);
-      else await removeDraftSnapshot(docRef.id, { storagePrefix });
-    }
+    // Nothing written above is removed on a refusal: stored files are shared,
+    // with older versions and with any concurrent publish of the same bytes,
+    // and a retry of this one reuses them.
     if (e instanceof WriteAuthorityError) return { ...e.detail, status: e.status, error: e.message };
     const reason = (e as Error).message;
+    if (reason === "WITHDRAWING") return { error: WITHDRAWING_MESSAGE, status: 409, currentVersion: String((await docRef.get()).data()?.currentVersion ?? "") };
     if (reason === "PENDING") {
       const pending = await refuseIfPending(docRef, base);
       if (pending) return pending;
@@ -573,7 +595,7 @@ export async function commitNewVersion(args: {
   await removeDraftSnapshot(docRef.id, replacedDraft);
   await retireLiveSession(db, docRef.id, retiredEpoch);
 
-  return { versionId, contentHash, fileCount, bytes, deduped: false };
+  return { versionId, contentHash, fileCount, bytes, deduped: false, ...(changes ? { changes } : {}) };
 
   async function mintVersion(tx: admin.firestore.Transaction): Promise<void> {
     const vRef = versionsRef.doc(versionId);
@@ -588,11 +610,7 @@ export async function commitNewVersion(args: {
       ...(compiled.rendererVersion
         ? { rendererVersion: compiled.rendererVersion }
         : {}),
-      storagePrefix,
-      fileCount,
-      bytes,
-      contentHash,
-      files: compiled.files.map((f) => f.rel),
+      ...stored,
       parentVersion: args.baseVersion,
       origin: "upload",
       publishedVia: publishedViaOf("upload", args.actor),

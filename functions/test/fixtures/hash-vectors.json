@@ -110,5 +110,25 @@
     "contentHash": "6f4c40a40c56615c60acd7aad8c42fcbc5121a1539d8b044d3e0687806d5548f",
     "fileCount": 2,
     "bytes": 46
+  },
+  {
+    "name": "sort order is UTF-16 code units, not UTF-8 bytes",
+    "files": [
+      {
+        "rel": "！.txt",
+        "utf8": "fullwidth"
+      },
+      {
+        "rel": "😀.txt",
+        "utf8": "emoji"
+      },
+      {
+        "rel": "z.txt",
+        "utf8": "z"
+      }
+    ],
+    "contentHash": "ebc313a8f508f0de5f1ac1f06c960212daf18878f824fc89e7cf4da4ed1c8cc1",
+    "fileCount": 3,
+    "bytes": 15
   }
 ]

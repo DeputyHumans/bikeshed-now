@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Thirty decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Thirty-four decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
 They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
@@ -39,8 +39,9 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0030](0030-agents-read-a-markdown-reading.md) | Agents read an HTML document as a Markdown reading made on read | Accepted |
 | [0031](0031-a-document-can-be-embedded-in-another-site.md) | A document can be embedded in another site | Accepted |
 | [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) | A reading separates text that touches, and a quote may carry the space | Accepted |
-| [0033](0033-a-reading-is-kept-once-made.md) | A version's reading is kept once made, named by its bytes | Accepted |
+| [0033](0033-a-reading-is-kept-once-made.md) | A version's reading is kept once made, named by its bytes | Amended by 0035 |
 | [0034](0034-a-reading-is-made-within-a-budget.md) | A reading is made in a worker, within a time and memory budget | Accepted |
+| [0035](0035-a-version-lists-its-files-each-stored-once.md) | A version lists its files, and each file is stored once per document | Accepted |
 
 ## Format
 

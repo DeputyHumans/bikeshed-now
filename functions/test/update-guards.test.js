@@ -197,7 +197,8 @@ test(`${route} fences a log first created after its editors check and late write
     const store = w.objects.set.bind(w.objects);
     let seededDuringUpload = false;
     w.objects.set = (key, value) => {
-      if (key.startsWith("docs/d1/bundles/")) {
+      // Where a version's new bytes go: the document's stored files.
+      if (key.startsWith("docs/d1/blobs/")) {
         // The editors/log read already returned empty, but an old-session tab
         // establishes its seed before this candidate wins the transaction.
         live.status.d1.y = { initial: { _seed: "AAA=", before: "AAEC" } };

@@ -30,8 +30,9 @@ import { isAbsolute, join } from "node:path";
 import mime from "mime";
 import { parse, splitList, fail } from "./lib/args.mjs";
 import { assertUsableEmails } from "./lib/email.mjs";
-import { hashBundle, hashBundleFiles } from "./lib/hash.mjs";
-import { commitOperatorVersion, finishOperatorReplacement, uploadOperatorBundle } from "./lib/operator-writes.mjs";
+import { byPath, hashBundle, hashBundleFiles, hashBundleListing, listingOf } from "./lib/hash.mjs";
+import { commitOperatorVersion, finishOperatorReplacement, storeOperatorFiles } from "./lib/operator-writes.mjs";
+import { blobKey } from "./lib/stored.mjs";
 import {
   REPO_ROOT,
   FieldValue,
@@ -198,7 +199,11 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
     files.push({ rel: storedEntry, data: Buffer.from(rendered.html, "utf8") });
   }
 
-  const { contentHash, fileCount, bytes } = hashBundleFiles(files);
+  // Hashed from its file list (SPEC §9.1 v2). The v1 hash of the same bytes is
+  // what a head minted before v2 is compared with.
+  const listing = listingOf(files).sort(byPath);
+  const { contentHash, fileCount, bytes } = hashBundleListing(listing);
+  const bytesHash = hashBundleFiles(files).contentHash;
   const bucketName = getBucketName(values.project, values.bucket);
 
   console.log(`publish: doc=${docId} dir=${bundleDir}`);
@@ -210,10 +215,10 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   if (dry) {
     console.log("  --dry-run: no Firestore or Storage writes.");
     console.log(`  would compare this contentHash with docs/${docId} current version; NO-OP only if identical.`);
-    console.log("  otherwise would upload to a unique immutable bundle, then select version v{maxN+1} transactionally:");
-    for (const f of files) {
+    console.log("  otherwise would store each file once, skipping any the document already stores, then select version v{maxN+1} transactionally:");
+    for (const f of listing) {
       console.log(
-        `    gs://${bucketName}/docs/${docId}/bundles/{attempt}/${f.rel}  (${mime.getType(f.rel) || "application/octet-stream"})`,
+        `    gs://${bucketName}/${blobKey(docId, f.sha256)}  ${f.rel}  (${mime.getType(f.rel) || "application/octet-stream"})`,
       );
     }
     console.log(`  would upsert docs/${docId} and move currentVersion.`);
@@ -232,7 +237,7 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
   const before = await docRef.get();
   const behind = before.exists ? before.data()?.currentVersion : null;
   const dup = typeof behind === "string" && behind ? await versionsRef.doc(behind).get() : null;
-  if (dup?.exists && dup.data()?.contentHash === contentHash) {
+  if (dup?.exists && dup.data()?.contentHash === (dup.data()?.hashVersion === 2 ? contentHash : bytesHash)) {
     console.log(`  already published as ${dup.id} (current contentHash match) — NO-OP.`);
     return;
   }
@@ -251,8 +256,9 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
     }
   }
 
-  console.log(`  uploading ${fileCount} file(s) into an immutable attempt bundle ...`);
-  const storagePrefix = await uploadOperatorBundle(bucket, docId, files);
+  console.log(`  storing ${fileCount} file(s), each once ...`);
+  const written = await storeOperatorFiles(bucket, docId, files);
+  console.log(`    ${written} new, ${fileCount - written} already stored.`);
 
   const actor = {
     uid: null,
@@ -272,9 +278,14 @@ This is an OPERATOR tool. The end-user equivalent is \`bikeshed publish\`.`;
       entry: storedEntry, format,
       ...(sourceEntry ? { sourceEntry } : {}),
       ...(rendererVersion ? { rendererVersion } : {}),
-      storagePrefix, fileCount, bytes, contentHash, files: files.map((f) => f.rel),
+      layout: "blobs",
+      files: listing.map((f) => f.rel),
+      hashes: listing.map((f) => f.sha256),
+      sizes: listing.map((f) => f.size),
+      fileCount, bytes, contentHash, hashVersion: 2, attempt: randomUUID(),
       origin: "upload", publishedVia: "operator", publishedByEmail: actor.email, publishedBy: actor,
     },
+    bytesHash,
   }, FieldValue.serverTimestamp());
   if (result.duplicate) {
     console.log(`  already published as ${result.versionId} (contentHash match) — NO-OP.`);

@@ -8,6 +8,7 @@ const { fakeFirestore, withFakeAdmin } = require("./fakes.js");
 const { writeDraft, commitDraft } = require("../lib/lib/draft.js");
 const { commitNewVersion } = require("../lib/lib/publish.js");
 const { hashBundleFiles } = require("../lib/lib/hash.js");
+const { versionBytes, listedHash } = require("./stored.js");
 const actor = { uid: "owner", email: "owner@example.com", channel: "web" };
 const oldHtml = "<p>published one</p>";
 const oldHash = hashBundleFiles([{ rel: "index.html", data: Buffer.from(oldHtml) }]).contentHash;
@@ -30,8 +31,10 @@ for (const channel of ["draft", "update"]) {
       assert.equal(store.get("docs/d").currentVersion, "v3");
       const restored = store.get("docs/d/versions/v3");
       assert.equal(restored.parentVersion, "v2");
-      assert.equal(restored.contentHash, oldHash);
-      assert.equal(objects.get(`${restored.storagePrefix}/index.html`).toString(), oldHtml);
+      // Hashed from its file list (SPEC §9.1 v2), so not equal to v1's hash of the same bytes.
+      assert.equal(restored.contentHash, listedHash([{ rel: "index.html", data: Buffer.from(oldHtml) }]));
+      assert.equal(restored.hashVersion, 2);
+      assert.equal(versionBytes(objects, "d", "v3", restored, "index.html").toString(), oldHtml);
       assert.equal(objects.get("docs/d/v1/index.html").toString(), oldHtml);
       assert.equal(objects.get("docs/d/v2/index.html").toString(), newer);
       assert.equal(store.get("docs/d").draft, undefined);

@@ -7,7 +7,8 @@ const { fakeFirestore, withFakeAdmin } = require("./fakes.js");
 const { loseFirstTransactionAcknowledgement } = require("./transaction-ack.js");
 const { writeDraft, commitDraft, draftRevision, removeUnreferencedCandidate } = require("../lib/lib/draft.js");
 const { commitNewVersion } = require("../lib/lib/publish.js");
-const { hashBundleFiles } = require("../lib/lib/hash.js");
+const { hashBundleFiles, sha256Hex } = require("../lib/lib/hash.js");
+const { versionBytes } = require("./stored.js");
 
 const actor = { uid: "link-editor", email: "editor@example.com", channel: "web" };
 const oldHtml = "<p>old published bytes</p>", newHtml = "<p>candidate bytes</p>";
@@ -68,7 +69,7 @@ for (const channel of ["commit", "update"]) for (const advanced of [false, true]
     assert.ok(count().callbackCalls >= 2);
     assert.equal(store.get("docs/d").currentVersion, advanced ? "v3" : "v2", "retry acknowledgement never repoints a later head");
     const published = store.get("docs/d/versions/v2");
-    assert.equal(objects.get(`${published.storagePrefix}/index.html`)?.toString(), newHtml, "the published version still has the bytes its record references");
+    assert.equal(versionBytes(objects, "d", "v2", published, "index.html")?.toString(), newHtml, "the published version still has the bytes its record references");
     if (advanced) assert.equal(objects.get("docs/d/bundles/later/index.html")?.toString(), "later version");
   });
 });
@@ -142,7 +143,13 @@ for (const reason of ["revision", "revoked"]) test(`a retry-only ${reason} chang
   });
 });
 
-for (const channel of ["save", "commit", "update"]) test(`${channel} removes a candidate after a definite competing transaction wins`, async () => {
+/**
+ * A losing draft SAVE owns a prefix nobody else can name, so it removes it. A
+ * losing commit or update owns nothing of its own: what it wrote is a stored
+ * file, which another version or a concurrent publish of the same bytes may
+ * name, so it stays, and a retry reuses it (SPEC §4).
+ */
+for (const channel of ["save", "commit", "update"]) test(`${channel} leaves nothing of its own after a definite competing transaction wins`, async () => {
   await world(async ({ db, objects, save, commit, update }) => {
     const transact = db.runTransaction.bind(db);
     let raced = false;
@@ -161,7 +168,9 @@ for (const channel of ["save", "commit", "update"]) test(`${channel} removes a c
       const result = await (channel === "commit" ? commit() : update());
       assert.equal(result.status, 409);
     }
-    assert.deepEqual([...objects.keys()].sort(), ["docs/d/bundles/draft/index.html", "docs/d/bundles/winner/index.html", "docs/d/v1/index.html"], "a normal losing transaction removes its unreferenced candidate");
+    const kept = ["docs/d/bundles/draft/index.html", "docs/d/bundles/winner/index.html", "docs/d/v1/index.html"];
+    if (channel !== "save") kept.push(`docs/d/blobs/${sha256Hex(Buffer.from(newHtml))}`);
+    assert.deepEqual([...objects.keys()].sort(), kept.sort(), "a losing save removes its prefix; a losing mint leaves only stored files");
   });
 });
 
