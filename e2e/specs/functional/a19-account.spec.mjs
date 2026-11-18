@@ -213,7 +213,7 @@ async function uploadThroughDialog(u, ownerEmail, { name, title, anchor }) {
   const dlg = u.page.getByRole("dialog", { name: "Upload a document" });
   await dlg.waitFor({ state: "visible", timeout: RECORD_WAIT_MS });
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1><p>A19 marking probe.</p></body></html>`;
-  await dlg.locator('input[type="file"]').setInputFiles({ name: "probe.html", mimeType: "text/html", buffer: Buffer.from(html) });
+  await dlg.locator('input[type="file"][aria-label="Choose files"]').setInputFiles({ name: "probe.html", mimeType: "text/html", buffer: Buffer.from(html) });
   await dlg.locator(".upload-dropzone strong", { hasText: "probe.html" }).waitFor({ timeout: RECORD_WAIT_MS });
   const boxChecked = await dlg.locator("#upload-marking").isChecked();
   await dlg.locator("#upload-id").fill(docIdFor(target, name));

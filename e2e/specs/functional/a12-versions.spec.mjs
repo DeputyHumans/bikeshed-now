@@ -1024,7 +1024,8 @@ scenario("A12.5 /publish?update=: an editor 200, an open editor 403, id/folderId
   const r2 = docHtml(title, 2);
   const e = await updateUpload(editor.http, docId, { body: r2, timeoutMs: HTTP_MS });
   assert.equal(e.status, 200, `editor: ${e.status} ${e.response.text.slice(0, 300)}`);
-  assert.deepEqual(Object.keys(e.json).sort(), ["bytes", "contentHash", "deduped", "docId", "fileCount", "versionId"], "the answer's keys (SPEC §2)");
+  assert.deepEqual(Object.keys(e.json).sort(), ["bytes", "changes", "contentHash", "deduped", "docId", "fileCount", "versionId"], "the answer's keys (SPEC §2)");
+  assert.deepEqual(e.json.changes, { changed: 1, unchanged: 0, removed: 0 }, "a minted version counts its files against the one it replaced (SPEC §2)");
   assert.deepEqual(pick(e.json, ["docId", "versionId", "deduped"]), { docId, versionId: "v2", deduped: false });
   const v2rec = await versionRecord(docId, "v2");
   assert.deepEqual(pick(v2rec, ["parentVersion", "publishedVia", "publishedByEmail", "contentHash"]), { parentVersion: "v1", publishedVia: "upload", publishedByEmail: editorAcct.email.toLowerCase(), contentHash: e.json.contentHash });

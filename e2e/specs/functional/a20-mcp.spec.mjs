@@ -100,8 +100,7 @@ const REQUIRED_ARGS = Object.freeze({
     "id"
   ],
   "update_document": [
-    "id",
-    "content"
+    "id"
   ],
   "commit_draft": [
     "id"

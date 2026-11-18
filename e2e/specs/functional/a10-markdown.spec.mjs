@@ -62,7 +62,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture, readSample } from "../../lib/seed.mjs";
-import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, versionObjects } from "../../lib/admin.mjs";
 import { eventually, lineHunks } from "../../lib/assert.mjs";
 import { rehashZip } from "../../lib/bytes.mjs";
 import { inspectMarkdownRendering } from "../../lib/markdown-inspection.mjs";
@@ -433,10 +433,13 @@ scenario("A10.2 a .md upload records format markdown, entry index.html, sourceEn
   );
   assert.match(String(record.rendererVersion), RENDERER_VERSION_RE, "rendererVersion names the pinned renderer");
 
-  ctx.step("Storage holds exactly the two files under the version prefix");
-  assert.deepEqual(await listObjects(target, `docs/${docId}/v1/`), [`docs/${docId}/v1/index.html`, `docs/${docId}/v1/index.md`]);
-  const objMd = await readObject(target, `docs/${docId}/v1/index.md`);
-  const objHtml = await readObject(target, `docs/${docId}/v1/index.html`);
+  ctx.step("the version names exactly the two files, each stored once (SPEC §4)");
+  const named = await versionObjects(target, docId, "v1", record);
+  assert.deepEqual(named.map((o) => o.rel), ["index.html", "index.md"]);
+  const keyOf = Object.fromEntries(named.map((o) => [o.rel, o.key]));
+  const objMd = await readObject(target, keyOf["index.md"]);
+  const objHtml = await readObject(target, keyOf["index.html"]);
+  assert.ok(objMd && objHtml, "both stored files exist");
   assert.equal(sha(objMd), sha(bytes), "Storage's index.md is the uploaded source, byte for byte (authored source, canonical)");
 
   ctx.step("GET /download: the zip holds both files, the same bytes, and REHASH holds");

@@ -1469,7 +1469,7 @@ scenario("A17.5 marking is the owner's alone: POST /marking is 200 for the owner
     return true;
   }, { timeout: 60_000, interval: 1_000, message: "the Upload dialog's marking box is seeded from the default" });
   assert.equal(seededOpen, true);
-  await up2.locator('input[type="file"]').setInputFiles({ name: "seeded.html", mimeType: "text/html", buffer: Buffer.from(probeDoc({ title: `Seeded ${t}` })) });
+  await up2.locator('input[type="file"][aria-label="Choose files"]').setInputFiles({ name: "seeded.html", mimeType: "text/html", buffer: Buffer.from(probeDoc({ title: `Seeded ${t}` })) });
   await up2.locator(".upload-dropzone strong", { hasText: "seeded.html" }).waitFor({ timeout: 10_000 });
   assert.equal(await up2.locator("#upload-marking").isChecked(), true, "the dialog's marking box is seeded from the default");
   const seededId = docIdFor(target, "a175-seeded");
