@@ -8,6 +8,13 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A long document's reading reads to its end.** A reading parsed at most 2,000,000 characters of the page after its scripts, stylesheets and inline images were stripped, so a tracker of 2.3M stopped part way down. It now parses up to 8,000,000, which a page like that reads in under 2 s on one CPU (ADR 0034).
+- **A page that costs more than it looks no longer stalls the service that reads it.** Length never bounded what a reading cost: 2M characters of bare paragraphs took 23 s to convert, because the converter copies its whole output for every sibling it adds, and 100,000 nested `div`s took 48 s to parse before overflowing its stack. That ran on the request's own thread, so every other request on the instance waited, it could pass the 60 s a function has, and it failed before anything was kept, so every read paid it again. A reading is now made in a worker with a deadline and a heap ceiling, one at a time per instance: 8M characters within 20 s, then 2M within 12 s, then 250K within 8 s. A page that fits only a shorter attempt says it was too complex to read whole; one that fits none says it could not be read, and its source is one call away. Either is kept, so it costs its budget once. The agent guide said a reading was made fresh each time, which has not been true since 0.37.2; it now says a reading is kept (ADR 0034).
+
 ## 0.37.2 — 2026-11-17
 
 ### Changed

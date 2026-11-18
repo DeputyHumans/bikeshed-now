@@ -14,7 +14,10 @@ import TurndownService from "turndown";
  * carries (ADR 0028): never hashed, so changing these rules mints no version
  * of anything. `stored.ts` keeps each version's reading once made, named by
  * a fingerprint of this file among the rest, so a change here is never
- * served an old one (ADR 0033).
+ * served an old one (ADR 0033). It runs in a worker within a time and memory
+ * budget (`budget.ts`, ADR 0034), because some pages cost far more than their
+ * length: a long run of siblings is quadratic in turndown, deep nesting in its
+ * parser.
  *
  * Two rules the rest of this file serves
  * --------------------------------------
@@ -36,8 +39,13 @@ import TurndownService from "turndown";
  * hides still appears, because no CSS is evaluated here.
  */
 
-/** Characters parsed after the strip. Past it, the prefix is read and the reading says it stops early. */
-export const READ_PARSE_CHARS = 2_000_000;
+/**
+ * Characters parsed after the strip. Past it, the prefix is read and the
+ * reading says it stops early. 8M characters of a dense tracker page read in
+ * 1.7 s at 469 MiB on one vCPU; what keeps a worse page from costing more is
+ * the budget around the conversion (`budget.ts`), not this number.
+ */
+export const READ_PARSE_CHARS = 8_000_000;
 
 /** What a reading leaves out, counted so the preamble can say how much. */
 export interface LeftOut {
@@ -80,11 +88,16 @@ export const BUILT_BY_SCRIPT =
 /** Said when the page was too long to read whole. */
 export const STOPS_EARLY =
   "The page is too long to read whole, so this reading stops before its end. The original continues.";
+/** Said when the whole page would cost more than a reading's budget, so a shorter part of it was read (ADR 0034). */
+export const TOO_COMPLEX =
+  "The page is too complex to read whole here, so this reading stops before its end. The original continues.";
+/** Said when not even a short part of the page could be read within the budget (ADR 0034). */
+export const UNREADABLE = "The page is too complex to make a reading of here. Read the original.";
 
 /** Fewer letters and digits than this, from a page that has a script, reads as a page the script fills. */
 const SCRIPT_BUILT_BELOW = 200;
 
-function noneLeftOut(): LeftOut {
+export function noneLeftOut(): LeftOut {
   return { scripts: 0, stylesheets: 0, figures: 0, embeds: 0, inlineImages: 0, hidden: 0, formControls: 0 };
 }
 
@@ -656,12 +669,32 @@ function textWeight(markdown: string): number {
   return (bare.match(/[\p{L}\p{N}]/gu) ?? []).length;
 }
 
-/** An HTML document as an agent should read it. */
-export function readingMarkdown(html: string, ctx: ReadingContext): Reading {
+/**
+ * An HTML document as an agent should read it, parsing at most `limit`
+ * characters after the strip. Synchronous and unbounded in time: requests go
+ * through `budgetedReading`, which runs this in a worker.
+ */
+export function readingMarkdown(html: string, ctx: ReadingContext, limit: number = READ_PARSE_CHARS): Reading {
+  return readStripped(stripped(html), ctx, limit);
+}
+
+/** A page after the strip, with what the strip left out. */
+export interface Stripped {
+  text: string;
+  leftOut: LeftOut;
+}
+
+/** The strip alone: linear, and what a budget needs to know before it parses anything. */
+export function stripped(html: string): Stripped {
   const leftOut = noneLeftOut();
-  const stripped = stripForReading(html ?? "", leftOut);
-  const cut = stripped.length > READ_PARSE_CHARS;
-  const input = cut ? stripped.slice(0, READ_PARSE_CHARS) : stripped;
+  return { text: stripForReading(html ?? "", leftOut), leftOut };
+}
+
+/** The reading of a stripped page, parsing at most `limit` characters of it. */
+export function readStripped(page: Stripped, ctx: ReadingContext, limit: number = READ_PARSE_CHARS): Reading {
+  const leftOut = { ...page.leftOut };
+  const cut = page.text.length > limit;
+  const input = cut ? page.text.slice(0, limit) : page.text;
   if (!service) service = createReadingService();
   current = { ctx, leftOut };
   let body: string;

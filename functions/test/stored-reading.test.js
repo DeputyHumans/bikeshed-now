@@ -7,8 +7,9 @@ const { createHash } = require("node:crypto");
 const admin = require("firebase-admin");
 
 process.env.BIKESHED_PUBLIC_ORIGIN = "https://bikeshed.example";
-const { RULES, parseKept, readingObject, readingsPrefix, storedReading } = require("../lib/lib/markdown/stored.js");
-const { readingMarkdown } = require("../lib/lib/markdown/reading.js");
+const { RULES, RULE_FILES, parseKept, readingObject, readingsPrefix, storedReading } = require("../lib/lib/markdown/stored.js");
+const { UNREADABLE, readingMarkdown } = require("../lib/lib/markdown/reading.js");
+const { workers } = require("../lib/lib/markdown/budget.js");
 const { TOOLS } = require("../lib/mcp/tools.js");
 const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
 const { docMarkdown } = require("../lib/index.js");
@@ -64,6 +65,12 @@ async function read(store, { version = { contentHash: HASH_A }, html = PAGE_A, p
 
 test("the rules a reading is made by can be named, so a reading can be kept", () => {
   assert.match(String(RULES), /^[0-9a-f]{64}$/);
+});
+
+test("the rules include the budget and the worker, because they decide which part of a page is read", () => {
+  const names = RULE_FILES.map((f) => f.slice(f.lastIndexOf("/") + 1));
+  for (const name of ["reading.js", "budget.js", "worker.js", "turndown.cjs.js"]) assert.ok(names.includes(name), `${name} is in ${names}`);
+  assert.ok(RULE_FILES.some((f) => f.includes("@mixmark-io/domino")), "and the parser");
 });
 
 test("a second read of one version's bytes converts nothing and reads the same", async () => {
@@ -271,4 +278,45 @@ test("a refused read never reaches a kept reading", async () => {
   assert.equal(refused.status, 404);
   assert.equal(refused.headers["cache-control"], "private, no-store");
   assert.deepEqual(store.calls.downloads, [], "no object was read for a caller who may not read");
+});
+
+
+// --- One conversion at a time ---------------------------------------------------
+
+test("two readings to make never convert at once on one instance", async () => {
+  const store = fakeStore();
+  workers.most = 0;
+  await Promise.all([
+    read(store, { version: { contentHash: HASH_A }, place: { ...PLACE, versionId: "v1" }, prefix: "docs/plan/v1" }),
+    read(store, { version: { contentHash: HASH_B }, place: { ...PLACE, versionId: "v2" }, prefix: "docs/plan/v2", html: PAGE_B }),
+  ]);
+  assert.equal(store.calls.saves.length, 2, "both were made and kept");
+  assert.equal(workers.most, 1, "but never two workers alive together");
+  assert.equal(workers.live, 0);
+});
+
+test("readers queued behind the reading of their version are served what it kept", async () => {
+  const store = fakeStore();
+  const results = await Promise.all([read(store), read(store), read(store)]);
+  assert.equal(results.reduce((n, r) => n + r.sourceReads, 0), 1, "the source is read once");
+  assert.equal(store.calls.saves.length, 1, "and the reading made and kept once");
+  for (const r of results) assert.deepEqual(r.reading, results[0].reading);
+});
+
+test("a page that cannot be read within the budget is kept as such, and costs its budget once", async () => {
+  const store = fakeStore();
+  const html = `${"<div>".repeat(10_000)}deep`;
+  const quiet = console.warn;
+  console.warn = () => {};
+  let first;
+  try {
+    first = await read(store, { html });
+  } finally {
+    console.warn = quiet;
+  }
+  assert.deepEqual(first.reading.warnings, [UNREADABLE]);
+  assert.equal(store.calls.saves.length, 1, "the outcome is kept");
+  const second = await read(store, { html });
+  assert.equal(second.sourceReads, 0, "the second read converts nothing");
+  assert.deepEqual(second.reading, first.reading);
 });

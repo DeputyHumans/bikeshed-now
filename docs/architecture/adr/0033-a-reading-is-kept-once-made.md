@@ -1,6 +1,6 @@
 # 0033 — A version's reading is kept once made, named by its bytes
 
-**Status** Accepted · **Spec** §2, §8, §19 · **Amends** [0030](0030-agents-read-a-markdown-reading.md) §1
+**Status** Accepted, amended by [0034](0034-a-reading-is-made-within-a-budget.md) (§1: a reading shortened to fit its budget is kept like any other) · **Spec** §2, §8, §19 · **Amends** [0030](0030-agents-read-a-markdown-reading.md) §1
 
 ## Context
 

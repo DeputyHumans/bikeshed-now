@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { safeSegment } from "../http";
-import { readingMarkdown, type LeftOut, type Reading, type ReadingContext } from "./reading";
+import { budgetedReading, oneAtATime } from "./budget";
+import { type LeftOut, type Reading, type ReadingContext } from "./reading";
 
 /**
  * Why this exists
@@ -46,16 +47,38 @@ export interface VersionBytes {
 }
 
 /**
- * Every rule a reading is made by: `reading.ts` as compiled, turndown, and the
- * parser turndown brings. `reading.ts` imports nothing else. Null when any of
- * them cannot be read, and then nothing is kept: a reading made fresh is
- * always right, a kept one only while the rules are the ones that made it.
+ * Every file a reading is made by: `reading.ts` as compiled, the budget and
+ * the worker it runs in (a changed ladder decides which part of a page is
+ * read), turndown, and the parser turndown brings. Empty when one cannot be
+ * found.
+ */
+function ruleFiles(): string[] {
+  try {
+    const turndown = require.resolve("turndown");
+    return [
+      require.resolve("./reading"),
+      require.resolve("./budget"),
+      require.resolve("./worker"),
+      turndown,
+      createRequire(turndown).resolve("@mixmark-io/domino"),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+export const RULE_FILES: readonly string[] = ruleFiles();
+
+/**
+ * A fingerprint of `RULE_FILES`. Null when any of them cannot be read, and
+ * then nothing is kept: a reading made fresh is always right, a kept one only
+ * while the rules are the ones that made it.
  */
 function rulesFingerprint(): string | null {
+  if (RULE_FILES.length === 0) return null;
   try {
     const hash = createHash("sha256");
-    const turndown = require.resolve("turndown");
-    for (const file of [require.resolve("./reading"), turndown, createRequire(turndown).resolve("@mixmark-io/domino")]) {
+    for (const file of RULE_FILES) {
       hash.update(file.slice(file.lastIndexOf("/") + 1));
       hash.update(readFileSync(file));
     }
@@ -115,10 +138,27 @@ function codeOf(err: unknown): unknown {
   return (err as { code?: unknown })?.code ?? (err as Error)?.name;
 }
 
+/** The kept reading at `name`, or null for none, or for one that does not parse: then it is made again. */
+async function keptReading(store: ReadingStore, name: string): Promise<Reading | null> {
+  try {
+    const [bytes] = await store.file(name).download();
+    return parseKept(bytes.toString("utf8"));
+  } catch (err) {
+    if (codeOf(err) !== 404) console.warn("reading: kept copy unreadable", codeOf(err));
+    return null;
+  }
+}
+
 /**
  * A version's reading: the kept one when there is one, else made from the
  * source and kept for next time. Call it only after the read gate has said
  * yes; what it keeps is the document's content.
+ *
+ * A miss waits its turn for the instance's one conversion (`oneAtATime`), then
+ * looks again, so readers who queued behind the reading of the same version
+ * are served what it kept rather than converting it again. The reading is
+ * made within a budget (`budgetedReading`) and kept whatever it came to,
+ * including a shortened one, so a page that costs its budget costs it once.
  *
  * The write is awaited, because Cloud Run takes the CPU away once the response
  * is sent. A write that fails, or loses the race to another reader's identical
@@ -133,25 +173,22 @@ export async function storedReading(input: {
   source: () => Promise<string>;
 }): Promise<Reading> {
   const name = readingObject(input.place, input.version, input.storagePrefix);
-  if (name) {
-    try {
-      const [bytes] = await input.store.file(name).download();
-      const kept = parseKept(bytes.toString("utf8"));
-      if (kept) return kept;
-    } catch (err) {
-      if (codeOf(err) !== 404) console.warn("reading: kept copy unreadable", codeOf(err));
+  const kept = name ? await keptReading(input.store, name) : null;
+  if (kept) return kept;
+  return oneAtATime(async () => {
+    const again = name ? await keptReading(input.store, name) : null;
+    if (again) return again;
+    const reading = await budgetedReading(await input.source(), input.place);
+    if (name) {
+      try {
+        await input.store.file(name).save(
+          JSON.stringify({ body: reading.body, leftOut: reading.leftOut, warnings: reading.warnings, cut: reading.cut }),
+          { contentType: "application/json", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } },
+        );
+      } catch (err) {
+        if (codeOf(err) !== 412) console.warn("reading: not kept", codeOf(err));
+      }
     }
-  }
-  const reading = readingMarkdown(await input.source(), input.place);
-  if (name) {
-    try {
-      await input.store.file(name).save(
-        JSON.stringify({ body: reading.body, leftOut: reading.leftOut, warnings: reading.warnings, cut: reading.cut }),
-        { contentType: "application/json", resumable: false, preconditionOpts: { ifGenerationMatch: 0 } },
-      );
-    } catch (err) {
-      if (codeOf(err) !== 412) console.warn("reading: not kept", codeOf(err));
-    }
-  }
-  return reading;
+    return reading;
+  });
 }
