@@ -285,7 +285,7 @@ function describeUpdate(result) {
   if (result.deduped) return `no change — identical to ${result.versionId}`;
   const c = result.changes;
   const counts = c
-    ? `${c.changed} file(s) changed, ${c.unchanged} unchanged${c.removed ? `, ${c.removed} left out` : ""}`
+    ? `${c.changed} file(s) changed, ${c.unchanged} unchanged${c.removed ? `, ${c.removed} removed` : ""}`
     : `${result.fileCount} file(s), ${result.bytes} bytes`;
   const lines = [`published ${result.versionId} — ${counts}`];
   for (const p of result.placed ?? []) lines.push(p.sent === p.at ? `  ${p.at}` : `  ${p.sent} → ${p.at}`);

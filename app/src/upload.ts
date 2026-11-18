@@ -2,6 +2,8 @@
 // Client for the browser-upload endpoint (SPEC §2, §11).
 
 import type { Marking } from "./types";
+import { storedZip } from "./zip";
+import type { Plan } from "./bundleInput";
 
 /**
  * The file bytes ARE the request body; metadata rides in the query string.
@@ -24,26 +26,48 @@ export interface UploadResult {
   format: "html" | "markdown";
 }
 
-export interface UploadOptions {
+/** How a send is watched and stopped. */
+export interface SendControl {
+  onProgress?: (fraction: number) => void;
+  /** Every byte has gone; the deployment is publishing now. */
+  onSent?: () => void;
+  /** Aborting stops the upload; nothing is published. */
+  signal?: AbortSignal;
+}
+
+export interface UploadOptions extends SendControl {
   title?: string;
   /** The id to publish at. Taken means a suffixed id, so read `docId` back. */
   id?: string;
   folderId?: string | null;
   marking?: Marking;
-  onProgress?: (fraction: number) => void;
 }
 
 export function uploadDoc(file: File, opts: UploadOptions = {}): Promise<UploadResult> {
+  return uploadNamed(file, file.name, opts);
+}
+
+function uploadNamed(body: Blob, filename: string, opts: UploadOptions): Promise<UploadResult> {
   const params = new URLSearchParams();
-  params.set("filename", file.name);
+  params.set("filename", filename);
   if (opts.title) params.set("title", opts.title);
   if (opts.id) params.set("id", opts.id);
   if (opts.folderId) params.set("folderId", opts.folderId);
   if (opts.marking !== undefined) params.set("marking", JSON.stringify(opts.marking));
-  return send<UploadResult>(file, params, {
-    forbidden: "You cannot upload to that folder.",
-    onProgress: opts.onProgress,
-  });
+  return send<UploadResult>(body, params, { forbidden: "You cannot upload to that folder.", ...opts });
+}
+
+/** Files as the one `.zip` the deployment takes, each at its path. */
+async function zipOf(files: ReadonlyArray<{ path: string; file: File }>): Promise<Blob> {
+  const entries = await Promise.all(files.map(async (f) => ({ name: f.path, data: new Uint8Array(await f.file.arrayBuffer()) })));
+  return new Blob([storedZip(entries) as BlobPart], { type: "application/zip" });
+}
+
+/** Publish a planned NEW document: a page, a zip, or a folder sent as one zip (SPEC §2). */
+export async function publishNew(plan: Plan, opts: UploadOptions = {}): Promise<UploadResult> {
+  if (plan.action === "page" || plan.action === "zip") return uploadNamed(plan.file, plan.file.name, opts);
+  if (plan.action === "bundle") return uploadNamed(await zipOf(plan.files), `${plan.name}.zip`, opts);
+  throw new Error("Loose files are laid over a document that already exists.");
 }
 
 export interface VersionUploadResult {
@@ -55,6 +79,10 @@ export interface VersionUploadResult {
   bytes: number;
   /** True when the file is a version the document already has: nothing changed. */
   deduped: boolean;
+  /** Against the version it replaced, when the deployment could tell without reading it. */
+  changes?: { changed: number; unchanged: number; removed: number };
+  /** For loose files: where each one went. */
+  placed?: Array<{ sent: string; at: string }>;
 }
 
 /**
@@ -81,16 +109,42 @@ export class StaleUploadError extends Error {
  */
 export async function uploadVersion(
   file: File,
-  opts: { docId: string; baseVersion: string; onProgress?: (fraction: number) => void },
+  opts: { docId: string; baseVersion: string } & SendControl,
+): Promise<VersionUploadResult> {
+  return sendVersion(file, file.name, false, opts);
+}
+
+/**
+ * Publish a planned next version (SPEC §2): a page replaces the page, a zip or
+ * a folder is the whole version, and loose files are laid over the current
+ * one, each replacing the file of its name.
+ */
+export async function publishVersion(
+  plan: Plan,
+  opts: { docId: string; baseVersion: string } & SendControl,
+): Promise<VersionUploadResult> {
+  if (plan.action === "page" || plan.action === "zip") return sendVersion(plan.file, plan.file.name, false, opts);
+  if (plan.action === "bundle") return sendVersion(await zipOf(plan.files), `${plan.name}.zip`, false, opts);
+  // Sent by the names they were dropped with; the deployment places each by
+  // the rule the dialog showed (SPEC §2, `merge=1`).
+  return sendVersion(await zipOf(plan.files.map((p) => p.sent)), "files.zip", true, opts);
+}
+
+async function sendVersion(
+  body: Blob,
+  filename: string,
+  merge: boolean,
+  opts: { docId: string; baseVersion: string } & SendControl,
 ): Promise<VersionUploadResult> {
   const params = new URLSearchParams();
-  params.set("filename", file.name);
+  params.set("filename", filename);
   params.set("update", opts.docId);
   if (opts.baseVersion) params.set("baseVersion", opts.baseVersion);
+  if (merge) params.set("merge", "1");
   try {
-    return await send<VersionUploadResult>(file, params, {
+    return await send<VersionUploadResult>(body, params, {
       forbidden: "You can no longer publish to this document.",
-      onProgress: opts.onProgress,
+      ...opts,
     });
   } catch (e) {
     const detail = e instanceof UploadRefused ? e.detail : null;
@@ -112,20 +166,37 @@ class UploadRefused extends Error {
   }
 }
 
+/** The upload was stopped by the person sending it; nothing was published. */
+export class UploadStopped extends Error {
+  constructor() {
+    super("The upload was stopped. Nothing was published.");
+    this.name = "UploadStopped";
+  }
+}
+
 function send<T>(
-  file: File,
+  body: Blob,
   params: URLSearchParams,
-  opts: { forbidden: string; onProgress?: (fraction: number) => void },
+  opts: { forbidden: string } & SendControl,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
+    if (opts.signal?.aborted) {
+      reject(new UploadStopped());
+      return;
+    }
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/publish?${params.toString()}`);
     xhr.withCredentials = true;
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
 
+    const stop = () => xhr.abort();
+    opts.signal?.addEventListener("abort", stop, { once: true });
+    xhr.onloadend = () => opts.signal?.removeEventListener("abort", stop);
+    xhr.onabort = () => reject(new UploadStopped());
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) opts.onProgress?.(e.loaded / e.total);
     };
+    xhr.upload.onload = () => opts.onSent?.();
     xhr.onerror = () => reject(new Error("Network error during upload."));
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -152,7 +223,7 @@ function send<T>(
       reject(new UploadRefused(message, xhr.status, detail));
     };
 
-    xhr.send(file);
+    xhr.send(body);
   });
 }
 
@@ -167,11 +238,11 @@ function sentence(text: string): string {
   return /[.!?…]$/.test(capped) ? capped : `${capped}.`;
 }
 
-/** File types the uploader accepts. Mirrors functions/src/lib/bundle.ts. */
+/** File types the uploader accepts on their own. Mirrors functions/src/lib/bundle.ts. */
 export function isUploadable(file: File): boolean {
   return /\.(html?|md|markdown|zip)$/i.test(file.name);
 }
 
 /** A human description of what can be uploaded, for the dropzone. */
 export const UPLOAD_HINT =
-  "A self-contained .html file, a .md file, or a .zip bundle";
+  "A page (.html or .md), a .zip, or a folder with a page and its files";

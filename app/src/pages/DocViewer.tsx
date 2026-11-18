@@ -43,6 +43,7 @@ import { useLiveSync } from "../viewer/useLiveSync";
 import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
 import { useVersionDrop } from "../viewer/useVersionDrop";
+import { baseFilesOf, combine, type Pick } from "../bundleInput";
 import { contentBase, readingSandboxed, readsDraft, type FrameMode } from "../viewer/frameMode";
 
 import { EditToolbar } from "../wysiwyg/EditToolbar";
@@ -160,7 +161,7 @@ export function DocViewer() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   // A file dropped onto the document, waiting in the upload dialog.
-  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [droppedPick, setDroppedPick] = useState<Pick | null>(null);
   const currentLiveEpoch = doc.meta?.liveEpoch ?? doc.publicDoc?.liveEpoch ?? "initial";
   const { origin: editingOrigin, error: editOpenError, setEditing: setWantsEdit, reloadEditing } = useEditSession(docId, doc.currentVersion);
   const wantsEdit = editingOrigin !== null;
@@ -716,16 +717,17 @@ export function DocViewer() {
   // A file dropped onto the document opens the upload dialog with it, for
   // whoever may upload, while reading. Never while editing, where a drop
   // belongs to the editor, nor while presenting (SPEC §2).
-  const openUpload = useCallback((file: File | null) => {
+  const openUpload = useCallback((pick: Pick | null) => {
     if (!offersUpload) return;
-    setDroppedFile(file);
+    setDroppedPick(pick);
     setDialog("upload-version");
   }, [offersUpload]);
   const versionDrop = useVersionDrop({
     enabled: offersUpload && mode.kind === "reading" && !presenting && dialog === null,
     doc: frame.doc,
     epoch: frame.epoch,
-    onFile: openUpload,
+    // Everything dropped at once is one upload: a folder, or files together.
+    onDrop: (picks) => void picks.then((list) => { if (list.length > 0) openUpload(combine(list)); }),
   });
 
   const editorMounted = useRef(true);
@@ -1259,8 +1261,8 @@ export function DocViewer() {
             {versionDrop.over ? (
               <div className="frame-drop">
                 <Icon name="upload" size={28} />
-                <strong>Drop to publish it as a new version</strong>
-                <span className="caption">You can check it before it is published.</span>
+                <strong>Drop to publish a new version</strong>
+                <span className="caption">A page, a folder, or the files to replace. You’ll see what changes before anything is published.</span>
               </div>
             ) : null}
             <SelectionFab
@@ -1431,7 +1433,8 @@ export function DocViewer() {
           trusted={trust.trusted}
           draftBy={doc.meta.draft?.updatedByEmail ?? null}
           editing={presence.peers.filter((p) => p.mode === "edit").map((p) => p.name || p.email)}
-          initialFile={droppedFile}
+          initialPick={droppedPick}
+          base={doc.version && doc.version.versionId === headVersion ? baseFilesOf(doc.version) : undefined}
           onClose={() => setDialog(null)}
           onPublished={(result) => {
             setDialog(null);

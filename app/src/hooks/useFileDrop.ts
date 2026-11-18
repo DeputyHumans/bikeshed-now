@@ -2,6 +2,7 @@
 // Dropping a file onto the workspace uploads it (SPEC §2, §11).
 
 import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
+import { captureDrop, type Pick } from "../bundleInput";
 
 /**
  * Why a counter rather than a boolean.
@@ -33,7 +34,12 @@ function carriesFiles(e: DragEvent): boolean {
 }
 
 export function useFileDrop(
-  onFiles: (files: File[]) => void,
+  /**
+   * The files dropped, and each dropped item read as a pick: a file, or a
+   * folder with everything in it. The items are taken from the event at once,
+   * as a browser allows only then; the folders are read after.
+   */
+  onFiles: (files: File[], picks: Promise<Pick[]>) => void,
   enabled = true,
 ): FileDrop {
   const [over, setOver] = useState(false);
@@ -81,7 +87,7 @@ export function useFileDrop(
       depth.current = 0;
       setOver(false);
       const files = Array.from(e.dataTransfer?.files ?? []);
-      if (files.length > 0) onFiles(files);
+      if (files.length > 0) onFiles(files, captureDrop(e.dataTransfer ?? null));
     },
     [enabled, onFiles],
   );

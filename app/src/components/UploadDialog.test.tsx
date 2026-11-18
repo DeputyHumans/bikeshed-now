@@ -8,6 +8,7 @@ import { UploadDialog } from "./UploadDialog";
 import { ToastProvider } from "./Toast";
 import { MARKING_OFF } from "../export/labels";
 import type { UploadOptions, UploadResult } from "../upload";
+import type { Plan } from "../bundleInput";
 
 /**
  * The dialog's own XHR-based client never runs in jsdom — this is about what
@@ -18,7 +19,7 @@ import type { UploadOptions, UploadResult } from "../upload";
  * assertion on `opts.title` below is a checked one rather than a cast.
  */
 const { uploadDoc } = vi.hoisted(() => ({
-  uploadDoc: vi.fn(async (_file: File, _opts: UploadOptions): Promise<UploadResult> => ({
+  uploadDoc: vi.fn(async (_plan: Plan, _opts: UploadOptions): Promise<UploadResult> => ({
     docId: "d1",
     versionId: "v1",
     title: "Quarterly report",
@@ -30,7 +31,7 @@ const { uploadDoc } = vi.hoisted(() => ({
 
 vi.mock("../upload", async () => {
   const actual = await vi.importActual<typeof import("../upload")>("../upload");
-  return { ...actual, uploadDoc };
+  return { ...actual, publishNew: uploadDoc };
 });
 
 // Not the subject here, and logging for real would need the measurement id
@@ -149,7 +150,7 @@ describe("the file picker by keyboard", () => {
     const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
     const click = vi.spyOn(input, "click");
     expect(input.tabIndex).toBe(-1);
-    fireEvent.click(screen.getByRole("button", { name: "Choose a file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose files" }));
     expect(click).toHaveBeenCalledTimes(1);
   });
 });
@@ -171,5 +172,34 @@ describe("UploadDialog's arriving account default", () => {
     clickUpload();
     await waitFor(() => expect(uploadDoc).toHaveBeenCalled());
     expect(uploadDoc.mock.calls[0][1].marking).toEqual({ enabled: false, label: "Account label", footer: "Footer" });
+  });
+});
+
+describe("what UploadDialog says before anything is sent", () => {
+  const pickFiles = (...files: File[]) =>
+    fireEvent.change(screen.getByLabelText("Choose files"), { target: { files } });
+
+  it("sends a page and its files as one document, and says which page opens", async () => {
+    renderDialog();
+    pickFiles(new File(["<p>"], "report.html"), new File(["p{}"], "style.css"), new File(["png"], "chart.png"));
+    expect(document.querySelector(".upload-plan")!.textContent).toContain("Opens with report.html.");
+    clickUpload();
+    await waitFor(() => expect(uploadDoc).toHaveBeenCalled());
+    const plan = uploadDoc.mock.calls[0][0];
+    expect(plan.action).toBe("bundle");
+    expect(plan.action === "bundle" && plan.files.map((f) => f.path)).toEqual(["report.html", "style.css", "chart.png"]);
+  });
+
+  it("turns a picture away on its own, with what to choose instead", () => {
+    renderDialog();
+    pickFiles(new File(["png"], "chart.png"));
+    expect(screen.getByRole("alert").textContent).toContain("chart.png isn’t a page. To publish a page with its pictures, choose the folder they’re in, or pick the page and the pictures together.");
+    expect((screen.getByRole("button", { name: "Upload" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("asks which page should open when two could", () => {
+    renderDialog();
+    pickFiles(new File(["<p>"], "a.html"), new File(["<p>"], "b.html"));
+    expect(screen.getByRole("alert").textContent).toContain("2 pages could open first: a.html, b.html. Rename the one you want to open as index.html.");
   });
 });

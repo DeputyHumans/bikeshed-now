@@ -101,5 +101,7 @@ export function describeLeftOut(leftOut) {
 }
 
 export function megabytes(n) {
-  return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
+  const mb = (n / 1024 / 1024).toFixed(1);
+  return `${mb.endsWith(".0") ? mb.slice(0, -2) : mb} MB`;
 }

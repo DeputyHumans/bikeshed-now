@@ -1,28 +1,39 @@
 // SPDX-License-Identifier: Apache-2.0
-// The drop target and file picker every upload dialog shows (SPEC §2, §11).
+// The drop target and pickers every upload dialog shows: a page, a zip, a folder or several files (SPEC §2, §11).
 
 import { useRef, useState } from "react";
 import { Icon } from "./Icon";
-import { useToast } from "./Toast";
-import { UPLOAD_HINT, isUploadable } from "../upload";
+import { captureDrop, combine, formatBytes, pickFromInput, type Pick } from "../bundleInput";
+
+/** Whether this browser can choose a folder. Touch devices pick several files instead. */
+function canChooseFolder(): boolean {
+  if (typeof document === "undefined") return false;
+  const coarse = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+  return !coarse && "webkitdirectory" in document.createElement("input");
+}
+
+/** "Q3 review — 24 files, 41.2 MB", or one file's name and size. */
+export function pickSummary(pick: Pick): { name: string; detail: string } {
+  const bytes = pick.files.reduce((n, f) => n + f.file.size, 0);
+  if (!pick.fromFolder && pick.files.length === 1) return { name: pick.files[0].file.name, detail: formatBytes(bytes) };
+  const count = `${pick.files.length.toLocaleString()} file${pick.files.length === 1 ? "" : "s"}`;
+  return { name: pick.folder ?? count, detail: pick.folder ? `${count}, ${formatBytes(bytes)}` : formatBytes(bytes) };
+}
 
 /**
- * One file, dropped or chosen. A file of a kind the server would refuse is
- * turned away here, where the person still has the dialog open, rather than
- * after its bytes have crossed the network.
+ * What a person brings, dropped or chosen, as one pick. Nothing is refused
+ * here: the dialog shows what publishing it would do, problems included, so a
+ * person sees why before anything has crossed the network.
  */
-export function FileDropzone({ file, onFile }: { file: File | null; onFile: (file: File) => void }) {
-  const toast = useToast();
+export function FileDropzone({ pick, onPick }: { pick: Pick | null; onPick: (pick: Pick) => void }) {
   const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const filesRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  const [folders] = useState(canChooseFolder);
+  const summary = pick ? pickSummary(pick) : null;
 
-  const accept = (next: File | null) => {
-    if (!next) return;
-    if (!isUploadable(next)) {
-      toast.error(`${UPLOAD_HINT}. That file is not one of those.`);
-      return;
-    }
-    onFile(next);
+  const chosen = (list: FileList | null) => {
+    if (list && list.length > 0) onPick(pickFromInput(list));
   };
 
   return (
@@ -37,33 +48,53 @@ export function FileDropzone({ file, onFile }: { file: File | null; onFile: (fil
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
-        accept(e.dataTransfer.files[0] ?? null);
+        void captureDrop(e.dataTransfer).then((picks) => {
+          if (picks.length > 0) onPick(combine(picks));
+        });
       }}
     >
       <Icon name="upload" size={28} />
-      {file ? (
+      {summary ? (
         <>
-          <strong>{file.name}</strong>
-          <span className="caption">{file.size < 1024 ? `${file.size} bytes` : `${Math.round(file.size / 1024)} KB`}</span>
+          <strong className="upload-pick-name">{summary.name}</strong>
+          <span className="caption">{summary.detail}</span>
         </>
       ) : (
         <>
-          <strong>Drop a file here</strong>
-          <span className="caption">{UPLOAD_HINT}</span>
+          <strong>Drop a page, a .zip or a folder here</strong>
+          <span className="caption">A page with its stylesheets, scripts, pictures and video, or several files at once.</span>
         </>
       )}
-      <button type="button" className="btn btn-sm" onClick={() => inputRef.current?.click()}>
-        {file ? "Choose another file" : "Choose a file"}
-      </button>
+      <div className="upload-pickers">
+        <button type="button" className="btn btn-sm" onClick={() => filesRef.current?.click()}>
+          {pick ? "Choose other files" : "Choose files"}
+        </button>
+        {folders ? (
+          <button type="button" className="btn btn-sm" onClick={() => folderRef.current?.click()}>
+            {pick ? "Choose another folder" : "Choose a folder"}
+          </button>
+        ) : null}
+      </div>
       <input
-        ref={inputRef}
+        ref={filesRef}
         type="file"
+        multiple
         tabIndex={-1}
-        aria-label="Choose a document file"
+        aria-label="Choose files"
         className="visually-hidden"
-        accept=".html,.htm,.md,.markdown,.zip"
-        onChange={(e) => accept(e.target.files?.[0] ?? null)}
+        onChange={(e) => { chosen(e.target.files); e.target.value = ""; }}
       />
+      {folders ? (
+        <input
+          ref={folderRef}
+          type="file"
+          tabIndex={-1}
+          aria-label="Choose a folder"
+          className="visually-hidden"
+          {...{ webkitdirectory: "", directory: "" }}
+          onChange={(e) => { chosen(e.target.files); e.target.value = ""; }}
+        />
+      ) : null}
     </div>
   );
 }

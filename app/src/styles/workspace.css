@@ -408,6 +408,31 @@
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
 }
+/* The pickers: files, and a folder where the device can choose one. */
+.upload-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2);
+}
+/* A long folder or file name wraps rather than widening the dialog. */
+.upload-pick-name { overflow-wrap: anywhere; }
+/* What publishing a pick would do, shown before it is sent (SPEC §2). */
+.upload-plan {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.upload-plan p { margin: 0; }
+.upload-plan code { overflow-wrap: anywhere; }
+.upload-list {
+  display: grid;
+  gap: var(--s-1);
+  margin: 0;
+  padding-inline-start: var(--s-4);
+}
+.upload-plan .banner .upload-list { margin-top: var(--s-1); }
+.upload-status .caption { margin: var(--s-1) 0 0; }
 /* What an upload of a new version does besides publish it (SPEC §6a). */
 .upload-notes {
   display: grid;

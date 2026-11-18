@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-// Browser upload, with real progress and a marking default (SPEC §2, §11, §20).
+// Browser upload of a page, a zip or a folder, with real progress and a marking default (SPEC §2, §11, §20).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { FileDropzone } from "./FileDropzone";
+import { PlanSummary } from "./PlanSummary";
+import { UploadProgress } from "./UploadProgress";
 import { useToast } from "./Toast";
-import { uploadDoc, type UploadResult } from "../upload";
+import { useUploadRun } from "../hooks/useUploadRun";
+import { publishNew, type UploadResult } from "../upload";
+import { planNew, type Pick } from "../bundleInput";
 import { logEvent } from "../analytics";
 import { MARKING_OFF } from "../export/labels";
 import type { Marking } from "../types";
@@ -23,7 +27,9 @@ export function UploadDialog({
   onUploaded: (result: UploadResult) => void;
 }) {
   const toast = useToast();
-  const [file, setFile] = useState<File | null>(null);
+  const [pick, setPick] = useState<Pick | null>(null);
+  const plan = useMemo(() => (pick ? planNew(pick) : null), [pick]);
+  const upload = useUploadRun();
   const [title, setTitle] = useState("");
   const [id, setId] = useState("");
   const [marking, setMarking] = useState<Marking>(accountDefaultMarking ?? MARKING_OFF);
@@ -31,19 +37,19 @@ export function UploadDialog({
   useEffect(() => {
     if (!markingChosen.current) setMarking(accountDefaultMarking ?? MARKING_OFF);
   }, [accountDefaultMarking]);
-  const [progress, setProgress] = useState<number | null>(null);
+  const ready = Boolean(plan && plan.problems.length === 0);
 
-  const upload = async () => {
-    if (!file) return;
-    setProgress(0);
+  const send = async () => {
+    if (!plan || !ready) return;
     try {
-      const result = await uploadDoc(file, {
+      const result = await upload.run((control) => publishNew(plan, {
         title: title.trim() || undefined,
         id: id.trim() || undefined,
         folderId,
         marking,
-        onProgress: setProgress,
-      });
+        ...control,
+      }));
+      if (!result) return;
       logEvent({
         name: "doc_publish",
         params: { source: "upload", format: result.format },
@@ -51,39 +57,46 @@ export function UploadDialog({
       onUploaded(result);
     } catch (e) {
       toast.error((e as Error).message);
-      setProgress(null);
     }
+  };
+
+  // Closing while the bytes are on their way stops them, and nothing is made.
+  const close = () => {
+    upload.stop();
+    onClose();
   };
 
   return (
     <Modal
       title="Upload a document"
-      onClose={onClose}
+      onClose={close}
       footer={
         <>
           <span className="spacer" />
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
+          {/* Publishing cannot be taken back, so there is nothing to cancel;
+              the dialog's own close button stays, and the caption says so. */}
+          {upload.phase.kind === "publishing" ? null : (
+            <button type="button" className="btn" onClick={close}>
+              {upload.phase.kind === "sending" ? "Stop" : "Cancel"}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!file || progress != null}
-            aria-busy={progress != null}
-            onClick={() => void upload()}
+            disabled={!ready || upload.busy}
+            aria-busy={upload.busy}
+            onClick={() => void send()}
           >
-            {progress != null ? "Uploading…" : "Upload"}
+            {upload.busy ? "Uploading…" : "Upload"}
           </button>
         </>
       }
     >
-      <FileDropzone file={file} onFile={setFile} />
+      <FileDropzone pick={pick} onPick={setPick} />
 
-      {progress != null ? (
-        <div className="upload-progress" style={{ marginTop: "var(--s-3)" }}>
-          <div className="upload-progress-bar" style={{ width: `${progress * 100}%` }} />
-        </div>
-      ) : null}
+      {plan && pick ? <PlanSummary plan={plan} pick={pick} version={false} /> : null}
+
+      <UploadProgress phase={upload.phase} bytes={plan?.bytes ?? 0} />
 
       <div className="field" style={{ marginTop: "var(--s-3)" }}>
         <label className="field-label" htmlFor="upload-title">
@@ -94,7 +107,7 @@ export function UploadDialog({
           className="input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="From the document's <title>, else the file name"
+          placeholder="From the page's <title>, else the file or folder name"
         />
       </div>
 

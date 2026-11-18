@@ -21,7 +21,11 @@ function drag(type: string, files: File[] = [], types = files.length ? ["Files"]
 }
 
 function Harness(props: { enabled: boolean; doc: Document | null; onFile: (f: File) => void }) {
-  const drop = useVersionDrop({ ...props, epoch: 0 });
+  // What was dropped arrives as picks; the first file of the first is enough here.
+  const drop = useVersionDrop({
+    enabled: props.enabled, doc: props.doc, epoch: 0,
+    onDrop: (picks) => void picks.then((list) => { const f = list[0]?.files[0]?.file; if (f) props.onFile(f); }),
+  });
   return (
     <div data-testid="stage" {...drop.handlers}>
       {drop.over ? <div data-testid="target">Drop to publish it as a new version</div> : null}
@@ -34,7 +38,7 @@ const FILE = new File(["<p>Hi</p>"], "deck.html", { type: "text/html" });
 afterEach(() => vi.useRealTimers());
 
 describe("useVersionDrop", () => {
-  it("raises the target in the page when a file is dragged into the document, and takes the drop there", () => {
+  it("raises the target in the page when a file is dragged into the document, and takes the drop there", async () => {
     const doc = frameDocument();
     const onFile = vi.fn();
     const view = render(<Harness enabled doc={doc} onFile={onFile} />);
@@ -46,11 +50,11 @@ describe("useVersionDrop", () => {
 
     fireEvent.dragEnter(target, { dataTransfer: { types: ["Files"], files: [FILE] } });
     fireEvent.drop(target, { dataTransfer: { types: ["Files"], files: [FILE] } });
-    expect(onFile).toHaveBeenCalledWith(FILE);
+    await vi.waitFor(() => expect(onFile).toHaveBeenCalledWith(FILE));
     expect(view.queryByTestId("target")).toBeNull();
   });
 
-  it("takes a drop that lands in the document before the target is up, so the browser cannot open the file", () => {
+  it("takes a drop that lands in the document before the target is up, so the browser cannot open the file", async () => {
     const doc = frameDocument();
     const onFile = vi.fn();
     render(<Harness enabled doc={doc} onFile={onFile} />);
@@ -58,7 +62,7 @@ describe("useVersionDrop", () => {
     const dropped = drag("drop", [FILE]);
     act(() => void doc.body.dispatchEvent(dropped));
     expect(dropped.defaultPrevented).toBe(true);
-    expect(onFile).toHaveBeenCalledWith(FILE);
+    await vi.waitFor(() => expect(onFile).toHaveBeenCalledWith(FILE));
   });
 
   it("lets the target go when the drag stops moving over the document", () => {

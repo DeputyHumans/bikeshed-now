@@ -38,7 +38,9 @@ import {
 } from "../workspace/recent";
 import { useIsSingleColumn } from "../hooks/useMediaQuery";
 import { useFileDrop } from "../hooks/useFileDrop";
-import { UPLOAD_HINT, isUploadable, uploadDoc } from "../upload";
+import { publishNew } from "../upload";
+import { planNew, type Pick } from "../bundleInput";
+import { pickSummary } from "../components/FileDropzone";
 import { logEvent } from "../analytics";
 
 import { Breadcrumb } from "../components/Breadcrumb";
@@ -224,12 +226,12 @@ function FolderCard({
 }: {
   folder: FolderMeta;
   menu: MenuEntry[];
-  onFiles: (files: File[], folderId: string) => void;
+  onFiles: (picks: Promise<Pick[]>, folderId: string) => void;
   /** The owner's way to the date behind the chip; absent for anyone else. */
   onShare?: () => void;
 }) {
   const drop = useFileDrop(
-    useCallback((files: File[]) => onFiles(files, folder.folderId), [onFiles, folder.folderId]),
+    useCallback((_files: File[], picks: Promise<Pick[]>) => onFiles(picks, folder.folderId), [onFiles, folder.folderId]),
   );
   return (
     <div className="doc-card" data-drop-over={drop.over || undefined} {...drop.handlers}>
@@ -398,22 +400,26 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
    * and the progress figure has to mean something. The list is live, so each
    * document appears as it lands.
    */
+  /**
+   * Each item dropped on the workspace is a document of its own, as a file
+   * always was: a page, a zip, or now a folder with a page and its files. A
+   * picture on its own is not a page, and is turned away with what to drop
+   * instead; so is anything the deployment would refuse, before it is sent.
+   */
   const uploadFiles = useCallback(
-    async (files: File[], target: string | null) => {
-      const usable = files.filter(isUploadable);
-      const rejected = files.length - usable.length;
-      if (rejected > 0) {
-        toast.error(
-          `${UPLOAD_HINT}. ${rejected === files.length ? "That is not one of those." : `${rejected} of those are not.`}`,
-        );
+    async (dropped: Promise<Pick[]>, target: string | null) => {
+      const planned = (await dropped).map((pick) => ({ pick, plan: planNew(pick) }));
+      for (const { pick, plan } of planned) {
+        if (plan.problems.length > 0) toast.error(`${pickSummary(pick).name}: ${plan.problems[0]}`);
       }
+      const usable = planned.filter(({ plan }) => plan.problems.length === 0);
       if (usable.length === 0) return;
 
       let done = 0;
       setDropping({ done: 0, total: usable.length, fraction: 0 });
-      for (const file of usable) {
+      for (const { pick, plan } of usable) {
         try {
-          const result = await uploadDoc(file, {
+          const result = await publishNew(plan, {
             folderId: target,
             marking: defaultMarkingRef.current,
             onProgress: (fraction) =>
@@ -427,7 +433,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
             onSelect: () => navigate(`/d/${result.docId}`),
           });
         } catch (e) {
-          toast.error(`${file.name}: ${(e as Error).message}`);
+          toast.error(`${pickSummary(pick).name}: ${(e as Error).message}`);
         }
         done += 1;
         setDropping({ done, total: usable.length, fraction: 0 });
@@ -438,7 +444,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
   );
 
   const workspaceDrop = useFileDrop(
-    useCallback((files: File[]) => void uploadFiles(files, folderId), [uploadFiles, folderId]),
+    useCallback((_files: File[], picks: Promise<Pick[]>) => void uploadFiles(picks, folderId), [uploadFiles, folderId]),
     dropping === null,
   );
 

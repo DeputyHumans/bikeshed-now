@@ -54,6 +54,7 @@ export interface DocFrame {
     key: string;
     src: string;
     sandbox?: string;
+    allow: string;
     onLoad: () => void;
   } | null;
   /** Force a reload, even when the URL is unchanged. */
@@ -207,6 +208,8 @@ export function useDocFrame(options: {
           key,
           src,
           sandbox: frameSandbox(mode),
+          // A video's own fullscreen button needs the frame's leave (SPEC §24).
+          allow: "fullscreen",
           onLoad,
         },
     reload,

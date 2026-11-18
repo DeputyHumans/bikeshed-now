@@ -62,7 +62,7 @@ test("a folder that would be refused is refused before anything is sent", () => 
   const sized = (rel, size = 1) => ({ rel, size });
   assert.match(folderProblems([sized("img/a.png")])[0], /no page to open: add index.html/);
   assert.match(folderProblems([sized("a.html"), sized("b.html")])[0], /2 pages could open first \(a.html, b.html\)/);
-  assert.match(folderProblems([sized("index.html", 26 * 1024 * 1024)])[0], /comes to 26.0 MB; a document can be up to 25.0 MB/);
+  assert.match(folderProblems([sized("index.html", 26 * 1024 * 1024)])[0], /comes to 26 MB; a document can be up to 25 MB/);
   assert.match(folderProblems([sized("index.html"), sized(`${"a".repeat(300)}.png`)])[0], /longer than 256 bytes/);
 });
 
@@ -121,7 +121,7 @@ test("update <id> <folder> makes the folder the whole next version", async () =>
     assert.equal(url.searchParams.get("update"), "deck");
     assert.equal(url.searchParams.get("baseVersion"), "v1");
     assert.equal(url.searchParams.has("merge"), false);
-    assert.match(r.stdout, /published v2 — 1 file\(s\) changed, 1 unchanged, 3 left out/);
+    assert.match(r.stdout, /published v2 — 1 file\(s\) changed, 1 unchanged, 3 removed/);
   } finally { f.done(); }
 });
 

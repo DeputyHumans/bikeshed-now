@@ -42,6 +42,8 @@ vi.mock("../firestore", () => ({
   listMyTeams: () => () => {},
   listMyReading: (uid: string, max: number) => reading(uid, max),
   watchUser: () => () => {},
+  // The new-version dialog reads what the current version holds.
+  getVersion: async () => ({ versionId: "v4", entry: "index.html", format: "html", files: ["index.html"] }),
 }));
 const { trashItem, restoreItem, inheritedFolderAccess } = vi.hoisted(() => ({
   trashItem: vi.fn(async () => ({ ok: true, batch: "b1" })),
@@ -58,7 +60,7 @@ vi.mock("../folders", () => ({
   setFolderAccess: vi.fn(),
 }));
 vi.mock("../forks", () => ({ forkDoc }));
-vi.mock("../upload", async () => ({ ...await vi.importActual<typeof import("../upload")>("../upload"), uploadDoc }));
+vi.mock("../upload", async () => ({ ...await vi.importActual<typeof import("../upload")>("../upload"), publishNew: uploadDoc }));
 vi.mock("../analytics", () => ({ logEvent: vi.fn() }));
 const { backfill } = vi.hoisted(() => ({ backfill: vi.fn() }));
 vi.mock("../hooks/useCoverBackfill", () => ({ useCoverBackfill: backfill }));
@@ -399,11 +401,25 @@ describe("dropping a new document", () => {
     const file = new File(["<title>Quarterly review</title>"], "q3.html", { type: "text/html" });
     fireEvent.drop(container.querySelector(".workspace-main")!, { dataTransfer: { types: ["Files"], files: [file] } });
     await waitFor(() => expect(uploadDoc).toHaveBeenCalledTimes(1));
-    const [actual, options] = uploadDoc.mock.calls[0] as unknown as [File, { title?: string; id?: string; folderId?: string }];
-    expect(actual).toBe(file);
+    const [plan, options] = uploadDoc.mock.calls[0] as unknown as [{ action: string; file: File }, { title?: string; id?: string; folderId?: string }];
+    expect(plan).toMatchObject({ action: "page", file });
     expect(options.title).toBeUndefined();
     expect(options.id).toBeUndefined();
     expect(options.folderId).toBeNull();
+  });
+});
+
+describe("dropping things that are not one document", () => {
+  it("turns away a picture on its own, says what to drop instead, and sends nothing", async () => {
+    const { container } = mount();
+    act(() => { listeners.docs!([]); listeners.folders!([]); });
+    const picture = new File(["png"], "chart.png", { type: "image/png" });
+    const page = new File(["<title>Q</title>"], "q.html", { type: "text/html" });
+    fireEvent.drop(container.querySelector(".workspace-main")!, { dataTransfer: { types: ["Files"], files: [picture, page] } });
+    await waitFor(() => expect(screen.getByText(/chart\.png: chart\.png isn’t a page/)).toBeTruthy());
+    // The page beside it is still its own document, as dropped files always were.
+    await waitFor(() => expect(uploadDoc).toHaveBeenCalledTimes(1));
+    expect((uploadDoc.mock.calls[0] as unknown as [{ file: File }])[0].file).toBe(page);
   });
 });
 
@@ -634,7 +650,7 @@ describe("the list layout", () => {
     const file = new File(["<title>Q4</title>"], "q4.html", { type: "text/html" });
     fireEvent.drop(rows(container)[0], { dataTransfer: { types: ["Files"], files: [file] } });
     await waitFor(() => expect(uploadDoc).toHaveBeenCalledTimes(1));
-    const [, options] = uploadDoc.mock.calls[0] as unknown as [File, { folderId?: string | null }];
+    const [, options] = uploadDoc.mock.calls[0] as unknown as [unknown, { folderId?: string | null }];
     expect(options.folderId).toBe("plans");
   });
 

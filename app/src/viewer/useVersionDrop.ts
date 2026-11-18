@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFileDrop, type FileDrop } from "../hooks/useFileDrop";
+import { captureDrop, type Pick } from "../bundleInput";
 
 /**
  * The document is in a same-origin frame, and a drag over a frame belongs to
@@ -32,13 +33,14 @@ export function useVersionDrop(options: {
   enabled: boolean;
   doc: Document | null;
   epoch: number;
-  onFile: (file: File) => void;
+  /** What was dropped: each item a file, or a folder with everything in it. */
+  onDrop: (picks: Promise<Pick[]>) => void;
 }): FileDrop {
-  const { enabled, doc, epoch, onFile } = options;
+  const { enabled, doc, epoch, onDrop } = options;
   const [raised, setRaised] = useState(false);
   const lapse = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latest = useRef(onFile);
-  latest.current = onFile;
+  const latest = useRef(onDrop);
+  latest.current = onDrop;
 
   const lower = useCallback(() => {
     if (lapse.current) clearTimeout(lapse.current);
@@ -46,9 +48,9 @@ export function useVersionDrop(options: {
     setRaised(false);
   }, []);
   const take = useCallback(
-    (files: File[]) => {
+    (_files: File[], picks: Promise<Pick[]>) => {
       lower();
-      if (files[0]) latest.current(files[0]);
+      latest.current(picks);
     },
     [lower],
   );
@@ -72,8 +74,7 @@ export function useVersionDrop(options: {
       if (!carriesFiles(e)) return;
       e.preventDefault();
       lower();
-      const file = e.dataTransfer?.files?.[0];
-      if (file) latest.current(file);
+      if ((e.dataTransfer?.files?.length ?? 0) > 0) latest.current(captureDrop(e.dataTransfer ?? null));
     };
     doc.addEventListener("dragenter", raise);
     doc.addEventListener("dragover", raise);

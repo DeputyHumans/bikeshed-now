@@ -18,6 +18,7 @@ import { currentSummary, type SortKey } from "../workspace/tree";
 import type { Layout } from "../workspace/prefs";
 import type { RecentRow } from "../workspace/recent";
 import type { DocMeta, FolderMeta } from "../types";
+import type { Pick } from "../bundleInput";
 
 /** What a row says when the folder a document is filed in is not this account's to open. */
 export const UNREADABLE_FOLDER = "A folder you can't open";
@@ -249,13 +250,13 @@ export function FolderRow({
 }: {
   folder: FolderMeta;
   menu: MenuEntry[];
-  onFiles: (files: File[], folderId: string) => void;
+  onFiles: (picks: Promise<Pick[]>, folderId: string) => void;
   onShare?: () => void;
   location?: string;
   owner: string;
 }) {
   const drop = useFileDrop(
-    useCallback((files: File[]) => onFiles(files, folder.folderId), [onFiles, folder.folderId]),
+    useCallback((_files: File[], picks: Promise<Pick[]>) => onFiles(picks, folder.folderId), [onFiles, folder.folderId]),
   );
   const people = `${folder.members.length} ${folder.members.length === 1 ? "person" : "people"}`;
   return (
