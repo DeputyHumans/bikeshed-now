@@ -23,7 +23,7 @@ Without ids, every anchor in the document scopes to `<body>`. The quote is then 
 
 This is the single highest-value thing you can do to a document, and it costs one attribute per section. Markdown gets it for free: the renderer wraps each heading and its content in `<section id="<slug>">` using GitHub-style slugs.
 
-### 2. Keep it self-contained
+### 2. A page and its files
 
 **No external URLs.** No CDN fonts, no hosted stylesheets, no remote images, no analytics snippet. Three reasons, in order of how much they will cost you:
 
@@ -31,7 +31,9 @@ This is the single highest-value thing you can do to a document, and it costs on
 - **It has to render offline** — in an air-gapped deployment, and inside the print iframe used for PDF export.
 - **An untrusted document renders with scripts disabled**, so anything that depends on fetching at runtime will simply not be there.
 
-Inline your CSS. Inline your SVG. Base64 a raster image only if you truly need one — and prefer SVG, which scales, prints and recolours.
+**Put what the page uses beside it,** and reference each file by relative path: `style.css`, `app.js`, `fonts/inter.woff2`, `img/chart.png`, `clip.mp4`. A path starting with `/` resolves against the deployment, not your document. Publish the folder, or a zip of it (SPEC §24). Each file is stored once, so a revision that changes one picture sends and stores that picture alone, and a member's browser keeps pictures, stylesheets and fonts between visits. Video and audio play from a link that answers the ranges a player asks for, so `<video controls src="clip.mp4">` seeks, in Safari too.
+
+Inline only what is a few lines long, an icon you style with CSS say. A base64 `data:` URI still works, but it makes the page larger, every revision resends it, and an agent reading the page reads it too.
 
 ---
 
@@ -129,11 +131,12 @@ Flags override the manifest, so one bundle can be published under several titles
 | | |
 |---|---|
 | Maximum bundle | 25 MB uncompressed, 2,000 files |
-| Accepted | `.html`, `.htm`, `.md`, `.markdown`, `.zip` |
+| Longest path | 256 bytes of UTF-8 |
+| Accepted | `.html`, `.htm`, `.md`, `.markdown`, `.zip`, or a folder: the browser and the CLI send one as a zip |
 | Entry resolution | root `index.html`, then root `index.md`, then a lone `.html`, then a nested `index.html`, then a lone `.md`, then a nested `index.md` |
 | Rejected | absolute paths, `..`, backslashes, NUL in any archive path |
 | Rejected | an archive entry declaring 0 bytes while carrying more than 64 compressed |
-| Ignored | `__MACOSX/`, `.DS_Store`, `Thumbs.db` |
+| Left out | any file or folder whose name starts with a dot (`.env`, `.git/`, `.DS_Store`), `__MACOSX/`, `node_modules/`, `Thumbs.db`, in a zip and a folder alike; the browser and the CLI say what they left out, and the CLI never follows a symbolic link |
 | Stripped | a single shared top-level directory, so `deck/index.html` works |
 
 A zip is sniffed by magic bytes rather than trusted by extension, and the size cap is applied to the **declared** uncompressed size from the central directory before anything is decompressed.

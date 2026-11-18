@@ -101,10 +101,10 @@ If your harness does register servers from a config file, most expand `${VAR}` i
 | `list_versions` | Published history, paginated newest first, with pinned URLs |
 | `list_documents` | Your documents. Metadata only, with where each is filed (`filedIn`) |
 | `get_document` | Metadata, the address and the content: an HTML document as a **Markdown reading** made for agents, or `as: "source"` for the HTML you revise; a Markdown one as its source. In pages of 200,000 characters (see [Reading a document](#reading-a-document)) |
-| `publish_document` | Create a document from content you supply, optionally at an `id` you choose (`idTaken` says if it was taken). Returns where it is filed and who can read it there (`filedIn`, `access`) |
+| `publish_document` | Create a document from content you supply, with its stylesheets, scripts and pictures in `files` beside it, optionally at an `id` you choose (`idTaken` says if it was taken). Returns where it is filed and who can read it there (`filedIn`, `access`) |
 | `fork_document` | Your own copy of a document you can read, which remembers what it was forked from |
 | `get_lineage` | What a document was forked from, and whether that has changed since; for its owner, its forks |
-| `update_document` | Publish a new version of one that exists. Pass the `baseVersion` you revised: if somebody published since, it is refused instead of replacing their work. Refused while somebody has it open in the editor |
+| `update_document` | Publish a new version of one that exists, from `content` (the page), `files` (beside it), or both; every file you do not send is kept. Pass the `baseVersion` you revised: if somebody published since, it is refused instead of replacing their work. Refused while somebody has it open in the editor |
 | `commit_draft` | Publish a document's draft as its next version, as "Save as new version" does |
 | `suggest_edit` | Propose new text for one passage, for a person to accept or reject |
 | `revise_suggestion` | Change your own suggestion before it is decided; what it said before is kept |
@@ -140,8 +140,8 @@ bikeshed login [--paste] [--no-browser]
 bikeshed logout
 bikeshed list [--json]
 bikeshed versions <id|link> [--limit 20] [--cursor …] [--all] [--json]
-bikeshed publish <file> [--title …] [--id …] [--folder …] [--watch]
-bikeshed update <id> <file> [--base …] [--watch]
+bikeshed publish <file|folder> [--title …] [--id …] [--folder …] [--watch]
+bikeshed update <id> <file|folder|files…> [--base …] [--watch]
 bikeshed fork <id> [--version …] [--folder …] [--title …]
 bikeshed lineage <id> [--json]
 bikeshed get <id> [--source] [--version …]
@@ -364,14 +364,18 @@ A `…` in a path is a folder you cannot see: access flows downward, so a grant 
 |---|---|---|
 | Markdown, `.md` or `.markdown` | `bikeshed publish`, or `publish_document` (its default) | One HTML page rendered on the server. `get_document` returns your Markdown |
 | HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte. `get_document` reads it to an agent as Markdown, and `as: "source"` returns the file |
-| A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
+| A page and its files: stylesheets, scripts, fonts, pictures, video | `publish_document` with `files` beside `content`; or a folder or a `.zip` through `bikeshed publish <folder>` | The page, with every file at the relative path it is referenced by. `index.html` or `index.md` opens, or the only page there is. One enclosing folder is fine |
 
-Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB uncompressed and at most 2,000 files. Markdown is read as UTF-8.
+Anything else is refused. A document may be 25 MB and 2,000 files, each path at most 256 bytes. `files` may come to 10 MB: text types (CSS, JavaScript, SVG, JSON, CSV, captions, HTML, Markdown) as text, binary ones (pictures, fonts, PDF, audio, video) as base64 without a `data:` prefix. Markdown is read as UTF-8. A folder or a zip leaves out every name starting with a dot (`.env`, `.git/`), node_modules, `__MACOSX/` and `Thumbs.db`, and the CLI says what it left out.
 
-**An update keeps the document's format, and what it replaces depends on what you send.**
+**An update keeps the document's format, and what it replaces depends on what you send. Send only what changed.**
 
-- **One `.md` or `.html` file**, through `bikeshed update` or `update_document`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text and its images and stylesheets stay where they were.
-- **A `.zip`**, through `bikeshed update`, replaces the whole bundle. A file the archive leaves out is gone from the new version. This takes somebody the document is shared with as an editor, not open editing.
+- **Only `files`**, through `update_document`, replaces each file at its path or adds it, and keeps everything else, the page included. Changing a document's files takes being one of its editors, not open editing.
+- **Several files, or one that is not a page**, through `bikeshed update <id> <files…>`, each replace the file of the same name, wherever it is, or are added; a path such as `img/chart.png` names exactly one. A name two files share is refused with both paths. The output says where each file went.
+- **One `.md` or `.html` file**, through `bikeshed update` or `update_document` with `content`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text and its images and stylesheets stay where they were.
+- **A folder or a `.zip`**, through `bikeshed update`, replaces the whole bundle. A file it leaves out is gone from the new version. This takes somebody the document is shared with as an editor, not open editing.
+
+Each answer counts the files `changed`, `unchanged` and `removed` against the version it replaced.
 
 An update cannot switch a document between Markdown and HTML. Publish a new document for that.
 
@@ -412,11 +416,13 @@ Comments anchor to the nearest ancestor with an `id`. Without one, every highlig
 
 **Markdown gets this for free**: every heading is wrapped in a `<section>` with a slug derived from its text. If you are writing Markdown, just use headings.
 
-### Keep it self-contained
+### A page and its files
 
-One file, no external URLs. Images, stylesheets and fonts from another site do load, because nothing blocks them. But each one tells that site when the document is read, breaks when the site moves, and is missing from a download. A document outlives the conversation that produced it: somebody will download it, print it, or open it in three years. Every file of a multi-file bundle is also a separate authenticated request, so a fifty-asset deck costs fifty round trips per reader and an inlined one costs one.
+No external URLs. Images, stylesheets and fonts from another site do load, because nothing blocks them. But each one tells that site when the document is read, breaks when the site moves, and is missing from a download. A document outlives the conversation that produced it: somebody will download it, print it, or open it in three years.
 
-Inline your SVG. Inline your CSS. Put images in `data:` URIs and use system fonts, or embed a font as a `data:` URI. If you genuinely need several files, send a `.zip` with `index.html` at its root and refer to its files by relative path: a path starting with `/` resolves against the deployment, not your bundle.
+Put what the page uses beside it and refer to each file by relative path: `style.css`, `app.js`, `img/chart.png`, `clip.mp4`. A path starting with `/` resolves against the deployment, not your document. Each file is stored once, a reader's browser keeps pictures, stylesheets and fonts between visits, and a revision sends only the files that changed. Over MCP, send stylesheets, scripts and SVG in `files` as text, which costs what inlining them would; from a shell, publish the folder. A picture or a video on disk is not worth spelling out in base64: use the CLI. Video and audio play from a link that answers the ranges a player asks for, so `<video controls src="clip.mp4"></video>` seeks, in Safari too, and works in Markdown as raw HTML. A script in its own file is blocked until somebody trusts the document, as an inline one is.
+
+Inline only a few lines. A `data:` URI still works, but it makes the page larger, every revision resends it, and every agent that reads the page reads it too.
 
 ### Markdown is usually the right choice
 

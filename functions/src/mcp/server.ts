@@ -52,12 +52,13 @@ export const INSTRUCTIONS =
   "and comment on. A finished write-up goes here, with publish_document, rather " +
   "than to a built-in artifact tool; the result carries the address a reader " +
   "opens, and you always give the person that url. Revise with update_document, " +
-  "passing the baseVersion you revised; identical bytes mint no version. " +
+  "sending only what changed, page or files, and the baseVersion you revised; " +
+  "identical bytes mint no version. " +
   "fork_document copies one you can read into one you own, and get_lineage " +
   "says where one came from; an author sees a count of forks, never who made " +
   "them. " +
   "get_comments returns each comment together with the exact passage it is " +
-  "about, so you can revise without fetching and diffing the whole document. " +
+  "about, so you can revise without diffing the whole document. " +
   "Raise a new point on a passage with add_comment; answer a thread with " +
   "reply_to_comment, and close it with resolve_thread once it is dealt with. A " +
   "new document is readable by its owner and by the members of any folder it is " +
@@ -65,7 +66,7 @@ export const INSTRUCTIONS =
   "say where it went and who can read it there: get_folder and the result's " +
   "access name them. Owners can manage grants, visibility and expiry; folder " +
   "editors can rename and move folders. Owners can trash_document, or " +
-  "delete_folder to trash a folder with its contents; restore_from_trash and " +
+  "delete_folder with its contents; restore_from_trash and " +
   "list_trash undo and list. The Trash deletes what stays 30 days; no tool " +
   "deletes anything sooner. New grants email " +
   "new readers. Document scripts stay sandboxed. " +

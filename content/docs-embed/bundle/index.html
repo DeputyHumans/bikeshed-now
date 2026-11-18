@@ -768,12 +768,14 @@ footer p { margin: 0 0 6px; }
 <pre><code>&lt;iframe src=&quot;https://bikeshed.example/embed/q3-plan&quot;
         title=&quot;Q3 plan&quot;
         width=&quot;100%&quot; height=&quot;640&quot;
+        allow=&quot;fullscreen&quot;
         style=&quot;border: 0&quot;&gt;&lt;/iframe&gt;</code></pre>
 
   <ul class="ticks">
     <li>Use this site's address in place of <code>bikeshed.example</code>.</li>
     <li>It shows the latest version, and a new one reaches your page within five minutes. To keep one version, put it on the address: <code>/embed/q3-plan/v3</code>.</li>
     <li>Give the iframe a <code>title</code>, which is what a screen reader announces.</li>
+    <li><code>allow=&quot;fullscreen&quot;</code> lets a video in the document go full screen.</li>
     <li>Leave out <code>sandbox</code>. If your site needs it, use <code>sandbox=&quot;allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox&quot;</code>. With less, the document still shows, but its links stop opening and its readers stop being counted.</li>
   </ul>
 </div>

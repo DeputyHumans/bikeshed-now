@@ -2,11 +2,11 @@
 
 `docs/architecture/spec.md` says what the system does and is normative. This file says why it is shaped this way, and — more usefully — what it deliberately is not.
 
-The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty-four records of about thirty lines each.
+The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty-five records of about thirty lines each.
 
 ## The one-paragraph version
 
-A document is a series of immutable versions, each a list of files stored once in a private bucket. The only path those bytes take to a browser is one Cloud Function that authenticates the caller, checks an ACL, and streams. The browser renders them in a **same-origin** iframe, which is what makes highlight-anchored commenting possible at all: the parent app can drive annotation directly on `contentDocument` without injecting anything into the document. Everything else — versions, folders, teams, presence, provenance — exists to make that one arrangement safe and useful.
+A document is a series of immutable versions, each a list of files stored once in a private bucket. One Cloud Function decides who may read them: it authenticates the caller, checks an ACL, and streams — or, for video and audio, hands the reader a Storage link that lives ten minutes, because Storage answers the byte ranges a player asks for ([ADR 0036](adr/0036-a-pages-files-sit-beside-it.md)). The browser renders them in a **same-origin** iframe, which is what makes highlight-anchored commenting possible at all: the parent app can drive annotation directly on `contentDocument` without injecting anything into the document. Everything else — versions, folders, teams, presence, provenance — exists to make that one arrangement safe and useful.
 
 ## Five load-bearing decisions
 

@@ -49,7 +49,15 @@ bikeshed comment storage-migration "a single weekend" --body "Is the dual-write 
 
 Publishing identical bytes is a no-op: the bundle is hashed, and a matching hash mints no new version. So `update` is safe in a loop, in CI, or after a change you are not sure you made.
 
-A document of several files is a `.zip` with `index.html` or `index.md` at its root. `update` with a `.zip` replaces every file; `update` with one `.md` or `.html` replaces the entry and keeps the images and stylesheets beside it.
+A document of several files is a folder, or a `.zip`, with `index.html` or `index.md` at its root and every stylesheet, script, picture and video referenced from the page by relative path. `bikeshed publish ./deck` sends the folder as one zip. It leaves out dotfiles such as `.env` and `.git`, `node_modules` and `__MACOSX`, never follows a symbolic link, says on stderr what it left out, and refuses before sending anything over 25 MB or 2,000 files, a path over 256 bytes, or a folder with no page.
+
+What `update` replaces depends on what it is given. A folder or a `.zip` replaces every file. One `.md` or `.html` replaces the page and keeps everything beside it. Any other file, or several, replace only the files of those names, wherever they are, and are added when nothing has the name; a path such as `img/chart.png` names exactly one file, and a name two files share is refused with both paths. Each file is stored once, so changing one picture sends and stores that picture alone, and the output says how many files changed and where each one went.
+
+```bash
+bikeshed update deck ./deck              # the whole folder
+bikeshed update deck index.html          # the page; the rest is kept
+bikeshed update deck img/chart.png       # that one picture; the rest is kept
+```
 
 `bikeshed get <id>` prints a document. A Markdown document comes as its source. An HTML one, from `bikeshed-now` 0.22.0, comes as a Markdown reading made for agents: the page's words without its stylesheets, scripts or inline images, opening with a note that says it is a reading. Read and quote it, but never send it back. To revise, `bikeshed get <id> --source > index.html` writes the HTML as published, however long it is, and that is what `update` takes. A script that saved `get`'s output as a page needs `--source` added.
 

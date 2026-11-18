@@ -55,7 +55,7 @@ Then say you will watch it for comments, and do, if your harness can wait. Keep 
 | reading the comments on it | `bikeshed comments`, or `get_comments`; answer with `reply_to_comment`, raise a new point with `add_comment` |
 | copying someone else's document to revise | `bikeshed fork`, or `fork_document`; `get_lineage` says what it came from and whether that changed. Its author sees that it was forked |
 
-There is no runtime here: no shared state, no viewer identity, no stored assets, no pinning, and a document stays until its owner deletes it. Ship a document that stands still, and say what it cannot do.
+There is no runtime here: no shared state, no viewer identity, no storage a page can write to, no pinning, and a document stays until its owner deletes it. Ship a document that stands still, and say what it cannot do.
 
 ## What you can publish
 
@@ -63,9 +63,9 @@ There is no runtime here: no shared state, no viewer identity, no stored assets,
 |---|---|---|
 | Markdown, `.md` or `.markdown` | `bikeshed publish`, or `publish_document` (its default) | One HTML page rendered on the server. `get_document` returns your Markdown |
 | HTML, `.html` or `.htm` | `bikeshed publish`, or `publish_document` with `"format": "html"` | Your file, byte for byte. `get_document` reads it to an agent as Markdown, and `as: "source"` returns the file |
-| A `.zip` of several files | `bikeshed publish`, and `bikeshed update` to revise it. The tools take text | The files, with `index.html` or `index.md` at the root as the entry. One enclosing folder is fine |
+| A page and its files: stylesheets, scripts, fonts, pictures, video | `publish_document` with `files` beside `content`; or a folder or a `.zip` through `bikeshed publish <folder>` | The page, with every file at the relative path it is referenced by. `index.html` or `index.md` opens, or the only page there is. One enclosing folder is fine |
 
-Anything else is refused. An upload may be 25 MB, and a `.zip` 25 MB uncompressed and at most 2,000 files. Markdown is read as UTF-8.
+Anything else is refused. A document may be 25 MB and 2,000 files, each path at most 256 bytes; `files` may come to 10 MB. Markdown is read as UTF-8. A folder or a zip leaves out every name starting with a dot (`.env`, `.git/`), node_modules and `__MACOSX/`, and says so.
 
 Without a title from you, a Markdown document is named by its first `#` heading and an HTML one by its `<title>`; failing both, by the file name.
 
@@ -118,13 +118,17 @@ In HTML, write them:
 </section>
 ```
 
-## Keep it to one file
+## A page and its files
 
-No external URLs. Images, stylesheets and fonts from another site do load — nothing blocks them — but each one tells that site when the document is read, breaks when the site moves, and is missing from a download. A document is something somebody will download, print, or open in three years, and every file of a multi-file bundle is a separate authenticated request — a fifty-asset deck costs fifty round trips per reader, and the same deck inlined costs one.
+No external URLs. Images, stylesheets and fonts from another site do load — nothing blocks them — but each one tells that site when the document is read, breaks when the site moves, and is missing from a download. A document is something somebody will download, print, or open in three years.
 
-Inline the SVG, inline the CSS. Put images in `data:` URIs. Use system fonts, or embed a font as a `data:` URI in `@font-face`.
+Put what the page uses beside it, and refer to each file by relative path: `style.css`, `app.js`, `img/chart.png`, `clip.mp4`. A path starting with `/` resolves against the deployment, not your document. Each file is stored once, a reader's browser keeps pictures, stylesheets and fonts between visits, and a revision sends only what changed.
 
-If you genuinely need several files, send a `.zip` with `index.html` at its root, and refer to its files by relative path: a path starting with `/` resolves against the deployment, not your bundle.
+- **Through MCP**, put stylesheets, scripts, SVG, JSON and captions in `files` as text, exactly as you would have written them inline: it costs the same tokens. A small binary goes as base64, with `encoding: "base64"` and no `data:` prefix. A picture or a video you have on disk is not something to spell out in base64: publish its folder with the CLI.
+- **From a shell**, write the folder and `bikeshed publish <folder>`. It leaves out dotfiles and node_modules, never follows a symbolic link, and refuses before sending anything over a limit.
+- **Video and audio** are a file and one line: `<video controls src="clip.mp4"></video>`, which works in Markdown too, as raw HTML. They play from a link that answers the ranges a player asks for, so they seek, in Safari as well.
+- **A script in its own file is blocked until somebody trusts the document**, exactly as an inline one is.
+- **Inline only a few lines**, an icon you style with CSS say. A `data:` URI still works, but it makes the page larger, every revision resends it, and every agent that reads the page reads it too.
 
 ## Publishing
 
@@ -150,14 +154,17 @@ Over MCP the same two are `publish_document` and `update_document`, and they ret
 
 **Publishing identical content is a no-op.** The bytes are hashed; matching bytes mint no new version. So `update` is safe to run in a loop, in CI, or after a change you are not sure you made — it will tell you `no change` rather than filling the history with duplicates. A change is refused while somebody has the document open in the editor, where it would throw away their typing; try again once they have left it.
 
-**An update keeps the document's format, and what it replaces depends on what you send.**
+**An update keeps the document's format, and what it replaces depends on what you send. Send only what changed.**
 
-- **One `.md` or `.html` file**, through `bikeshed update` or `update_document`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text from `get_document`'s source and its images and stylesheets stay where they were. For an HTML document that means `get_document` with `as: "source"`: by default it hands you a Markdown reading made for agents, which opens with front matter saying so, and `update_document` refuses a reading sent back as the page. Revise the whole source: `get_document` returns 200,000 characters at a time and sets `truncated` when there is more, which you read with `offset` set to `nextOffset` and the same `version`, and an update made from a cut source publishes a version missing everything after the cut. `bikeshed get <id> --source > index.html` writes it whole.
-- **A `.zip`**, through `bikeshed update`, replaces the whole bundle. A file the archive leaves out is gone from the new version. This takes somebody the document is shared with as an editor, not open editing.
+- **Only `files`**, through `update_document`, replaces each file at its path or adds it. Everything else, the page included, is kept. Changing a document's files takes being one of its editors, not open editing.
+- **Several files, or one that is not a page**, through `bikeshed update <id> <files…>`, each replace the file of the same name, wherever it is, or are added; a path such as `img/chart.png` names exactly one. A name two files share is refused with both paths.
+- **One `.md` or `.html` file**, through `bikeshed update` or `update_document` with `content`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text from `get_document`'s source and its images and stylesheets stay where they were. For an HTML document that means `get_document` with `as: "source"`: by default it hands you a Markdown reading made for agents, which opens with front matter saying so, and `update_document` refuses a reading sent back as the page. Revise the whole source: `get_document` returns 200,000 characters at a time and sets `truncated` when there is more, which you read with `offset` set to `nextOffset` and the same `version`, and an update made from a cut source publishes a version missing everything after the cut. `bikeshed get <id> --source > index.html` writes it whole.
+- **A folder or a `.zip`**, through `bikeshed update`, replaces the whole bundle. A file it leaves out is gone from the new version. This takes somebody the document is shared with as an editor, not open editing.
 
 ```bash
-bikeshed update platform-review deck.zip     # every file, from the archive
-bikeshed update platform-review index.html   # the entry; the rest is kept
+bikeshed update platform-review ./deck/                # every file, from the folder
+bikeshed update platform-review index.html             # the entry; the rest is kept
+bikeshed update platform-review img/chart.png          # that one file; the rest is kept
 ```
 
 An update cannot switch a document between Markdown and HTML. Publish a new document for that.

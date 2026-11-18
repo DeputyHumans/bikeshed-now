@@ -2,11 +2,14 @@ rules_version = '2';
 
 // Storage security rules (SPEC §2, §8).
 //
-// Document bundles live in a private bucket and are NEVER served to clients
-// directly. Every read goes through the contentProxy Cloud Function, which
+// Document bundles live in a private bucket and are NEVER readable through
+// these rules. Every read is decided by the contentProxy Cloud Function, which
 // authenticates the caller (session cookie, or anonymously for a non-private
 // document), checks the Firestore ACL, and then streams the object using the
-// Admin SDK — which bypasses these rules by design.
+// Admin SDK — which bypasses these rules by design. For video and audio it
+// hands the reader, after the same checks, a signed link to that one object
+// that lives ten minutes, because a player needs byte ranges (SPEC §24). A
+// signed link is not a rule: these still deny everything.
 //
 // "Public" in this product means "the proxy will serve you without a cookie".
 // It never means the bucket is readable. Deny everything.

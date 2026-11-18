@@ -886,8 +886,8 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>list_documents</code></td><td>Documents you can read, newest first, each with the folder it is filed in</td></tr>
         <tr><td><code>list_versions</code></td><td>Published history, newest first, with pagination and version-pinned links</td></tr>
         <tr><td><code>get_document</code></td><td>A document's metadata and address, and its content (current version by default): an HTML document as a Markdown reading made for agents, which opens with front matter saying so and where the original is, or <code>as: "source"</code> for the HTML you revise; a Markdown document as its source. 200,000 characters at a time: <code>truncated</code> says there is more, and <code>offset</code> with <code>nextOffset</code> and the same <code>version</code> reads on</td></tr>
-        <tr><td><code>publish_document</code></td><td>Create a document from content you supply; says whether the id you asked for was taken, where it is filed and who can read it there</td></tr>
-        <tr><td><code>update_document</code></td><td>Publish a new version; identical content is a no-op. Given the <code>baseVersion</code> you revised, it refuses rather than replace a version somebody published since, and it counts the open threads it leaves behind. Refused while somebody has the document open in the editor</td></tr>
+        <tr><td><code>publish_document</code></td><td>Create a document from content you supply, with its stylesheets, scripts and pictures in <code>files</code>; says whether the id you asked for was taken, where it is filed and who can read it there</td></tr>
+        <tr><td><code>update_document</code></td><td>Publish a new version from <code>content</code>, <code>files</code> or both, keeping every file you don't send; identical content is a no-op. Given the <code>baseVersion</code> you revised, it refuses rather than replace a version somebody published since, and it counts the open threads it leaves behind. Refused while somebody has the document open in the editor</td></tr>
         <tr><td><code>commit_draft</code></td><td>Publish the draft as the next version, as Save as new version does</td></tr>
         <tr><td><code>get_changes</code></td><td>What happened since a cursor, in the order it was recorded: comments, threads, suggestions, versions, and changes to the document itself; <code>since</code> is required, and <code>needsReply</code> names the threads a person is waiting on</td></tr>
         <tr><td><code>get_comments</code></td><td>Unresolved threads on the current version, or on the <code>version</code> you name, oldest first and at most 50, each with its quote, its section, whether a person awaits a reply, and every comment with its id, time and the channel it came through</td></tr>
@@ -916,7 +916,7 @@ bikeshed update storage-migration proposal.md</code></pre>
 <div class="chapter" id="formats">
   <p class="eyebrow">05</p>
   <h2>What you can publish</h2>
-  <p class="answer">HTML as written, Markdown rendered on the server, or a zip of several files, up to 25 MB.</p>
+  <p class="answer">HTML as written, Markdown rendered on the server, or a page with the files it uses, as a folder, a zip or MCP <code>files</code>, up to 25 MB.</p>
 
   <div class="table-wrap">
     <table>
@@ -924,14 +924,16 @@ bikeshed update storage-migration proposal.md</code></pre>
       <tbody>
         <tr><td><code>.md</code> <code>.markdown</code></td><td>Rendered to HTML on the server; <code>get_document</code> returns the Markdown</td></tr>
         <tr><td><code>.html</code> <code>.htm</code></td><td>Stored as written; <code>get_document</code> reads it to an agent as Markdown, and <code>as: "source"</code> returns the file</td></tr>
-        <tr><td><code>.zip</code></td><td>Several files, with <code>index.html</code> or <code>index.md</code> at the root</td></tr>
+        <tr><td>A folder or a <code>.zip</code></td><td>A page and its files, referenced by relative path, with <code>index.html</code> or <code>index.md</code> at the root. <code>bikeshed publish &lt;folder&gt;</code> sends a folder; dotfiles such as <code>.env</code>, node_modules and symbolic links are left out</td></tr>
+        <tr><td>MCP <code>files</code></td><td><code>[{path, content, encoding?}]</code> beside <code>content</code>, up to 10 MB: stylesheets, scripts and SVG as text, pictures and fonts as base64</td></tr>
       </tbody>
     </table>
   </div>
 
   <ul class="ticks">
     <li><strong>Put an id on every section.</strong> A comment anchors to the nearest element with an id. Without one it anchors to the whole page, and any edit above shifts it. Markdown headings get ids for free.</li>
-    <li>An update keeps the format: a zip replaces every file, and one <code>.md</code> or <code>.html</code> replaces the entry and keeps the files beside it.</li>
+    <li>An update keeps the format. A folder or a zip replaces every file. One <code>.md</code> or <code>.html</code> replaces the entry and keeps the files beside it. <code>files</code>, or loose files given to <code>bikeshed update</code>, replace only the files of those names. Each file is stored once, so send only what changed.</li>
+    <li>Video and audio play from a link that answers the ranges a player asks for, so <code>&lt;video controls src="clip.mp4"&gt;</code> seeks, in Safari too.</li>
     <li>Markdown is CommonMark with tables, strikethrough and task lists. Mermaid, math, footnotes and front matter show as typed.</li>
     <li>Scripts run only for a reader who chooses to run them, or for everyone once a deployment's superadmin who owns the document trusts it. Opened at its own file address, or embedded in another site, a page never runs its scripts. Each version published through the CLI or MCP sandboxes it again. Images, stylesheets and fonts from other sites load either way.</li>
     <li><strong>Embed one in another site's page</strong> with an iframe of <code>/embed/&lt;id&gt;</code>, the latest version, or <code>/embed/&lt;id&gt;/&lt;version&gt;</code>, one version. It takes a public document, or an unlisted one with <code>?k=</code>, counts its readers as the viewer does, and opens its links in a new tab. <a href="/d/docs-embed">Put a Bikeshed document on your web page</a> has the snippet.</li>
@@ -964,8 +966,8 @@ bikeshed update storage-migration proposal.md</code></pre>
         <tr><td><code>bikeshed login</code></td><td>Sign in through your browser (<code>--paste</code> for a token)</td></tr>
         <tr><td><code>bikeshed logout</code></td><td>Sign out on this computer, revoking a token from browser sign-in</td></tr>
         <tr><td><code>bikeshed list</code></td><td>Documents you can read</td></tr>
-        <tr><td><code>bikeshed publish &lt;file&gt;</code></td><td>Create a new document (<code>--title</code>, <code>--id</code>, <code>--folder</code>, <code>--watch</code>)</td></tr>
-        <tr><td><code>bikeshed update &lt;id&gt; &lt;file&gt; [--base &lt;v&gt;]</code></td><td>Publish a new version; with <code>--base</code>, refused if somebody published since the version you revised. Refused while somebody has the document open in the editor</td></tr>
+        <tr><td><code>bikeshed publish &lt;file|folder&gt;</code></td><td>Create a new document from a page, a zip or a folder (<code>--title</code>, <code>--id</code>, <code>--folder</code>, <code>--watch</code>)</td></tr>
+        <tr><td><code>bikeshed update &lt;id&gt; &lt;file|folder|files…&gt; [--base &lt;v&gt;]</code></td><td>Publish a new version; a folder replaces every file, and loose files only the files of those names; with <code>--base</code>, refused if somebody published since the version you revised. Refused while somebody has the document open in the editor</td></tr>
         <tr><td><code>bikeshed get &lt;id&gt; [--source]</code></td><td>Print a document: an HTML one as its Markdown reading, or with <code>--source</code> the HTML as published, whole however long it is</td></tr>
         <tr><td><code>bikeshed comments &lt;id&gt;</code></td><td>Unresolved feedback, with its anchored text</td></tr>
         <tr><td><code>bikeshed changes &lt;id&gt; --since &lt;cursor&gt; [--wait]</code></td><td>What happened since a cursor, ending with the cursor for next time; <code>--wait</code> keeps checking until something does, and exits 3 on <code>--timeout</code></td></tr>

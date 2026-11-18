@@ -177,7 +177,7 @@ Three accounts: **A** owns a public document, **B** and **C** do not.
 
 Publish `deck-animated` and sign in as its owner.
 
-1. Open it. Within a few seconds the network panel shows two `POST /thumb` requests, `kind=cover` then `kind=slides`, both `200`. `docs/deck-animated` now holds `thumb` with a cover key and `slides.count: 6`, and its `updatedAt` has not moved. In the Storage emulator the images sit under `docs/deck-animated/thumbs/v1/{key}/`, beside `v1/`, never inside it.
+1. Open it. Within a few seconds the network panel shows two `POST /thumb` requests, `kind=cover` then `kind=slides`, both `200`. `docs/deck-animated` now holds `thumb` with a cover key and `slides.count: 6`, and its `updatedAt` has not moved. In the Storage emulator the images sit under `docs/deck-animated/thumbs/v1/{key}/`, beside the document's files, never among them.
 2. The rail's thumbnails are `<img src="/thumb/…">`, not preview frames. Every slide shows its final state: the badge on the first, every bar on the third at its value.
 3. Back on Everything, the card leads with the first slide. Reload: the cover comes from the browser's cache, with no request reaching the function.
 4. As `reviewer@example.com`, the cover and rail load, and opening the deck sends no `POST /thumb`. A non-member asking for the same image URL gets the same `404` as for one that does not exist.

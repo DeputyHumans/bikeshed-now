@@ -80,7 +80,7 @@ Two of its ten steps exist only because a **fresh** Google Cloud project is far 
 | `datastore.user` | every request 500s with `PERMISSION_DENIED` |
 | `firebaseauth.admin` | every sign-in fails with `session_failed` |
 | `storage.objectAdmin` | documents publish but never serve |
-| `iam.serviceAccountTokenCreator` on itself | `createSessionCookie` cannot sign |
+| `iam.serviceAccountTokenCreator` on itself | `createSessionCookie` cannot sign, and no video or audio plays: its signed link cannot be minted |
 | `allUsers` + `run.invoker` | **every** path answers 403 with an HTML body, before any of this code runs |
 
 Step 6 grants the first five to the runtime service account — Storage scoped to the content bucket only, never project-wide — and step 8 makes the 31 HTTP functions publicly invokable. "Publicly invokable" is not "public": each function authenticates its own caller. The five Firestore triggers (`onCommentCreated`, the three `record…Event` triggers that write the change log, and `moveAccount`) and the two scheduled jobs, the Trash's daily `purgeExpiredTrash` and the hourly `applyExpiries`, are deliberately left private. Eventarc invokes the triggers and Cloud Scheduler the jobs, and a fresh project grants those paths nothing of their own. If comment emails already arrive, the triggers' wiring works: all five use the same one. The three log triggers retry on failure. A permission they lack therefore shows as the same function failing again and again in the logs, and as a `get_changes` that never reports a new comment.
@@ -443,6 +443,8 @@ gcloud storage buckets add-iam-policy-binding gs://${DEFAULT_BUCKET} \
 The last three were each found by a failed first deploy, and only the first of those failures named the permission it lacked. IAM is invisible locally. A missing role appears as a failing step, so grant the role, add it to this table, and re-run with `gh run rerun <id> --failed`.
 
 The pipeline deploys Storage rules unconditionally, so a project must have Firebase Storage set up: a default bucket must exist. The rules deny everything, and the app never reads that bucket; document bytes live in the content bucket and go through `contentProxy`.
+
+**Video and audio are the one exception to "every byte through the proxy".** Once `contentProxy` or `getDraft` has decided the caller may read, a file served as `video/*` or `audio/*` answers `302` to a V4 signed link for that one object, which lives ten minutes, because a player asks for byte ranges and Hosting cuts a function at 60 s (SPEC §24, [ADR 0036](../architecture/adr/0036-a-pages-files-sit-beside-it.md)). The link is signed through IAM signBlob as the runtime's own identity, with the token-creator role it already holds on itself for session cookies, so setup grants nothing new for it and the content bucket needs no CORS: a `<video>` element follows a redirect without one. Check it after a deploy with `curl -sI` on a member's video address: `302`, `cache-control: private, no-store`, and a `location` on `storage.googleapis.com`. A `500` there means the link could not be signed: check the token-creator row in the table above. The emulator cannot sign, so it streams video as before; locally a video plays but cannot be proven to seek.
 
 Then the six repository secrets. They are secrets rather than variables so that the build log masks them, and these logs become public if the repository does. `app/.env.local` must be the production one: the preflight refuses an emulator config.
 

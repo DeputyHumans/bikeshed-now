@@ -6,7 +6,7 @@ What this system protects, from whom, and where it deliberately stops.
 
 | Asset | Where it lives | Who may see it |
 |---|---|---|
-| Document bytes, and the thumbnails captured from them | private bucket, served only by `contentProxy` and `downloadBundle`; thumbnails only by `contentProxy`, uploaded by an editor's browser through `saveThumbs` as size-checked JPEG; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it); and, to read only, anyone a folder above it opens to by its link or public level (SPEC §17 "A folder's reach") |
+| Document bytes, and the thumbnails captured from them | private bucket, served only by `contentProxy` and `downloadBundle`, except that video and audio, once `contentProxy` or `getDraft` has decided the caller may read, are fetched through a signed link to that one object that lives ten minutes; thumbnails only by `contentProxy`, uploaded by an editor's browser through `saveThumbs` as size-checked JPEG; `docShell` reads the entry's first 256 KiB of a non-private document to derive a title, excerpt, keywords and image URL for its page, and nothing of a private one | owner + `members`; anyone when public; when unlisted, anyone holding its link (the key, or an account's grant from presenting it); and, to read only, anyone a folder above it opens to by its link or public level (SPEC §17 "A folder's reach") |
 | Member lists, owner email, usage stats | `docs/{docId}` | members only — never anonymous, never a non-member on a public document |
 | Reviewer identities (annotations, comments) | `docs/{docId}/versions/**` | anyone with an account who can read the document: a member, anyone on a public one, a link grant on an unlisted one |
 | That an unlisted document exists, and its title | `docs/{docId}` only — never `public/` | its members and the holders of its link, or of a link to a folder above it |
@@ -159,6 +159,22 @@ An agent reads `get_changes` as its owner. The log could otherwise hand a reader
 - **Nothing stored, everything joined.** No email or body is stored in the log. Both are joined from the source record at read time, which the caller's access already covers, and a deleted comment drops out.
 - **"Mine" cannot be forged.** What the caller caused is skipped only when it came through an agent channel with the caller's own token. A browser cannot claim either: the rules pin its channel to `web` and its actor's fields.
 - **Cursors grant nothing.** A cursor carries no access, and every call checks access again. A forged one yields only events its holder could read anyway. Saved cursors are server-only (SPEC §4, §19, ADR 0016).
+
+### A media link outlives the access that minted it
+
+**Attack.** Video and audio reach a reader through a V4 signed Storage link rather than the proxy's stream (SPEC §24, [ADR 0036](adr/0036-a-pages-files-sit-beside-it.md)). A link is a bearer credential: whoever holds it reads that object, whoever they are, until it expires. A cached or logged redirect would hand it on.
+
+**Mitigation.** A link is minted only after every check the proxy makes for any other file — the caller, the ACL, expiry, the link key — and names exactly one object, the type it is served as and inline display. It lives ten minutes. It is never logged. The redirect that carries it is `private, no-store`, set after everything else, so no shared cache keeps it. Signing is the runtime's own identity through IAM signBlob, which it already held for session cookies, so the change granted nothing.
+
+**Residual, accepted.** A reader whose access is withdrawn, or who forwards the link, can still fetch that one file for at most ten minutes. A picture, a stylesheet or a font a member's browser has kept stays there for at most an hour, as a thumbnail does for a day (SPEC §17).
+
+### A folder upload publishes a secret beside the page
+
+**Attack.** A folder dropped on the workspace or passed to `bikeshed publish` holds more than the page: an `.env` with keys in it, a `.git/` with history, a `node_modules/`. Published, each is a file any reader of the document can fetch.
+
+**Mitigation.** Every file or folder whose name starts with a dot, `node_modules/`, `__MACOSX/` and `Thumbs.db` is left out, by the browser and the CLI before anything is sent and by the server for a zip, so a folder and a zip of it publish the same thing. The browser and the CLI say what they left out. The CLI never follows a symbolic link, so a link to a home directory cannot publish it. An agent's `files` refuses a path the rule would leave out rather than storing it.
+
+**Residual, accepted.** A secret in a file with an ordinary name, `config.json` say, is published like any other file. The rule catches the files that hold secrets by convention, not every file that does.
 
 ### A version names bytes it should not
 
