@@ -31,7 +31,7 @@ async function listedInventory(target, docId, id, data) {
   return Promise.all((await versionObjects(target, docId, id, data)).map(async ({ rel, key }) => {
     const bytes = await readObject(target, key);
     assert.ok(bytes, `C14 publication inventory: listed file ${rel} (${key}) can be read`);
-    return { key, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+    return { rel, key, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
   }));
 }
 
@@ -63,7 +63,8 @@ export function assertPublicationBaseline(snapshot) {
     ["version", snapshot.versions[0]?.metadata.entry, snapshot.versions[0]?.objects],
     ["draft", snapshot.draft.entry, snapshot.draftObjects],
   ]) {
-    assert.ok(entry && objects?.some(o => o.key.endsWith(`/${entry}`)), `C14 publication baseline has the actual ${label} entry bytes`);
+    // A stored file's key is its hash, so a listed version's entry is found by its path (SPEC §4).
+    assert.ok(entry && objects?.some(o => o.rel === entry || o.key.endsWith(`/${entry}`)), `C14 publication baseline has the actual ${label} entry bytes`);
     assert.ok(objects.every(o => Number.isSafeInteger(o.size) && o.size >= 0 && /^[a-f0-9]{64}$/.test(o.sha256)), `C14 publication baseline has complete ${label} byte digests`);
   }
 }
