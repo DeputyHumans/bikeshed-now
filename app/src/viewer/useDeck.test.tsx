@@ -415,3 +415,70 @@ describe("a deck that drives itself", () => {
     expect(sections[2].scrollIntoView).toHaveBeenCalled();
   });
 });
+
+describe("a deck that fades between its slides", () => {
+  /**
+   * Like `mountStackedDeck`, but the slide being left stays visible until
+   * `settle()`, as a deck that fades keeps it until the fade ends: for that
+   * moment two slides are shown, and the first of them is the old one.
+   */
+  function mountFadingDeck() {
+    const { doc, sections } = mountDeck(`<main class="deck">${[1, 2, 3, 4, 5].map((n) => `<section class="slide"><h2>${n}</h2></section>`).join("")}</main>`, 700, 700);
+    sections.forEach((el) => {
+      el.getBoundingClientRect = () => ({ top: 0, height: 700 }) as DOMRect;
+    });
+    let at = 0;
+    const paint = (visible: number[]) =>
+      sections.forEach((el, i) => {
+        el.style.visibility = visible.includes(i) ? "visible" : "hidden";
+      });
+    paint([0]);
+    const fading = new Set<number>();
+    doc.addEventListener("keydown", (e) => {
+      const next = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : null;
+      if (next === null) return;
+      fading.add(at);
+      at = Math.max(0, Math.min(sections.length - 1, next));
+      fading.delete(at);
+      paint([at, ...fading]);
+      e.preventDefault();
+    });
+    const settle = () => {
+      fading.clear();
+      paint([at]);
+    };
+    return { doc, settle, at: () => at };
+  }
+
+  it("counts a second move from the slide it is heading to, not the one still fading out", async () => {
+    const { doc, settle, at } = mountFadingDeck();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+    expect(result.current.paged).toBe(true);
+    act(() => result.current.goTo(3));
+    expect(at()).toBe(3);
+    // Still fading: slides 0, 1 and 2 are shown with 3, and the first shown is 0.
+    act(() => result.current.goTo(1));
+    expect(at()).toBe(1);
+    act(() => settle());
+    await act(async () => {});
+    expect(result.current.locate()).toBe(1);
+  });
+
+  it("reads the frame again once the deck shows one slide, so its own keys are followed", async () => {
+    const { doc, settle, at } = mountFadingDeck();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
+    act(() => result.current.goTo(2));
+    act(() => settle());
+    await act(async () => {});
+    // The deck's own key, pressed in the frame, and settled.
+    act(() => {
+      doc.body.dispatchEvent(new (doc.defaultView!.KeyboardEvent)("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    });
+    act(() => settle());
+    await act(async () => {});
+    expect(at()).toBe(3);
+    expect(result.current.locate()).toBe(3);
+    act(() => result.current.goTo(0));
+    expect(at()).toBe(0);
+  });
+});
