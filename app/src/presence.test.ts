@@ -22,6 +22,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); });
 const focus = { elementId: "p", exact: "words", prefix: "", suffix: "", start: 0, end: 5 };
+const view = (viewport: number) => () => ({ viewport, place: null });
 const connect = async (index = 0) => {
   calls.value.mock.calls[index][1]({ val: () => true });
   await Promise.resolve(); await Promise.resolve();
@@ -31,7 +32,7 @@ it("never resurrects a departed peer from queued focus or viewport throttles", a
   const peer = joinPresence("d", "u", "A@example.test", "A", "edit");
   await connect();
   peer.setFocus(focus); peer.setFocus({ ...focus, start: 1 });
-  peer.setViewport(0.1); peer.setViewport(0.9);
+  peer.setView(view(0.1)); peer.setView(view(0.9));
   peer.leave(); const writes = calls.set.mock.calls.length;
   await vi.advanceTimersByTimeAsync(1_000);
   expect(calls.set).toHaveBeenCalledTimes(writes);
@@ -49,7 +50,7 @@ it("does not announce after a pending disconnect registration resolves following
 it("ignores every setter on a handle after it leaves", async () => {
   const peer = joinPresence("d", "u", "a@example.test", "A", "view");
   await connect(); peer.leave(); const writes = calls.set.mock.calls.length;
-  peer.setMode("edit"); peer.setComposing("thread"); peer.setFocus(focus); peer.setViewport(0.5);
+  peer.setMode("edit"); peer.setComposing("thread"); peer.setFocus(focus); peer.setView(view(0.5));
   await vi.advanceTimersByTimeAsync(1_000);
   expect(calls.set).toHaveBeenCalledTimes(writes);
 });
@@ -95,7 +96,7 @@ it("groups session records by person and retains editing while any tab edits, in
 it("without a database URL every presence operation is inert and readers receive an empty list", () => {
   calls.rtdb = null;
   const peer = joinPresence("d", "u", "a@example.test", "A", "edit");
-  peer.setMode("view"); peer.setFocus(focus); peer.setViewport(0.2); peer.setComposing("t"); peer.leave();
+  peer.setMode("view"); peer.setFocus(focus); peer.setView(view(0.2)); peer.setComposing("t"); peer.leave();
   const seen = vi.fn(); watchPeers("d", "u", seen)();
   expect(seen).toHaveBeenCalledWith([]);
   expect(calls.value).not.toHaveBeenCalled();
@@ -121,4 +122,53 @@ it("a delayed throttle timer cannot overwrite a newer immediate focus update", a
   await vi.advanceTimersByTimeAsync(200);
   expect(calls.set.mock.calls.at(-1)?.[1]).toHaveProperty("focus.exact", "newest");
   peer.leave();
+});
+
+it("sends the slide at once when it changes, never twice for the same one, and drops it for a document without pages", async () => {
+  const peer = joinPresence("d", "u", "a@example.test", "A", "view");
+  await connect(); const before = calls.set.mock.calls.length;
+  peer.setSlide(3);
+  expect(calls.set.mock.calls.at(-1)?.[1]).toHaveProperty("slide", 3);
+  peer.setSlide(3);
+  expect(calls.set).toHaveBeenCalledTimes(before + 1);
+  peer.setSlide(null);
+  expect(calls.set.mock.calls.at(-1)?.[1]).not.toHaveProperty("slide");
+  // What the rules refuse is never sent: it would cost the whole record.
+  peer.setSlide(1.5); peer.setSlide(-1); peer.setSlide(10_000);
+  expect(calls.set).toHaveBeenCalledTimes(before + 2);
+  peer.leave();
+});
+
+it("reads the view once per throttle window, when it is sent, and sends the place only in the shape the rules accept", async () => {
+  const peer = joinPresence("d", "u", "a@example.test", "A", "view");
+  await connect();
+  const place = { a: "intro", b: "pricing", at: 0.25 };
+  peer.setView(() => ({ viewport: 0.1, place }));
+  expect(calls.set.mock.calls.at(-1)?.[1]).toMatchObject({ viewport: 0.1, place });
+  const read = vi.fn(() => ({ viewport: 0.5, place: { a: "x".repeat(201), at: 0.5 } }));
+  peer.setView(read); peer.setView(read); peer.setView(read);
+  expect(read).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(500);
+  expect(read).toHaveBeenCalledTimes(1);
+  const sent = calls.set.mock.calls.at(-1)?.[1];
+  expect(sent).toHaveProperty("viewport", 0.5);
+  expect(sent).not.toHaveProperty("place");
+  peer.leave();
+});
+
+it("gives each person the slide and place of the session it reads them from, and ignores a malformed one", () => {
+  const seen = vi.fn();
+  watchPeers("d", "self", seen);
+  calls.value.mock.calls[0][1]({
+    val: () => ({
+      older: { uid: "u", email: "a@example.test", mode: "view", slide: 1, place: { a: "one", at: 0 }, lastChanged: 10 },
+      newer: { uid: "u", email: "a@example.test", mode: "view", slide: 4, place: { a: "four", b: "five", at: 0.5 }, lastChanged: 20 },
+      odd: { uid: "v", email: "b@example.test", mode: "view", slide: 2.5, place: { at: 0.5 }, lastChanged: 5 },
+    }),
+  });
+  const [peers] = seen.mock.calls[0];
+  expect(peers.find((p: { uid: string }) => p.uid === "u")).toMatchObject({ slide: 4, place: { a: "four", b: "five", at: 0.5 } });
+  const odd = peers.find((p: { uid: string }) => p.uid === "v");
+  expect(odd.slide).toBeUndefined();
+  expect(odd.place).toBeUndefined();
 });

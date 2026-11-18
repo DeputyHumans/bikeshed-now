@@ -6,8 +6,8 @@ import { describeFocusFromSelection } from "../annotation/anchor";
 import { refusesListeners, watchResize, watchScroll, watchSelection } from "./frameWatch";
 import {
   createPeerOverlay,
+  readingPlace,
   scrollFraction,
-  scrollToFraction,
   type PeerOverlay,
 } from "../annotation/peers";
 import {
@@ -92,7 +92,9 @@ export function usePeerPresence(options: {
       handle.current?.setFocus(anchor);
     };
     const onScroll = () => {
-      handle.current?.setViewport(scrollFraction(doc));
+      // Read when the throttle sends it, not on every scroll: a place measures
+      // every element with an id.
+      handle.current?.setView(() => ({ viewport: scrollFraction(doc), place: readingPlace(doc) }));
       // Rectangles are in page coordinates, so scrolling does not move them —
       // but a scroll can reveal content whose layout has not been measured yet.
       overlay.current?.reflow();
@@ -110,17 +112,16 @@ export function usePeerPresence(options: {
   }, [enabled, doc, epoch]);
 
   /**
-   * Follow mode: bind this reader's scroll to a peer's.
+   * Follow mode: this reader goes where a peer is.
    *
-   * About thirty lines on data already being broadcast, and it is what makes a
-   * live walkthrough work at all. Any manual scroll releases it, because a
-   * follow you cannot escape by scrolling is a trap.
+   * Who is followed, and what lets go, live here; MOVING the reader is
+   * `useTarget`'s, after the deck, because a peer on a deck is followed by
+   * slide and only the deck can show one. Any move of the reader's own
+   * releases it, because a follow you cannot escape is a trap: a wheel, a key
+   * or a pointer in the frame here, and a move through the deck's own controls
+   * by `release`, which `useDeck` calls.
    */
-  useEffect(() => {
-    if (!following || !doc) return;
-    const peer = peers.find((p) => p.uid === following);
-    if (peer?.viewport != null) scrollToFraction(doc, peer.viewport);
-  }, [following, peers, doc]);
+  const release = useCallback(() => setFollowing(null), []);
 
   useEffect(() => {
     if (!following || !doc) return;
@@ -147,9 +148,18 @@ export function usePeerPresence(options: {
     handle.current?.setComposing(threadId);
   }, []);
 
+  /** Which slide this reader is on, for whoever follows them; null when not paged. */
+  const setSlide = useCallback((slide: number | null) => {
+    handle.current?.setSlide(slide);
+  }, []);
+
   return {
     peers,
     following,
+    /** The person being followed, as their latest record, or null. */
+    followed: following ? peers.find((p) => p.uid === following) ?? null : null,
+    release,
+    setSlide,
     toggleFollow: (uid: string) => setFollowing((cur) => (cur === uid ? null : uid)),
     setComposing,
   };

@@ -4,8 +4,10 @@
 import { useEffect, useRef } from "react";
 import { rangeFromAnchor } from "../annotation/anchor";
 import { exactRangeFromAnchor } from "../annotation/exact";
+import { scrollToFraction, scrollToPlace } from "../annotation/peers";
 import { ANN_ATTR, HL_SELECTOR } from "../brand/dom";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
+import type { Peer } from "../presence";
 import type { Annotation } from "../types";
 import { slideOf } from "./deck";
 import type { FrameMode } from "./frameMode";
@@ -26,6 +28,13 @@ import type { DeckControls } from "./useDeck";
  * have shown it anyway. So a passage on another slide is reached the way the
  * rail reaches a slide, through `goTo`, and only a passage on the slide being
  * shown, or in a document with no pages, is scrolled to.
+ *
+ * Following a peer goes where they are by the same means (SPEC §16): their
+ * slide when both decks are paged, since a slide that stacks scrolls nothing;
+ * else their place in the text, between the ids either side of the top of
+ * their screen, which a screen of another width finds in the same words; else
+ * the fraction of the page they had scrolled, as before. This reader's own
+ * slide is shared for whoever follows them.
  */
 export function useTarget(options: {
   mode: FrameMode;
@@ -36,11 +45,16 @@ export function useTarget(options: {
   selectedId: string | null;
   /** False while something hides the frame, as the comments pane does in one column. */
   frameShown?: boolean;
+  /** The peer this reader follows, as their latest record. */
+  follow?: Peer | null;
+  /** Share this reader's slide, or null when their document is not paged. */
+  shareSlide?: (slide: number | null) => void;
 }): void {
-  const { mode, doc, epoch, deck, annotations, selectedId, frameShown = true } = options;
+  const { mode, doc, epoch, deck, annotations, selectedId, frameShown = true, follow = null, shareSlide } = options;
   const enabled = mode.kind === "reading";
   const reduceMotion = usePrefersReducedMotion();
-  const { paged, slides, locate, goTo, measuredEpoch } = deck;
+  const { paged, slides, current, locate, goTo, measuredEpoch } = deck;
+  const measured = measuredEpoch === epoch;
 
   /**
    * A newly selected thread brings its passage into view.
@@ -84,6 +98,35 @@ export function useTarget(options: {
     if (inView(node)) return;
     node.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
   }, [enabled, doc, frameShown, epoch, measuredEpoch, selectedId, annotations, reduceMotion, paged, slides, locate, goTo]);
+
+  // This reader's slide, for whoever follows them. Sent as it changes, because
+  // on a deck that stacks its slides nothing scrolls to carry it.
+  useEffect(() => {
+    shareSlide?.(paged && measured ? current : null);
+  }, [shareSlide, paged, measured, current]);
+
+  /**
+   * Go where the followed peer is, whenever where they are changes — not on
+   * every presence update, so another person's cursor moving does not pull
+   * back a follower who has just let go.
+   */
+  const placeKey = follow?.place ? `${follow.place.a ?? ""}\n${follow.place.b ?? ""}\n${follow.place.at}` : "";
+  const followSlide = follow?.slide;
+  const followViewport = follow?.viewport;
+  const followPlace = follow?.place;
+  useEffect(() => {
+    // Not before the deck has measured this document: until then whether it is
+    // paged is not known, and a move made on a guess is made twice.
+    if (!doc || !measured || (followSlide === undefined && !placeKey && followViewport === undefined)) return;
+    if (followSlide !== undefined && paged) {
+      if (followSlide !== locate()) goTo(followSlide, { follow: true });
+      return;
+    }
+    if (followPlace && scrollToPlace(doc, followPlace)) return;
+    if (followViewport !== undefined) scrollToFraction(doc, followViewport);
+    // `followPlace` is read through `placeKey`, so a new object with the same
+    // place does not move the reader again.
+  }, [doc, epoch, measured, paged, followSlide, placeKey, followViewport, locate, goTo]);
 }
 
 /**

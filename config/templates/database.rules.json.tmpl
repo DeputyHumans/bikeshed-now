@@ -85,6 +85,21 @@
 
             "viewport": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1" },
 
+            // Where in the text the top of the screen is (app/src/presence.ts
+            // ReadingPlace): the ids either side of it and how far between, so
+            // a follower on a screen of another width lands in the same words.
+            "place": {
+              ".validate": "newData.hasChildren(['at']) && (newData.hasChild('a') || newData.hasChild('b'))",
+              "a": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+              "b": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+              "at": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1" },
+              "$other": { ".validate": false }
+            },
+
+            // The slide shown, 0-based, while the deck is paged: a deck that
+            // stacks its slides scrolls nothing, so the fraction cannot say it.
+            "slide": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999 && newData.val() % 1 == 0" },
+
             "composing": { ".validate": "newData.isString() && newData.val().length <= 200" },
 
             "$other": { ".validate": false }

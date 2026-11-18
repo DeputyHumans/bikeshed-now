@@ -437,9 +437,13 @@ export function DocViewer() {
     // A dialog or the editor owns the keyboard while it is up: paging the deck
     // underneath the share dialog is somebody losing their place.
     keysEnabled: dialog === null && mode.kind === "reading",
+    // A move of the reader's own lets go of a follow, or the next update of
+    // the person they follow would pull them back (SPEC §16).
+    onReaderMove: presence.release,
   });
 
-  // After the deck, which it pages: a thread's passage may be on another slide.
+  // After the deck, which it pages: a thread's passage, or the person being
+  // followed, may be on another slide.
   useTarget({
     mode,
     doc: frame.doc,
@@ -449,6 +453,8 @@ export function DocViewer() {
     selectedId,
     // In one column the comments pane hides the frame, which measures nothing.
     frameShown: !(singleColumn && pane === "comments"),
+    follow: presence.followed,
+    shareSlide: presence.setSlide,
   });
 
   // A deck that scales itself by script renders at full size in the

@@ -240,6 +240,40 @@ describe("realtime database rules", () => {
     );
   });
 
+  it("a record may say which slide and where in the text its reader is, in the shape a follower reads, and nothing more", async () => {
+    // Following a deck that stacks its slides needs the slide, which no scroll
+    // carries; following on a screen of another width needs the place in the
+    // text. Each is bounded like the rest of the record (SPEC §16).
+    const db = verified(env, MEMBER).database();
+    const node = ref(db, `status/doc1/peers/${MEMBER.uid}`);
+    const record = (extra) => ({ email: MEMBER.email, mode: "view", lastChanged: serverTimestamp(), viewport: 0.4, ...extra });
+    for (const ok of [
+      { slide: 0 },
+      { slide: 9999 },
+      { place: { a: "intro", b: "pricing", at: 0.25 } },
+      { place: { b: "first-heading", at: 0 } },
+      { place: { a: "last-heading", at: 1 } },
+      { slide: 3, place: { a: "s3", b: "s4", at: 0 } },
+    ]) {
+      await assertSucceeds(set(node, record(ok)));
+    }
+    for (const refused of [
+      { slide: -1 },
+      { slide: 1.5 },
+      { slide: 10000 },
+      { slide: "3" },
+      { place: { at: 0.5 } },
+      { place: { a: "", at: 0.5 } },
+      { place: { a: "x".repeat(201), at: 0.5 } },
+      { place: { a: "intro", at: 1.5 } },
+      { place: { a: "intro", at: -0.1 } },
+      { place: { a: "intro", b: 7, at: 0.5 } },
+      { place: { a: "intro", at: 0.5, extra: "x" } },
+    ]) {
+      await assertFails(set(node, record(refused)));
+    }
+  });
+
   it("an editor may append to the shared document", async () => {
     const db = verified(env, MEMBER).database();
     await assertSucceeds(set(ref(db, "status/doc1/y/initial/e1"), "AQIDBA=="));

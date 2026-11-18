@@ -102,7 +102,12 @@ export interface DeckControls {
   stage: StageSize;
   overviewOpen: boolean;
   setOverviewOpen: (open: boolean) => void;
-  goTo: (index: number) => void;
+  /**
+   * Show a slide. Every move counts as the reader's own, and lets go of a
+   * follow (`onReaderMove`), except one made `{ follow: true }`, which is the
+   * follow itself.
+   */
+  goTo: (index: number, how?: { follow?: boolean }) => void;
   next: () => void;
   prev: () => void;
   /** Re-read the document after a structural edit. */
@@ -119,12 +124,18 @@ export function useDeck({
   doc,
   epoch,
   keysEnabled,
+  onReaderMove,
 }: {
   doc: Document | null;
   epoch: number;
   /** False while a dialog owns the keyboard, or while editing. */
   keysEnabled: boolean;
+  /** Told of every move but a follow's: the rail, the overview, the keys, a thread. */
+  onReaderMove?: () => void;
 }): DeckControls {
+  // Read through a ref, so a caller's inline callback does not rebuild goTo.
+  const onReaderMoveRef = useRef(onReaderMove);
+  onReaderMoveRef.current = onReaderMove;
   const [scan, setScan] = useState<SlideScan>({ kind: "none" });
   // Which epoch `scan` was read from, and which one the latch has measured.
   const [scannedEpoch, setScannedEpoch] = useState(-1);
@@ -255,9 +266,10 @@ export function useDeck({
   }, [doc, epoch, slides, scannedEpoch]);
 
   const goTo = useCallback(
-    (index: number) => {
+    (index: number, how?: { follow?: boolean }) => {
       const slide = slides[Math.max(0, Math.min(slides.length - 1, index))];
       if (!slide) return;
+      if (!how?.follow) onReaderMoveRef.current?.();
       const view = doc?.defaultView;
       if (stacked && view && doc.body) {
         // From where the deck IS, read live — the reader may have moved it

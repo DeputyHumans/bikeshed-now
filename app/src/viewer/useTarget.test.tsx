@@ -4,6 +4,7 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ANN_ATTR } from "../brand/dom";
+import type { Peer } from "../presence";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 import { useAnnotationLayer } from "./useAnnotationLayer";
@@ -67,6 +68,9 @@ interface Props {
   selectedId: string | null;
   annotations: Annotation[];
   frameShown?: boolean;
+  follow?: Peer | null;
+  shareSlide?: (slide: number | null) => void;
+  onReaderMove?: () => void;
 }
 
 function mount(doc: Document, initialProps: Props) {
@@ -80,7 +84,7 @@ function mount(doc: Document, initialProps: Props) {
         selectedId: props.selectedId,
         onSelect: vi.fn(),
       });
-      const deck = useDeck({ doc, epoch: 1, keysEnabled: false });
+      const deck = useDeck({ doc, epoch: 1, keysEnabled: false, onReaderMove: props.onReaderMove });
       useTarget({
         mode: READING,
         doc,
@@ -89,6 +93,8 @@ function mount(doc: Document, initialProps: Props) {
         annotations: props.annotations,
         selectedId: props.selectedId,
         frameShown: props.frameShown,
+        follow: props.follow,
+        shareSlide: props.shareSlide,
       });
       return deck;
     },
@@ -303,5 +309,106 @@ describe("selecting a thread on a deck that stacks its slides", () => {
     rerender({ selectedId: "done", annotations });
     expect(showing()).toBe(3);
     expect(doc.querySelector(`[${ANN_ATTR}="done"]`)).toBeNull();
+  });
+});
+
+/** A peer's record as `watchPeers` gives it. */
+function peer(extra: Partial<Peer>): Peer {
+  return { uid: "lead", email: "lead@example.com", name: "Lead", mode: "view", lastChanged: 1, color: "#00769b", ...extra };
+}
+
+describe("following a peer", () => {
+  function stackedDeck() {
+    const doc = frameDoc(
+      [1, 2, 3, 4].map((n) => `<section class="slide" id="s${n}"><h2>Slide ${n}</h2></section>`).join(""),
+    );
+    const sections = Array.from(doc.querySelectorAll<HTMLElement>("section"));
+    let at = 0;
+    const show = (n: number) => {
+      at = Math.max(0, Math.min(sections.length - 1, n));
+      sections.forEach((el, i) => (el.style.visibility = i === at ? "visible" : "hidden"));
+    };
+    doc.defaultView!.Element.prototype.getBoundingClientRect = () =>
+      ({ top: 0, bottom: 700, height: 700, left: 0, right: 1200, width: 1200 }) as DOMRect;
+    show(0);
+    doc.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") show(at + 1);
+      else if (e.key === "ArrowLeft") show(at - 1);
+      else return;
+      e.preventDefault();
+    });
+    return { doc, showing: () => sections.findIndex((el) => el.style.visibility === "visible") };
+  }
+
+  /** A document of three sections whose tops are stated, scrolled by `scrollTo`. */
+  function prose() {
+    const doc = frameDoc(`<h2 id="one">One</h2><p>…</p><h2 id="two">Two</h2><p>…</p><h2 id="three">Three</h2>`);
+    const view = doc.defaultView!;
+    let y = 0;
+    Object.defineProperty(view, "scrollY", { get: () => y, configurable: true });
+    Object.defineProperty(doc.documentElement, "scrollHeight", { value: 5000, configurable: true });
+    const tops: Record<string, number> = { one: 0, two: 3000, three: 3600 };
+    view.Element.prototype.getBoundingClientRect = function (this: Element) {
+      const top = tops[this.id] ?? 0;
+      return { top: top - y, bottom: top - y + 40, height: 40, width: 600, left: 0, right: 600 } as DOMRect;
+    };
+    const scrollTo = vi.fn((options: ScrollToOptions) => {
+      y = options.top ?? y;
+    });
+    view.scrollTo = scrollTo as unknown as typeof view.scrollTo;
+    return { doc, scrollTo, where: () => y };
+  }
+
+  it("shows the leader's slide on a deck that stacks its slides, which no scroll could", () => {
+    const { doc, showing } = stackedDeck();
+    const { rerender } = mount(doc, { selectedId: null, annotations: [], follow: peer({ slide: 2, viewport: 0 }) });
+    expect(showing()).toBe(2);
+    rerender({ selectedId: null, annotations: [], follow: peer({ slide: 3, viewport: 0 }) });
+    expect(showing()).toBe(3);
+  });
+
+  it("does not count its own move as the reader's, which would let go of the follow", () => {
+    const { doc, showing } = stackedDeck();
+    const onReaderMove = vi.fn();
+    mount(doc, { selectedId: null, annotations: [], follow: peer({ slide: 2 }), onReaderMove });
+    expect(showing()).toBe(2);
+    expect(onReaderMove).not.toHaveBeenCalled();
+  });
+
+  it("goes to the leader's place in the text, between the ids either side of the top of their screen", () => {
+    const { doc, where } = prose();
+    mount(doc, { selectedId: null, annotations: [], follow: peer({ place: { a: "two", b: "three", at: 0.5 }, viewport: 0.1 }) });
+    expect(where()).toBe(3300);
+  });
+
+  it("falls back to the fraction when the place names an id this document lacks", () => {
+    const { doc, where } = prose();
+    mount(doc, { selectedId: null, annotations: [], follow: peer({ place: { a: "gone", at: 0.5 }, viewport: 0.5 }) });
+    expect(where()).toBe((5000 - 700) * 0.5);
+  });
+
+  it("moves the reader only when where the leader is changes, not on every presence update", () => {
+    // Another person's cursor moving rewrites the peer list. A follower who has
+    // just scrolled away, before the release lands, must not be pulled back.
+    const { doc, scrollTo } = prose();
+    const place = { a: "two", b: "three", at: 0.5 };
+    const { rerender } = mount(doc, { selectedId: null, annotations: [], follow: peer({ place, viewport: 0.1 }) });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    rerender({ selectedId: null, annotations: [], follow: peer({ place: { ...place }, viewport: 0.1, lastChanged: 2 }) });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    rerender({ selectedId: null, annotations: [], follow: peer({ place: { ...place, at: 0.75 }, viewport: 0.1 }) });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares this reader's slide on a paged deck, and none on a document without pages", () => {
+    const deck = stackedDeck();
+    const onDeck = vi.fn();
+    mount(deck.doc, { selectedId: null, annotations: [], shareSlide: onDeck });
+    expect(onDeck).toHaveBeenLastCalledWith(0);
+
+    const onProse = vi.fn();
+    mount(prose().doc, { selectedId: null, annotations: [], shareSlide: onProse });
+    expect(onProse).toHaveBeenLastCalledWith(null);
+    expect(onProse).not.toHaveBeenCalledWith(0);
   });
 });

@@ -964,12 +964,12 @@ Three reasons this is not merely tidier:
 Realtime Database, under `status/{docId}`:
 
 ```
-status/{docId}/peers/{sessionId} { uid, email, name, mode, focus?, viewport?, composing?, lastChanged }
+status/{docId}/peers/{sessionId} { uid, email, name, mode, focus?, viewport?, place?, slide?, composing?, lastChanged }
 status/{docId}/y/{entry}        base64 shared-document update
 presenceAccess/{docId}/{emailKey}   server-maintained mirror, client-unreadable
 ```
 
-Each tab owns a random session key and an authenticated, immutable `uid` in its record. A second tab cannot replace or remove the first tab's record. Readers aggregate sessions by uid: any editing tab keeps the person in edit mode; focus and viewport come from the newest editing session, or the newest reading session when none edits. Legacy uid-keyed records remain readable and may be removed by their own uid during the transition. The withdrawn `lock` and `requests` nodes remain rejected.
+Each tab owns a random session key and an authenticated, immutable `uid` in its record. A second tab cannot replace or remove the first tab's record. Readers aggregate sessions by uid: any editing tab keeps the person in edit mode; focus, viewport, place and slide come from the newest editing session, or the newest reading session when none edits. Legacy uid-keyed records remain readable and may be removed by their own uid during the transition. The withdrawn `lock` and `requests` nodes remain rejected.
 
 Leaving cancels queued presence updates and suppresses late connection callbacks. An authenticated session owner may delete only their own existing record even after revocation or expiry; writes still require current membership and identity checks. Announcing `mode: edit` additionally requires current editor access. The server's editing veto counts distinct currently authorized editor uids, so stale records from a completed downgrade or revocation cannot block a write. A failed mirror read refuses the write. This assumes successful mirror delivery; the existing delivery limitation below still applies.
 
@@ -977,10 +977,22 @@ Leaving cancels queued presence updates and suppresses late connection callbacks
 |---|---|---|
 | `focus` — selection or caret, as an ephemeral `Anchor` | `selectionchange` | 200 ms, on change only |
 | `viewport` — fractional scroll position | scroll | 500 ms |
+| `place` — `{ a?, b?, at }`, where in the text the top of the screen is | scroll, in the same write as `viewport`, read when it is sent | 500 ms |
+| `slide` — the slide shown, 0-based, while the deck is paged | the slide changing | edge-triggered |
 | `composing` — `{ threadId \| "new" }` | comment input focus/blur | edge-triggered |
 | `mode` — view / edit | transition | edge-triggered |
 
 **The anchor machinery is reused verbatim.** A remote selection is an `Anchor` with a short lifetime: `describeAnchorFromSelection` on the sender, `rangeFromAnchor` on the receiver, then `getClientRects()`. No second resolution path, and it degrades gracefully when two peers are on slightly different draft revisions — exactly what quote-plus-position anchoring was built for.
+
+### Following someone
+
+Choosing a person's chip follows them: this reader goes wherever they are, until a move of this reader's own lets go. `usePeerPresence` holds who is followed and what releases it; moving the reader is `viewer/useTarget.ts`'s, declared after `useDeck`, because only the deck can show a slide.
+
+- **A paged deck is followed by slide.** A deck that stacks its slides moves without scrolling, so a fraction of the page said nothing and the follower stayed on the first slide: the leader's record carries `slide`, sent as it changes, and a follower whose deck is paged is taken to it by `goTo`, the rail's own way there.
+- **Anything else is followed by place, then by fraction.** A fraction of the page lands on the same words only when both screens lay the text out alike, which a phone and a laptop do not. `place` names the last element with an id at or above the top of the leader's screen (`a`), the next one below it (`b`), and how far the top is between them (`at`, 0 to 1); no `a` means the start of the document, no `b` its end. The follower finds both by `getElementById` and scrolls to the same proportion between them, so text that wraps taller moves both ends together. Ids that cannot be found again by the same name, or whose top moves with the scroll, are not used: our own nodes, an id an earlier element already took, anything with no box, and anything `fixed` or `sticky` or inside something that is. A place naming an id the follower's document lacks, or a document with no ids, leaves the fraction, as before. The rules bound it like the rest of the record: ids of at most 200 characters, at least one of them, `at` within 0 to 1, nothing else.
+- **The follower moves only when where the leader is changes,** not on every presence update, so another person's cursor moving does not pull back a follower who has just let go, and not before the deck has measured the document that loaded.
+- **Any move of the follower's own lets go:** a trusted wheel, key or pointer in the frame, and every move through the deck's own controls — the rail, the overview, the parent's keys, a thread taken to its slide — which `useDeck` reports, except the follow's own. Where the frame delivers no events (§6), a selection the follower makes lets go, as before.
+- **Not followed:** a document that scrolls an inner element rather than the page reports no scroll (§7), so neither its fraction nor its place moves, and it cannot be followed. A leader whose tab still runs an app without `slide` is followed by fraction until that tab reloads.
 
 ### The presence mirror
 

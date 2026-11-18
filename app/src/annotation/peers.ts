@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Peer cursors and selections, as an overlay that never touches the document (SPEC §16).
 
-import { PEER_LAYER_ID, PEER_STYLE_ID, markOwn } from "../brand/dom";
+import { OWN_SELECTOR, PEER_LAYER_ID, PEER_STYLE_ID, markOwn } from "../brand/dom";
 import { rangeFromAnchor } from "./anchor";
-import type { Peer } from "../presence";
+import { PLACE_ID_MAX, type Peer, type ReadingPlace } from "../presence";
 
 /**
  * The most important constraint in this feature: ephemeral peer presence NEVER
@@ -209,4 +209,89 @@ export function scrollToFraction(doc: Document, fraction: number): void {
   const el = doc.documentElement;
   const max = Math.max(0, el.scrollHeight - view.innerHeight);
   view.scrollTo({ top: max * fraction, behavior: "auto" });
+}
+
+/**
+ * The elements a reading place may name, top to bottom: every element with an
+ * id that a follower can find again by it and that moves with the text.
+ *
+ * Left out: our own nodes; an id another element took first, which
+ * `getElementById` would never return; anything with no box; and anything
+ * `fixed` or `sticky`, or inside something that is, because its top moves with
+ * the scroll and would place the reader wherever they already were. An id too
+ * long for the rules to carry is left out too, rather than refused with the
+ * whole record. Sorted by top, DOM order breaking ties.
+ */
+function placeMarks(doc: Document): { id: string; top: number }[] {
+  const view = doc.defaultView;
+  if (!view) return [];
+  const pinned = new Map<Element, boolean>();
+  const isPinned = (el: Element | null): boolean => {
+    if (!el || el === doc.body || el === doc.documentElement) return false;
+    const known = pinned.get(el);
+    if (known !== undefined) return known;
+    const position = view.getComputedStyle(el).position;
+    const answer = position === "fixed" || position === "sticky" || isPinned(el.parentElement);
+    pinned.set(el, answer);
+    return answer;
+  };
+  const marks: { id: string; top: number }[] = [];
+  for (const el of Array.from(doc.body?.querySelectorAll("[id]") ?? [])) {
+    const id = el.id;
+    if (!id || id.length > PLACE_ID_MAX || doc.getElementById(id) !== el) continue;
+    if (el.closest(OWN_SELECTOR)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    if (isPinned(el)) continue;
+    marks.push({ id, top: rect.top + view.scrollY });
+  }
+  return marks.sort((x, y) => x.top - y.top);
+}
+
+/** How far the window can scroll. */
+function maxScroll(doc: Document, view: Window): number {
+  return Math.max(0, doc.documentElement.scrollHeight - view.innerHeight);
+}
+
+/**
+ * Where the top of the reader's screen is in the text, for a follower on a
+ * screen of another size (`ReadingPlace`). Null when the document has no ids to
+ * name a place by, which leaves the follower the fraction.
+ */
+export function readingPlace(doc: Document): ReadingPlace | null {
+  const view = doc.defaultView;
+  if (!view) return null;
+  const marks = placeMarks(doc);
+  if (marks.length === 0) return null;
+  const y = view.scrollY;
+  let above = -1;
+  // A pixel of slack, for a heading scrolled to exactly the top and rounded.
+  for (let i = 0; i < marks.length && marks[i].top <= y + 1; i += 1) above = i;
+  const a = above >= 0 ? marks[above] : null;
+  const b = marks[above + 1] ?? null;
+  const lo = a ? a.top : 0;
+  const hi = b ? b.top : maxScroll(doc, view);
+  const at = hi > lo ? Math.min(1, Math.max(0, (y - lo) / (hi - lo))) : 0;
+  return { ...(a ? { a: a.id } : {}), ...(b ? { b: b.id } : {}), at };
+}
+
+/**
+ * Scroll to a peer's reading place. False, having scrolled nothing, when an id
+ * it names is not in this document, so the caller can fall back to the
+ * fraction.
+ */
+export function scrollToPlace(doc: Document, place: ReadingPlace): boolean {
+  const view = doc.defaultView;
+  if (!view) return false;
+  const topOf = (id: string): number | null => {
+    const el = doc.getElementById(id);
+    return el ? el.getBoundingClientRect().top + view.scrollY : null;
+  };
+  const max = maxScroll(doc, view);
+  const lo = place.a !== undefined ? topOf(place.a) : 0;
+  const hi = place.b !== undefined ? topOf(place.b) : max;
+  if (lo === null || hi === null) return false;
+  const y = hi > lo ? lo + place.at * (hi - lo) : lo;
+  view.scrollTo({ top: Math.min(max, Math.max(0, y)), behavior: "auto" });
+  return true;
 }

@@ -118,6 +118,20 @@ describe("useDeck", () => {
     expect(result.current.current).toBe(0);
   });
 
+  it("tells of every move the reader makes, by the rail or the keys, and not of a follow's", () => {
+    // Following a peer is let go by a move of the reader's own; the follow's
+    // own moves must not let go of it (SPEC §16).
+    const { doc } = mountDeck(DECK, 700, 700);
+    const onReaderMove = vi.fn();
+    const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true, onReaderMove }));
+    act(() => result.current.goTo(2, { follow: true }));
+    expect(onReaderMove).not.toHaveBeenCalled();
+    act(() => result.current.goTo(1));
+    expect(onReaderMove).toHaveBeenCalledTimes(1);
+    press(window, "ArrowRight");
+    expect(onReaderMove).toHaveBeenCalledTimes(2);
+  });
+
   it("hears a key pressed inside the frame, where the reader's focus is", () => {
     const { doc, sections } = mountDeck(DECK);
     renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
