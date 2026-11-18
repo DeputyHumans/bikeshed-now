@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Going to a place in the document: a thread's passage, on whichever slide holds it (SPEC §6, §6d).
+// Going to a place in the document — a thread's passage, a link's target, the person followed — on whichever slide holds it, and keeping the address on the slide (SPEC §6, §6d, §6e, §16).
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { rangeFromAnchor } from "../annotation/anchor";
 import { exactRangeFromAnchor } from "../annotation/exact";
 import { scrollToFraction, scrollToPlace } from "../annotation/peers";
@@ -10,6 +10,7 @@ import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import type { Peer } from "../presence";
 import type { Annotation } from "../types";
 import { slideOf } from "./deck";
+import { formatTarget, parseTarget, slideOfTarget, slideTarget } from "./target";
 import type { FrameMode } from "./frameMode";
 import type { DeckControls } from "./useDeck";
 
@@ -35,7 +36,25 @@ import type { DeckControls } from "./useDeck";
  * their screen, which a screen of another width finds in the same words; else
  * the fraction of the page they had scrolled, as before. This reader's own
  * slide is shared for whoever follows them.
+ *
+ * A link lands where its address says, after `#` (`viewer/target.ts`): a
+ * section or slide by id, a slide by number, a comment thread. Once per
+ * arrival — a page load, or the router moving to an address this hook did not
+ * write — and never again for a redraw, a peer or a reload of the frame. On a
+ * paged deck the address then follows the reader from slide to slide, by
+ * replacing it, so copying the address bar shares the slide and Back still
+ * leaves the document; and a frame that reloads returns to the slide in it.
  */
+
+/** Why a comment a link names is not shown, for the viewer to say. */
+export type TargetNotice = "comment-missing" | "comment-sign-in" | "comment-unreadable" | "comment-folder-link";
+
+/** Whether the threads of the version on screen can be looked in yet, and if not, why. */
+export interface ThreadsState {
+  ready: boolean;
+  /** Set once ready: why a reader cannot see them at all. */
+  refused?: Exclude<TargetNotice, "comment-missing">;
+}
 export function useTarget(options: {
   mode: FrameMode;
   doc: Document | null;
@@ -49,8 +68,17 @@ export function useTarget(options: {
   follow?: Peer | null;
   /** Share this reader's slide, or null when their document is not paged. */
   shareSlide?: (slide: number | null) => void;
+  /** The router's part of the address after `#`. Changes only when the router moves. */
+  hash?: string;
+  threads?: ThreadsState;
+  /** Open a thread a link named: select it and show the comments. */
+  onThread?: (threadId: string) => void;
+  onNotice?: (notice: TargetNotice) => void;
 }): void {
-  const { mode, doc, epoch, deck, annotations, selectedId, frameShown = true, follow = null, shareSlide } = options;
+  const {
+    mode, doc, epoch, deck, annotations, selectedId, frameShown = true, follow = null, shareSlide,
+    hash = "", threads = { ready: false }, onThread, onNotice,
+  } = options;
   const enabled = mode.kind === "reading";
   const reduceMotion = usePrefersReducedMotion();
   const { paged, slides, current, locate, goTo, measuredEpoch } = deck;
@@ -87,7 +115,7 @@ export function useTarget(options: {
     // Nor before the deck has measured this document, or a passage on a slide
     // would be scrolled to as if the document had no pages.
     if (!enabled || !doc || !frameShown || measuredEpoch !== epoch || revealed.current === selectedId) return;
-    const node = passageOf(doc, annotations.find((a) => a.annId === selectedId) ?? null, selectedId);
+    const node = passageOf(doc, annotations, selectedId);
     if (!node) return;
     revealed.current = selectedId;
     const slide = paged ? slideOf(slides, node) : -1;
@@ -127,16 +155,136 @@ export function useTarget(options: {
     // `followPlace` is read through `placeKey`, so a new object with the same
     // place does not move the reader again.
   }, [doc, epoch, measured, paged, followSlide, placeKey, followViewport, locate, goTo]);
+
+  // --- An address that names a place ----------------------------------------
+
+  /** The part after `#` this hook last wrote, which the router never sees. */
+  const written = useRef<string | null>(null);
+  /**
+   * The arrival being landed. A new one whenever the router's hash changes to
+   * something this hook did not write: the router hears Back, Forward and an
+   * address edited by hand, and never a `replaceState` of ours.
+   */
+  const [arrival, setArrival] = useState(() => ({ hash, target: parseTarget(hash), landed: false }));
+  if (arrival.hash !== hash && hash !== written.current) {
+    setArrival({ hash, target: parseTarget(hash), landed: false });
+  }
+  /** The frame epoch the address was last applied on, so a reload can go back to it. */
+  const appliedEpoch = useRef<number | null>(null);
+  /**
+   * A slide this hook is on its way to for the address. A deck that scrolls
+   * smoothly passes other slides first, and the address must not be rewritten
+   * to them, losing the link's own target; given up on after a moment, for a
+   * deck that never gets there.
+   */
+  const heading = useRef<{ slide: number; until: number } | null>(null);
+  const head = useCallback((slide: number) => {
+    heading.current = { slide, until: Date.now() + 2000 };
+    goTo(slide);
+  }, [goTo]);
+  const passage = useCallback((threadId: string) => (doc ? passageOf(doc, annotations, threadId) : null), [doc, annotations]);
+
+  const landed = useCallback(() => {
+    appliedEpoch.current = epoch;
+    setArrival((a) => (a.landed ? a : { ...a, landed: true }));
+  }, [epoch]);
+
+  useEffect(() => {
+    const target = arrival.target;
+    if (arrival.landed) return;
+    if (!doc || !measured) return;
+    if (!target) {
+      landed();
+      return;
+    }
+    if (target.kind === "comment") {
+      if (!threads.ready) return;
+      if (threads.refused) onNotice?.(threads.refused);
+      else if (annotations.some((a) => a.annId === target.id)) onThread?.(target.id);
+      else onNotice?.("comment-missing");
+      landed();
+      return;
+    }
+    if (target.kind === "slide") {
+      if (paged && target.n <= slides.length) head(target.n - 1);
+      landed();
+      return;
+    }
+    const el = doc.getElementById(target.id);
+    if (el) {
+      const slide = paged ? slideOf(slides, el) : -1;
+      if (slide >= 0) head(slide);
+      // Instantly, as a browser goes to `#id`; the slide itself needs no scroll.
+      if (slide < 0 || (el !== slides[slide].el && el !== slides[slide].outer)) {
+        el.scrollIntoView({ block: "start", behavior: "auto" });
+      }
+    }
+    landed();
+  }, [arrival, doc, measured, threads.ready, threads.refused, annotations, paged, slides, head, onThread, onNotice, landed]);
+
+  /**
+   * A frame that loads again — a peer's draft, a trust change — shows a deck's
+   * first slide. On a paged deck the address says which slide the reader was
+   * on, so they are put back there. Not while following: the follow decides.
+   */
+  const following = follow !== null;
+  useEffect(() => {
+    if (!doc || !measured || !paged || following || !arrival.landed) return;
+    if (appliedEpoch.current === null || appliedEpoch.current === epoch) return;
+    appliedEpoch.current = epoch;
+    const slide = slideOfTarget(doc, parseTarget(window.location.hash), slides, passage);
+    if (slide >= 0 && slide !== locate()) head(slide);
+  }, [doc, epoch, measured, paged, following, arrival.landed, slides, passage, locate, head]);
+
+  /**
+   * On a paged deck the address follows the slide. Replaced, never pushed, and
+   * the router's own state kept with it, so Back still leaves the document and
+   * the router still knows where it is.
+   *
+   * Only when the slide CHANGES: an address that does not name the slide on
+   * screen is left alone until the reader moves, so a link's target stays in
+   * it while the thread it names is still being opened, and a document opened
+   * with no place in its address keeps none. Nor while a link's target has yet
+   * to land, nor for a slide passed on the way to one, nor when the address
+   * already names the new slide — a thread there, an element on it.
+   */
+  const seen = useRef<number | null>(null);
+  useEffect(() => {
+    if (!doc || !measured || !paged || !arrival.landed) return;
+    const at = locate();
+    const slide = slides[at];
+    if (!slide) return;
+    if (seen.current === null || seen.current === at) {
+      seen.current = at;
+      return;
+    }
+    seen.current = at;
+    const bound = heading.current;
+    if (bound) {
+      if (at !== bound.slide && Date.now() < bound.until) return;
+      heading.current = null;
+    }
+    const here = window.location;
+    const named = parseTarget(here.hash);
+    if (slideOfTarget(doc, named, slides, passage) === at) return;
+    const next = formatTarget(slideTarget(slide));
+    if (next === here.hash) return;
+    written.current = next;
+    window.history.replaceState(window.history.state, "", `${here.pathname}${here.search}${next}`);
+    // `current` is how the deck says it moved; `locate` is where it is now.
+  }, [doc, measured, paged, arrival.landed, current, slides, passage, locate]);
 }
+
 
 /**
  * Where a thread's passage is: its highlight, or for a resolved thread, which
  * has none, the element its anchor resolves in — strictly when it would be
  * drawn strictly, exactly as `redrawHighlights` decides.
  */
-function passageOf(doc: Document, annotation: Annotation | null, annId: string): Element | null {
+function passageOf(doc: Document, annotations: readonly Annotation[], annId: string): Element | null {
   const mark = Array.from(doc.querySelectorAll(HL_SELECTOR)).find((el) => el.getAttribute(ANN_ATTR) === annId);
   if (mark) return mark;
+  const annotation = annotations.find((a) => a.annId === annId) ?? null;
   if (!annotation?.resolved) return null;
   const strict = annotation.anchor.strict === true;
   let range: Range | null = null;

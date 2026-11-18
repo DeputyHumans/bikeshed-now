@@ -527,6 +527,29 @@ Previews are sandboxed `allow-same-origin` with NO `allow-scripts`, even for a t
 
 Presentation mode hides app chrome with a class on `<body>` and requests fullscreen as an enhancement; the CSS state is what hides the chrome, and the app's state follows `fullscreenchange` rather than assuming it.
 
+### 6e. A place in a document has an address
+
+A link can name a place in a document: the part of Bikeshed's own address after `#`, which the server never sees ([ADR 0035](adr/0035-a-place-in-a-document-has-an-address.md), `app/src/viewer/target.ts`). It is never the document's own `#…`: a deck's script keeps that inside the frame, in a format of its own, and nothing reads it (§6d).
+
+| Target | Form | Path |
+|---|---|---|
+| A section or slide its author gave an id | `#<id>`, percent-encoded, found by `getElementById`, never by a selector | the one being read |
+| A slide with no id | `#slide=<n>`, from 1, in reading order | the one being read |
+| A comment thread | `#comment=<thread>` | always `/d/<id>/<the thread's version>` |
+
+`?k=` stays before the `#`. The reserved forms win over an author's id spelled the same way, a malformed one names nothing, and an id spelled like one is never linked by. A thread's link names its version because threads belong to it (§6), and `/d/<id>/<head>` reads as the current version, so the link works while that version is the head and after.
+
+- **A link lands once per arrival:** a page load, or the router moving to an address the viewer did not write — Back, Forward, an address edited by hand. A redraw, a peer's update and a frame reload never move the reader again. A slide or section waits until the deck has measured the document, a thread until its version's threads have answered.
+  - A section: its slide, on a paged deck, then the section at the top of the view, at once, as a browser goes to `#id`.
+  - A slide: shown as the rail shows it.
+  - A thread: selected, the comments opened, on a phone the Comments pane; selecting it then takes the reader to its slide and passage (§6), a resolved one included, which the panel shows though resolved threads are hidden.
+  - A slide number past the end, or an id this version lacks: the document as usual, nothing said. A thread this version lacks says it is not on this version. A reader who cannot see threads is told why: signed out, with Sign in, which comes back to the same address; a folder's link, which shows no comments; anybody else the rules refuse.
+- **On a paged deck the address follows the slide**, so copying the address bar shares it: the slide's own id when it has one that finds it again, else `#slide=<n>`. The address is replaced, never pushed, with the router's own `history.state` kept, so Back still leaves the document and the router still knows where it is. It changes only when the slide changes, never because the address names somewhere else, so a link's own target stays until the reader moves; not for a slide passed on the way to a link's slide; and not when the address already names the new slide, a thread on it or an element on it included. A frame that loads again shows a deck's first slide, so a paged deck is put back on the slide in the address, unless the reader is following someone (§16). A document without pages keeps whatever address it was opened with: following the scroll would rewrite it on every move, and most documents have few ids to name.
+- **Copy link is offered where a link is made.** On every thread card, archived versions included. In the selection controls, for any reader, alone where they may not comment: the nearest element around the start of the selection with an id that finds it again, passing over our own nodes, or on a paged deck the slide when nothing inside it has one, and never an element around the whole deck; not offered when there is neither. As "Copy link to this slide" in a deck's menu. A copy builds on the reader's own address, its path and `?k=`, and nothing else of the query; it adds no key, version or access the reader's address did not carry, except a thread's version. A refused clipboard says so and shows the link.
+- **Others hand out the same links.** The comment email links to its thread (§14), and the agent tools give every thread its `url` (§19).
+
+A link describes what its copier saw. An editor reading a draft links the draft's slides; a slide with an id is linked by it, so only an unnamed one can move. A link preview shows the document, never the slide or the comment (§17 "Link previews").
+
 ---
 
 ## 7. Web app structure

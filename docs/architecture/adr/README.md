@@ -41,6 +41,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) | A reading separates text that touches, and a quote may carry the space | Accepted |
 | [0033](0033-a-reading-is-kept-once-made.md) | A version's reading is kept once made, named by its bytes | Accepted |
 | [0034](0034-a-reading-is-made-within-a-budget.md) | A reading is made in a worker, within a time and memory budget | Accepted |
+| [0035](0035-a-place-in-a-document-has-an-address.md) | A place in a document has an address, after `#` | Accepted |
 
 ## Format
 

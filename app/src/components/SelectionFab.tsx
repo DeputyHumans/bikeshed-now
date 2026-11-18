@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// The "comment on this" and "suggest an edit" affordance that follows a selection (SPEC §6, §22).
+// The "comment on this", "suggest an edit" and "copy a link to here" affordance that follows a selection (SPEC §6, §6e, §22).
 
 import { createPortal } from "react-dom";
 import { useCoarsePointer } from "../hooks/useMediaQuery";
 import { useEffect, useState } from "react";
 import { watchScroll, watchSelection } from "../viewer/frameWatch";
 import { suggestibleRange, trimToText } from "../annotation/exact";
+import type { Target } from "../viewer/target";
 import { Icon } from "./Icon";
 
 export interface FabPosition {
@@ -43,11 +44,13 @@ export function SelectionFab({
   onComment,
   label = "Comment",
   suggest,
+  link,
 }: {
   doc: Document | null;
   epoch: number;
   enabled: boolean;
-  onComment: () => void;
+  /** Absent where this reader may not comment: the controls then offer only what they may do. */
+  onComment?: () => void;
   label?: string;
   /**
    * Offered beside Comment when this reader may suggest (SPEC §22). Never
@@ -55,9 +58,15 @@ export function SelectionFab({
    * than greyed out — a disabled button cannot explain itself reliably.
    */
   suggest?: { onSuggest: () => void; onRefused: (reason: string) => void };
+  /**
+   * A link to the place the selection starts in (SPEC §6e), for any reader.
+   * Offered only when `targetOf` finds one: a section with an id, or a slide.
+   */
+  link?: { targetOf: (range: Range) => Target | null; onCopy: (target: Target) => void };
 }) {
   const [position, setPosition] = useState<FabPosition | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [target, setTarget] = useState<Target | null>(null);
   // On a touch screen the phone's own Copy/Share menu sits just above the
   // selection, exactly where this would float, and covers it. There the
   // controls dock at the bottom of the screen instead, clear of it.
@@ -83,12 +92,20 @@ export function SelectionFab({
       // Judged as it will be anchored: trimmed of the whitespace a drag takes with it.
       const verdict = suggestibleRange(trimToText(range));
       setRefusal(verdict === true ? null : verdict.reason);
+      const found = link?.targetOf(range) ?? null;
+      setTarget(found);
+      const count = (onComment ? 1 : 0) + (suggest ? 1 : 0) + (found ? 1 : 0);
+      // Nothing this reader may do with it: no controls at all.
+      if (count === 0) {
+        setPosition(null);
+        return;
+      }
       const view = doc.defaultView;
       setPosition(
         fabPosition(
           rect,
           { width: view?.innerWidth ?? 0, height: view?.innerHeight ?? 0 },
-          { width: suggest ? 250 : 150, height: 34 },
+          { width: count === 1 ? 150 : count === 2 ? 250 : 350, height: 34 },
         ),
       );
     };
@@ -100,7 +117,9 @@ export function SelectionFab({
       stopSelection();
       stopScroll();
     };
-  }, [enabled, doc, epoch, suggest !== undefined]);
+    // The callbacks are read when the selection changes; what matters here is
+    // which of them exist, because that decides how wide the controls are.
+  }, [enabled, doc, epoch, suggest !== undefined, onComment !== undefined, link !== undefined]);
 
   if (!position) return null;
   // Pointer-down rather than click: a click first collapses the selection
@@ -115,11 +134,13 @@ export function SelectionFab({
     if (refusal) suggest.onRefused(refusal);
     else suggest.onSuggest();
   };
-  const commentButton = (
+  const copy = () => {
+    if (link && target) link.onCopy(target);
+  };
+  const commentButton = onComment ? (
     <button
       type="button"
       className="selection-fab"
-      style={suggest || docked ? undefined : { top: position.top, left: position.left }}
       onPointerDown={(e) => {
         e.preventDefault();
         onComment();
@@ -129,7 +150,21 @@ export function SelectionFab({
       <Icon name="comment" size={14} />
       {label}
     </button>
-  );
+  ) : null;
+  const linkButton = link && target ? (
+    <button
+      type="button"
+      className="selection-fab"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        copy();
+      }}
+      onClick={keyboardOnly(copy)}
+    >
+      <Icon name="link" size={14} />
+      Copy link
+    </button>
+  ) : null;
   const suggestButton = suggest ? (
     <button
       type="button"
@@ -152,15 +187,16 @@ export function SelectionFab({
       <div className="selection-fab-bar selection-dock" role="toolbar" aria-label="Selection">
         {commentButton}
         {suggestButton}
+        {linkButton}
       </div>,
       document.body,
     );
   }
-  if (!suggest) return commentButton;
   return (
     <div className="selection-fab-bar" role="toolbar" aria-label="Selection" style={{ top: position.top, left: position.left }}>
       {commentButton}
       {suggestButton}
+      {linkButton}
     </div>
   );
 }

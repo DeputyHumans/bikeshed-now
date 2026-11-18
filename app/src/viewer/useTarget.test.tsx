@@ -2,14 +2,15 @@
 // Selecting a thread brings its passage into view, on whichever slide holds it, and only then (SPEC §6, §6d).
 
 import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ANN_ATTR } from "../brand/dom";
 import type { Peer } from "../presence";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 import { useAnnotationLayer } from "./useAnnotationLayer";
 import { useDeck } from "./useDeck";
-import { useTarget } from "./useTarget";
+import { useTarget, type TargetNotice, type ThreadsState } from "./useTarget";
 
 /**
  * jsdom lays nothing out: `scrollIntoView` is not implemented there at all and
@@ -25,6 +26,10 @@ import { useTarget } from "./useTarget";
 const READING: FrameMode = { kind: "reading", versionId: "v1", draft: false, sandboxed: false };
 const scrollIntoView = vi.fn();
 
+beforeEach(() => {
+  // The address is the test window's own, so each case starts on a clean one.
+  window.history.replaceState(null, "", "/d/deck");
+});
 afterEach(() => {
   scrollIntoView.mockReset();
   document.body.innerHTML = "";
@@ -71,30 +76,42 @@ interface Props {
   follow?: Peer | null;
   shareSlide?: (slide: number | null) => void;
   onReaderMove?: () => void;
+  doc?: Document;
+  epoch?: number;
+  hash?: string;
+  threads?: ThreadsState;
+  onThread?: (threadId: string) => void;
+  onNotice?: (notice: TargetNotice) => void;
 }
 
 function mount(doc: Document, initialProps: Props) {
   return renderHook(
     (props: Props) => {
+      const frame = props.doc ?? doc;
+      const epoch = props.epoch ?? 1;
       useAnnotationLayer({
         mode: READING,
-        doc,
-        epoch: 1,
+        doc: frame,
+        epoch,
         annotations: props.annotations,
         selectedId: props.selectedId,
         onSelect: vi.fn(),
       });
-      const deck = useDeck({ doc, epoch: 1, keysEnabled: false, onReaderMove: props.onReaderMove });
+      const deck = useDeck({ doc: frame, epoch, keysEnabled: false, onReaderMove: props.onReaderMove });
       useTarget({
         mode: READING,
-        doc,
-        epoch: 1,
+        doc: frame,
+        epoch,
         deck,
         annotations: props.annotations,
         selectedId: props.selectedId,
         frameShown: props.frameShown,
         follow: props.follow,
         shareSlide: props.shareSlide,
+        hash: props.hash,
+        threads: props.threads,
+        onThread: props.onThread,
+        onNotice: props.onNotice,
       });
       return deck;
     },
@@ -410,5 +427,191 @@ describe("following a peer", () => {
     mount(prose().doc, { selectedId: null, annotations: [], shareSlide: onProse });
     expect(onProse).toHaveBeenLastCalledWith(null);
     expect(onProse).not.toHaveBeenCalledWith(0);
+  });
+});
+
+describe("arriving at a link", () => {
+  /** A stacked deck of five: two with ids, one with an id inside it, two plain. */
+  function deck() {
+    const doc = frameDoc(
+      `<section class="slide" id="cover"><h2>Cover</h2><p>Opening words.</p></section>
+       <section class="slide" id="agenda"><h2>Agenda</h2><p>Words on the agenda.</p></section>
+       <section class="slide"><h2>Plain</h2><p>Words on a plain slide.</p></section>
+       <section class="slide"><h2>Inner</h2><p id="claim">The claim itself.</p></section>
+       <section class="slide"><h2>Last</h2><p>Closing words.</p></section>`,
+    );
+    const sections = Array.from(doc.querySelectorAll<HTMLElement>("section"));
+    let at = 0;
+    const show = (n: number) => {
+      at = Math.max(0, Math.min(sections.length - 1, n));
+      sections.forEach((el, i) => (el.style.visibility = i === at ? "visible" : "hidden"));
+    };
+    doc.defaultView!.Element.prototype.getBoundingClientRect = () =>
+      ({ top: 0, bottom: 700, height: 700, left: 0, right: 1200, width: 1200 }) as DOMRect;
+    show(0);
+    doc.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") show(at + 1);
+      else if (e.key === "ArrowLeft") show(at - 1);
+      else return;
+      e.preventDefault();
+    });
+    return { doc, show, showing: () => sections.findIndex((el) => el.style.visibility === "visible") };
+  }
+  const ready: ThreadsState = { ready: true };
+  const plainThread = () => [annotation("t3", "", "Words on a plain slide")];
+
+  it("shows the slide a number names, without a history entry", () => {
+    const { doc, showing } = deck();
+    const length = window.history.length;
+    mount(doc, { selectedId: null, annotations: [], hash: "#slide=3" });
+    expect(showing()).toBe(2);
+    expect(window.history.length).toBe(length);
+  });
+
+  it("shows the slide an id names, and the slide holding an element an id names, with that element at the top", () => {
+    const first = deck();
+    mount(first.doc, { selectedId: null, annotations: [], hash: "#agenda" });
+    expect(first.showing()).toBe(1);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    const second = deck();
+    mount(second.doc, { selectedId: null, annotations: [], hash: "#claim" });
+    expect(second.showing()).toBe(3);
+    expect(scrolledTo()?.id).toBe("claim");
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "start", behavior: "auto" });
+  });
+
+  it("puts a section of a document without pages at the top, at once", () => {
+    const doc = frameDoc(`<section id="s1"><p>One.</p></section><section id="s2"><p>Two.</p></section>`);
+    mount(doc, { selectedId: null, annotations: [], hash: "#s2" });
+    expect(scrolledTo()?.id).toBe("s2");
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "auto" });
+  });
+
+  it("opens the deck as usual for a slide or an id it does not have", () => {
+    const { doc, showing } = deck();
+    const notice = vi.fn();
+    mount(doc, { selectedId: null, annotations: [], hash: "#slide=9", onNotice: notice });
+    expect(showing()).toBe(0);
+    const other = deck();
+    mount(other.doc, { selectedId: null, annotations: [], hash: "#nowhere", onNotice: notice });
+    expect(other.showing()).toBe(0);
+    expect(notice).not.toHaveBeenCalled();
+  });
+
+  it("opens a thread a link names once the threads have landed, and its slide follows from selecting it", () => {
+    const { doc, showing } = deck();
+    const onThread = vi.fn();
+    const annotations = plainThread();
+    const { rerender } = mount(doc, { selectedId: null, annotations: [], hash: "#comment=t3", threads: { ready: false }, onThread });
+    expect(onThread).not.toHaveBeenCalled();
+    rerender({ selectedId: null, annotations, hash: "#comment=t3", threads: ready, onThread });
+    expect(onThread).toHaveBeenCalledWith("t3");
+    rerender({ selectedId: "t3", annotations, hash: "#comment=t3", threads: ready, onThread });
+    expect(showing()).toBe(2);
+    expect(onThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so when the thread is not on this version, and why when the reader cannot see threads", () => {
+    const missing = vi.fn();
+    mount(deck().doc, { selectedId: null, annotations: plainThread(), hash: "#comment=gone", threads: ready, onNotice: missing });
+    expect(missing).toHaveBeenCalledWith("comment-missing");
+
+    const refused = vi.fn();
+    const onThread = vi.fn();
+    mount(deck().doc, { selectedId: null, annotations: [], hash: "#comment=t3", threads: { ready: true, refused: "comment-sign-in" }, onNotice: refused, onThread });
+    expect(refused).toHaveBeenCalledWith("comment-sign-in");
+    expect(onThread).not.toHaveBeenCalled();
+  });
+
+  it("lands once: a redraw or new threads after it never pull back a reader who moved on", () => {
+    const { doc, show, showing } = deck();
+    const annotations = plainThread();
+    const { rerender } = mount(doc, { selectedId: null, annotations, hash: "#slide=3", threads: ready });
+    expect(showing()).toBe(2);
+    show(0);
+    rerender({ selectedId: null, annotations: [...annotations], hash: "#slide=3", threads: { ...ready } });
+    expect(showing()).toBe(0);
+  });
+
+  it("lands again when the router moves to another address in the same document", () => {
+    const { doc, showing } = deck();
+    const { rerender } = mount(doc, { selectedId: null, annotations: [], hash: "#slide=2" });
+    expect(showing()).toBe(1);
+    rerender({ selectedId: null, annotations: [], hash: "#slide=5" });
+    expect(showing()).toBe(4);
+  });
+});
+
+describe("the address on a paged deck", () => {
+  function deck(withIds = true) {
+    const doc = frameDoc(
+      [1, 2, 3, 4].map((n) => `<section class="slide"${withIds && n !== 3 ? ` id="s${n}"` : ""}><h2>Slide ${n}</h2><p>Words on slide number ${n}.</p></section>`).join(""),
+    );
+    const sections = Array.from(doc.querySelectorAll<HTMLElement>("section"));
+    let at = 0;
+    const show = (n: number) => {
+      at = Math.max(0, Math.min(sections.length - 1, n));
+      sections.forEach((el, i) => (el.style.visibility = i === at ? "visible" : "hidden"));
+    };
+    doc.defaultView!.Element.prototype.getBoundingClientRect = () =>
+      ({ top: 0, bottom: 700, height: 700, left: 0, right: 1200, width: 1200 }) as DOMRect;
+    show(0);
+    doc.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") show(at + 1);
+      else if (e.key === "ArrowLeft") show(at - 1);
+      else return;
+      e.preventDefault();
+    });
+    return { doc, show, showing: () => sections.findIndex((el) => el.style.visibility === "visible") };
+  }
+
+  it("follows the slide by replacing the address, keeping the router's state, by the slide's id or else its number", () => {
+    window.history.replaceState({ usr: null, key: "k7", idx: 3 }, "", "/d/deck?k=key");
+    const length = window.history.length;
+    const { doc } = deck();
+    const { result } = mount(doc, { selectedId: null, annotations: [] });
+    expect(window.location.hash).toBe("");
+    act(() => result.current.goTo(1));
+    expect(window.location.hash).toBe("#s2");
+    act(() => result.current.goTo(2));
+    expect(window.location.hash).toBe("#slide=3");
+    expect(window.location.pathname + window.location.search).toBe("/d/deck?k=key");
+    expect(window.history.state).toEqual({ usr: null, key: "k7", idx: 3 });
+    expect(window.history.length).toBe(length);
+  });
+
+  it("keeps a link's own target while it names the slide on screen, and follows once the reader moves on", () => {
+    window.history.replaceState(null, "", "/d/deck/v2#comment=t2");
+    const { doc, showing } = deck();
+    const annotations = [annotation("t2", "s2", "slide number 2")];
+    const onThread = vi.fn();
+    const { result, rerender } = mount(doc, { selectedId: null, annotations, hash: "#comment=t2", threads: { ready: true }, onThread });
+    rerender({ selectedId: "t2", annotations, hash: "#comment=t2", threads: { ready: true }, onThread });
+    expect(showing()).toBe(1);
+    expect(window.location.hash).toBe("#comment=t2");
+    act(() => result.current.goTo(3));
+    expect(window.location.hash).toBe("#s4");
+  });
+
+  it("never touches the address of a document without pages", () => {
+    window.history.replaceState(null, "", "/d/plan#s2");
+    const doc = frameDoc(`<section id="s1"><p>One.</p></section><section id="s2"><p>Two.</p></section>`);
+    doc.defaultView!.Element.prototype.getBoundingClientRect = () => rectAt(100);
+    mount(doc, { selectedId: null, annotations: [], hash: "#s2" });
+    expect(window.location.hash).toBe("#s2");
+  });
+
+  it("returns a deck whose frame loaded again to the slide in the address", () => {
+    const first = deck();
+    const { result, rerender } = mount(first.doc, { selectedId: null, annotations: [] });
+    act(() => result.current.goTo(2));
+    expect(window.location.hash).toBe("#slide=3");
+
+    // A peer's draft reloads the frame: a new document, on its first slide.
+    const again = deck();
+    rerender({ selectedId: null, annotations: [], doc: again.doc, epoch: 2 });
+    expect(again.showing()).toBe(2);
+    expect(window.location.hash).toBe("#slide=3");
   });
 });

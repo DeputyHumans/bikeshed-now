@@ -361,7 +361,7 @@
   cursor: pointer;
 }
 
-/* Comment and Suggest edit together, placed as one. */
+/* Comment, Suggest edit and Copy link together, placed as one. */
 .selection-fab-bar {
   position: absolute;
   z-index: 10;
@@ -384,6 +384,8 @@
   /* Over the consent card (42): it is what the reader is using this moment. */
   z-index: 43;
   justify-content: center;
+  /* Three controls are wider than the narrowest phone: they take two rows there. */
+  flex-wrap: wrap;
   gap: var(--s-2);
 }
 .selection-dock .selection-fab {
@@ -469,6 +471,7 @@
   .slide-rail,
   .slide-overview,
   .selection-fab,
+  .selection-fab-bar,
   .frame-loading,
   .present-counter,
   .present-exit {
