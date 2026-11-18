@@ -62,6 +62,13 @@ export const PLAIN = { region: REGION };
  */
 export const WARM = { ...PLAIN, minInstances: 1 };
 /**
+ * Publishing a version whose media were staged reads each staged file once
+ * to hash it, and a 200 MB film takes longer than the 60 s default on a busy
+ * instance (SPEC §24). Hosting still cuts the caller off at 60 s; the function
+ * finishes, and a retry finds the version already made (`deduped`).
+ */
+export const MINTING = { ...PLAIN, timeoutSeconds: 300 };
+/**
  * The two services that turn a whole HTML page into a Markdown reading:
  * `docMarkdown` and `mcp`'s `get_document` (ADR 0030). At the 256 MiB default,
  * reading a 2.2 MB page, production killed `docMarkdown` three times in thirty

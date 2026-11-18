@@ -111,7 +111,7 @@ function httpFailure(result, code) {
     .test(result.stderr ?? "");
 }
 
-function runner({ project, account, dryRun = false }, { run = spawnSync, log = console.log } = {}) {
+export function runner({ project, account, dryRun = false }, { run = spawnSync, log = console.log } = {}) {
   if (!project) throw new Error("media operation needs a project");
   if (!dryRun && !account?.trim()) throw new Error("--account is required for a real media operation");
   const flags = [`--project=${project}`, ...(account ? [`--account=${account}`] : []), "--quiet", "--verbosity=error"];

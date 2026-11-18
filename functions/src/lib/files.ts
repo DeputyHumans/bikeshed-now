@@ -126,18 +126,18 @@ const PAGE_RE = /\.(html?|md|markdown)$/i;
  *   - A bare name two files share is refused, naming both, because guessing
  *     would replace the wrong picture.
  */
-export function resolveLoose(
+export function resolveLoose<T extends { rel: string }>(
   paths: readonly string[],
-  loose: readonly BundleEntry[],
+  loose: readonly T[],
   page: PageSlots,
-): { files: BundleEntry[] } | { error: string; matches: string[] } {
+): { files: T[] } | { error: string; matches: string[] } {
   const byName = new Map<string, string[]>();
   for (const p of paths) {
     const name = p.slice(p.lastIndexOf("/") + 1);
     byName.set(name, [...(byName.get(name) ?? []), p]);
   }
   const lonePage = loose.length === 1 && PAGE_RE.test(loose[0].rel) && !loose[0].rel.includes("/");
-  const out: BundleEntry[] = [];
+  const out: T[] = [];
   for (const f of loose) {
     if (f.rel.includes("/")) {
       out.push(f);
@@ -147,14 +147,14 @@ export function resolveLoose(
     if (found.length > 1) {
       return { error: `${found.length} files are called ${f.rel}: ${found.join(", ")}. Drop the folder instead, or give the path`, matches: found };
     }
-    if (found.length === 1) out.push({ rel: found[0], data: f.data });
+    if (found.length === 1) out.push({ ...f, rel: found[0] });
     else if (lonePage) {
       const markdown = /\.(md|markdown)$/i.test(f.rel);
       if (markdown !== (page.format === "markdown")) {
         const kind = page.format === "markdown" ? "Markdown" : "HTML";
         return { error: `this document is ${kind}, so the page that replaces its own must be ${kind} too`, matches: [] };
       }
-      out.push({ rel: page.sourceEntry ?? (page.format === "markdown" ? "index.md" : page.entry), data: f.data });
+      out.push({ ...f, rel: page.sourceEntry ?? (page.format === "markdown" ? "index.md" : page.entry) });
     } else out.push(f);
   }
   return { files: out };

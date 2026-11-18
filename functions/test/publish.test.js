@@ -137,7 +137,7 @@ test("files carried from the base count toward the size cap", () => {
   const baseBytes = htmlBase.files.reduce((n, f) => n + f.data.length, 0);
   const refused = compileRevision(htmlBase, htmlBundle("<h1>v1</h1>"), "T", baseBytes - 1);
   assert.ok("error" in refused, "a bundle over the cap was accepted");
-  assert.match(refused.error, /too large/);
+  assert.match(refused.error, /a version can be up to .* MB in all/);
 });
 
 test("sending a version's own entry back hashes the same, so the update is a no-op", () => {

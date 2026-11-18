@@ -44,6 +44,7 @@ export const ENDPOINTS = [
   { path: "/health", fn: "health", match: "exact" },
   { path: "/access", fn: "setAccess", match: "exact" },
   { path: "/publish", fn: "createDoc", match: "exact" },
+  { path: "/media", fn: "createDoc", match: "exact" },
   { path: "/folder", fn: "createFolder", match: "exact" },
   { path: "/folder-access", fn: "setFolderAccess", match: "exact" },
   { path: "/organize", fn: "organize", match: "exact" },

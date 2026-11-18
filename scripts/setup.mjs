@@ -21,6 +21,7 @@ import { parse, fail } from "./lib/args.mjs";
 import { REPO_ROOT, getBucketName, getProjectId } from "./lib/firebase.mjs";
 import { ENDPOINTS } from "./lib/endpoints.mjs";
 import { ensureMediaBucket, resolveMediaBucket, resolveMediaOrigin } from "./lib/media.mjs";
+import { ensureContentLifecycle } from "./lib/content-bucket.mjs";
 
 const USAGE = `setup.mjs — bring the deployment's infrastructure up, idempotently
 
@@ -203,6 +204,10 @@ function main() {
       ...gcloudAcct,
     ],
   );
+
+  // Staged uploads and built downloads are removed by the bucket a day after
+  // they are made (SPEC §24, ADR 0037).
+  ensureContentLifecycle({ project: projectId, bucket, account: ACCOUNT, dryRun: DRY });
 
   if (mediaBucket) {
     console.log("\n[optional] Ensure the dedicated public landing-media bucket");

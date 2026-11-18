@@ -14,6 +14,7 @@
       { "source": "/health", "function": "health" },
       { "source": "/access", "function": "setAccess" },
       { "source": "/publish", "function": "createDoc" },
+      { "source": "/media", "function": "createDoc" },
       { "source": "/folder", "function": "createFolder" },
       { "source": "/folder-access", "function": "setFolderAccess" },
       { "source": "/organize", "function": "organize" },

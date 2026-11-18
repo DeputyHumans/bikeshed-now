@@ -260,6 +260,12 @@ async function main() {
   const [readingObjects] = await bucket.getFiles({ prefix: readingsPrefix });
   const readingFiles = readingObjects.filter((o) => !o.name.endsWith("/"));
 
+  // A large download is built once per content hash (SPEC §24). It goes with
+  // the version unless another version holds the same bytes.
+  const sharedBytes = versions.some((v) => v.id !== doomed && v.contentHash === target.contentHash);
+  const downloadZip = typeof target.contentHash === "string" && /^[0-9a-f]{64}$/.test(target.contentHash) && !sharedBytes
+    ? `downloads/${docId}/${target.contentHash}.zip` : null;
+
   const viewsQuery = docRef.collection("views").where("versionId", "==", doomed);
   const viewCount = values["keep-views"] ? 0 : await countOf(viewsQuery);
 
@@ -289,6 +295,7 @@ async function main() {
   console.log(
     `  delete Storage: gs://${bucketName}/${readingsPrefix} (${readingFiles.length} kept reading(s))`,
   );
+  if (downloadZip) console.log(`  delete Storage: gs://${bucketName}/${downloadZip} (a built download, if there is one)`);
   if (clearsThumb) console.log(`  clear thumb: it names ${doomed}`);
   console.log(
     `  delete Firestore: docs/${docId}/versions/${doomed} (+${annCount} annotation(s), ${commentCount} comment(s))`,
@@ -340,6 +347,10 @@ async function main() {
   console.log(`  deleting gs://${bucketName}/${readingsPrefix} ...`);
   await bucket.deleteFiles({ prefix: readingsPrefix, force: true });
   console.log("    done.");
+  if (downloadZip) {
+    await bucket.file(downloadZip).delete({ ignoreNotFound: true });
+    console.log(`  deleted gs://${bucketName}/${downloadZip} if it was built.`);
+  }
 
   console.log(`  deleting docs/${docId}/versions/${doomed} (recursive) ...`);
   await db.recursiveDelete(versionsRef.doc(doomed));

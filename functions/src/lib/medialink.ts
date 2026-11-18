@@ -34,7 +34,8 @@ export const MEDIA_LINK_SECONDS = 10 * 60;
 export interface MediaLinkRequest {
   objectKey: string;
   contentType: string;
-  disposition: "inline" | "attachment";
+  /** `inline`, or `attachment; filename="…"` for a download. */
+  disposition: string;
   /** Milliseconds since the epoch. */
   expires: number;
 }

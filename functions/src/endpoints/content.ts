@@ -4,6 +4,7 @@
 import { storedFiles, versionFiles, versionObjectKey, type ListingBucket } from "../lib/storage";
 import { isStreamedMedia } from "../lib/files";
 import { mediaLink } from "../lib/medialink";
+import { downloadKey, writeStoredZip } from "../lib/zipstream";
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as mime from "mime-types";
@@ -60,7 +61,7 @@ import {
   safeSegment,
   strParam,
 } from "../lib/http";
-import { db, bucket, refusal, PLAIN, WARM } from "./runtime";
+import { db, bucket, refusal, MINTING, PLAIN, WARM } from "./runtime";
 
 // ---------------------------------------------------------------------------
 // Content
@@ -541,7 +542,7 @@ export const saveThumbs = onRequest(PLAIN, async (req, res) => {
  *
  * Same 403-to-404 collapse as contentProxy: this is a read-only byte path.
  */
-export const downloadBundle = onRequest(PLAIN, async (req, res) => {
+export const downloadBundle = onRequest(MINTING, async (req, res) => {
   if (rejectMethod(req, res, ["GET", "HEAD"])) return;
   noStore(res); // before any branch can return — see noStore()
   const caller = await resolveCaller(req);
@@ -576,7 +577,46 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const listed = await versionFiles(docId, versionId, versionSnap.data() ?? {}, bucket() as unknown as ListingBucket);
+  const record = versionSnap.data() ?? {};
+  const listed = await versionFiles(docId, versionId, record, bucket() as unknown as ListingBucket);
+  const base = typeof docData.slug === "string" && docData.slug ? docData.slug : docId;
+  const filename = `${base}-${versionId}.zip`;
+
+  // Over 25 MB, the zip is built once into Storage and the reader is sent
+  // there by a short-lived link, as a video is (SPEC §24).
+  const listedTotal = listed.reduce((n, f) => n + (f.size ?? 0), 0);
+  if (listedTotal > MAX_BUNDLE_BYTES) {
+    const contentHash = typeof record.contentHash === "string" ? record.contentHash : "";
+    if (!/^[0-9a-f]{64}$/.test(contentHash)) {
+      res.status(409).json({ error: "this version cannot be downloaded whole" });
+      return;
+    }
+    const key = downloadKey(docId, contentHash);
+    const built = bucket().file(key);
+    const [exists] = await built.exists();
+    if (!exists) {
+      const at = (record.publishedAt as { toDate?: () => Date } | undefined)?.toDate?.() ?? new Date(0);
+      const out = built.createWriteStream({ resumable: true, contentType: "application/zip", preconditionOpts: { ifGenerationMatch: 0 } });
+      try {
+        await writeStoredZip(out, listed.map((f) => ({ rel: f.rel, size: f.size ?? 0, open: () => bucket().file(f.key).createReadStream() })), at);
+      } catch (e) {
+        // Built meanwhile by another download: the same bytes, so use it.
+        if ((e as { code?: unknown }).code !== 412) throw e;
+      }
+    }
+    const url = await mediaLink({ objectKey: key, contentType: "application/zip", disposition: `attachment; filename="${filename}"` });
+    if (url) {
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Location", url);
+      res.status(302).end();
+      return;
+    }
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    await streamObject(res, key, filename, req.method === "HEAD");
+    return;
+  }
+
   const files: BundleEntry[] = [];
   let total = 0;
   for (const { rel, key, size } of listed) {
@@ -598,12 +638,11 @@ export const downloadBundle = onRequest(PLAIN, async (req, res) => {
     return;
   }
 
-  const base = typeof docData.slug === "string" && docData.slug ? docData.slug : docId;
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Cache-Control", "private, no-store");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${base}-${versionId}.zip"`,
+    `attachment; filename="${filename}"`,
   );
   if (req.method === "HEAD") {
     res.status(200).end();

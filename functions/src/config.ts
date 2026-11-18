@@ -16,6 +16,25 @@ export const SESSION_COOKIE_NAME = "__session";
 export const MAX_BUNDLE_BYTES = 25 * 1024 * 1024;
 
 /**
+ * The most one picture, film or recording may be (SPEC §24, ADR 0037). It is
+ * sent straight to Storage through an upload session, never in a request
+ * body, which Cloud Run caps at 32 MiB and Hosting cuts at 60 s.
+ */
+export const MAX_MEDIA_FILE_BYTES = 200 * 1024 * 1024;
+
+/** The most one version may hold in all, its media included. */
+export const MAX_VERSION_BYTES = 500 * 1024 * 1024;
+
+/**
+ * How long a staged upload may wait for the publish that names it. The
+ * bucket's lifecycle rule removes it a day after it was made either way.
+ */
+export const STAGING_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Each chunk of a resumable upload: a multiple of 256 KiB, as Storage requires. */
+export const UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+
+/**
  * Upper bound on the files in one bundle. Every file is a Storage write at
  * publish and a function call per reader who loads it, so 25 MB of
  * one-byte files would be millions of both from one upload.

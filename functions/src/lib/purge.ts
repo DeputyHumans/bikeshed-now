@@ -111,6 +111,8 @@ async function finishDocument(db: Db, ref: Ref): Promise<void> {
     ...collections.map((collection) => db.recursiveDelete(collection)),
     db.collection("public").doc(ref.id).delete(),
     admin.storage().bucket(bucketName()).deleteFiles({ prefix: `docs/${ref.id}/` }),
+    // A large download built for it lives beside the document's files (SPEC §24).
+    admin.storage().bucket(bucketName()).deleteFiles({ prefix: `downloads/${ref.id}/` }),
     clearPresence(ref.id),
   ]);
   await ref.update({ purgePending: FieldValue.delete() });

@@ -24,11 +24,12 @@ import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { removeDraftSnapshot, retireLiveSession } from "./draft";
 import { assertWriteAuthority, WriteAuthorityError } from "./writeAuthority";
-import { MAX_BUNDLE_BYTES, bucketName } from "../config";
+import { MAX_BUNDLE_BYTES, MAX_BUNDLE_FILES, MAX_VERSION_BYTES, bucketName } from "../config";
+import { isStageable, storeStaged, type StagedFile, type StagingBucket } from "./staging";
 import { emptyGrants } from "./access";
 import type { Actor } from "./actor";
 import { publishedViaOf } from "./versions";
-import { type BundleFile } from "./hash";
+import { type BundleFile, type ListedFile } from "./hash";
 import {
   assertNotWithdrawing,
   baseFilesOf,
@@ -40,6 +41,7 @@ import {
   storeFiles,
   storedRecord,
   WITHDRAWING_MESSAGE,
+  inHand,
   type FileChanges,
   type NextFile,
   type StoreBucket,
@@ -66,6 +68,9 @@ import {
 
 /** Access or expiry changed while bytes were uploading. */
 export type AuthorityRefusal = { status: 403 | 409; error: string; expired?: boolean };
+
+/** A new document's bundle is not one a version may be; said to the person, as a 400. */
+export class PublishRefusal extends Error {}
 
 /** Loose files whose name two of the document's files share: which one is meant is not guessed. */
 export interface SharedNameRefusal {
@@ -210,7 +215,7 @@ export function pagePath(base: Pick<BaseBundle, "entry" | "sourceEntry" | "forma
  */
 export function compileOverlay(
   base: BaseBundle,
-  overlay: readonly BundleFile[],
+  overlay: readonly NextFile[],
   fallbackTitle: string,
   maxBytes: number,
 ): CompiledBundle | { error: string } {
@@ -218,7 +223,9 @@ export function compileOverlay(
   if (base.format === "markdown" && overlay.some((f) => f.rel === base.entry)) {
     return { error: `${base.entry} is made from the Markdown; send the Markdown instead` };
   }
-  const page = overlay.find((f) => f.rel === at);
+  const found = overlay.find((f) => f.rel === at);
+  if (found && !inHand(found)) return { error: `${at} is the page, and the page goes up with the upload, not on its own` };
+  const page = found && inHand(found) ? found : null;
   const compiled: CompiledBundle = page
     ? compileBundle({ files: [{ rel: at, data: page.data }], entry: at, format: base.format }, fallbackTitle)
     : {
@@ -236,9 +243,27 @@ export function compileOverlay(
   return withinCap({ ...compiled, files: [...byRel.values()] }, maxBytes);
 }
 
+/**
+ * What a whole version may be (SPEC §24): at most 2,000 files and 500 MB, and
+ * nothing over 25 MB but a picture, a film or a recording, which only an
+ * upload session can have brought.
+ */
 function withinCap(compiled: CompiledBundle, maxBytes: number): CompiledBundle | { error: string } {
   const total = compiled.files.reduce((n, f) => n + sizeOf(f), 0);
-  return total > maxBytes ? { error: "bundle is too large" } : compiled;
+  if (total > maxBytes) return { error: `a version can be up to ${Math.round(maxBytes / 1024 / 1024)} MB in all, and this one comes to ${Math.ceil(total / 1024 / 1024)} MB` };
+  if (compiled.files.length > MAX_BUNDLE_FILES) return { error: `a version can hold ${MAX_BUNDLE_FILES} files` };
+  const big = compiled.files.find((f) => sizeOf(f) > MAX_BUNDLE_BYTES && !isStageable(f.rel));
+  if (big) return { error: `${big.rel} is over 25 MB, and only a picture, a film or a recording may be` };
+  return compiled;
+}
+
+/** Files sent beside a bundle, staged or already stored, laid in with it; a path both hold is refused. */
+function withExtra(compiled: CompiledBundle, extra: readonly ListedFile[]): CompiledBundle | { error: string } {
+  if (extra.length === 0) return compiled;
+  const have = new Set(compiled.files.map((f) => f.rel));
+  const clash = extra.find((f) => have.has(f.rel));
+  if (clash) return { error: `${clash.rel} is both in the upload and sent on its own` };
+  return { ...compiled, files: [...compiled.files, ...extra.map((f) => ({ rel: f.rel, size: f.size, sha256: f.sha256 }))] };
 }
 
 /** Every object under a Storage prefix, as in-memory bundle files. */
@@ -272,7 +297,11 @@ export async function reviseDocument(args: {
    * Files laid over the current version instead (SPEC §2, §19): at exact
    * paths, or, `byName`, matched by name as loose files are (`resolveLoose`).
    */
-  overlay?: { files: BundleEntry[]; byName?: boolean };
+  overlay?: { files: NextFile[]; byName?: boolean };
+  /** Large media sent through sessions, or files the document already stores, beside a bundle (SPEC §24). */
+  extra?: ListedFile[];
+  /** Staged uploads among `overlay` or `extra`, copied into the document's stored files before minting. */
+  staged?: { bucket: StagingBucket; files: StagedFile[] };
   actor: Actor;
   authorEmail: string;
   k?: string | null;
@@ -310,11 +339,14 @@ export async function reviseDocument(args: {
       placed = files.map((f, i) => ({ sent: f.rel, at: resolved.files[i].rel }));
       files = resolved.files;
     }
-    compiled = compileOverlay(base, files, args.title, MAX_BUNDLE_BYTES);
+    compiled = compileOverlay(base, files, args.title, MAX_VERSION_BYTES);
   } else {
-    compiled = compileRevision(base, extracted as ExtractedBundle, args.title, MAX_BUNDLE_BYTES);
+    compiled = compileRevision(base, extracted as ExtractedBundle, args.title, MAX_VERSION_BYTES);
+    if (!("error" in compiled)) compiled = withExtra(compiled, args.extra ?? []);
+    if (!("error" in compiled)) compiled = withinCap(compiled, MAX_VERSION_BYTES);
   }
   if ("error" in compiled) return compiled;
+  if (args.staged) await storeStaged(args.staged.bucket, docRef.id, args.staged.files);
   const committed = await commitNewVersion({
     db: args.db,
     docRef,
@@ -418,6 +450,8 @@ export interface PublishInput {
   ownerEmail: string;
   ownerUid: string;
   compiled: CompiledBundle;
+  /** Large media sent through sessions, copied into the new document's stored files (SPEC §24). */
+  staged?: { bucket: StagingBucket; files: StagedFile[] };
   title: string;
   folderId: string | null;
   parentMembership: Membership | null;
@@ -454,7 +488,11 @@ export async function publishNewDocument(
   const { db, compiled } = input;
   const slug = slugify(input.title);
   const versionId = "v1";
-  const listing = listingOf(compiled.files);
+  const placed = withExtra(compiled, input.staged?.files ?? []);
+  if ("error" in placed) throw new PublishRefusal(placed.error);
+  const bounded = withinCap(placed, MAX_VERSION_BYTES);
+  if ("error" in bounded) throw new PublishRefusal(bounded.error);
+  const listing = listingOf(bounded.files);
   const stored = storedRecord(listing, randomUUID());
   const { fileCount, bytes } = stored;
 
@@ -466,6 +504,7 @@ export async function publishNewDocument(
     async (id) => {
       await claimDocument(id);
       await storeFiles(id, compiled.files);
+      if (input.staged) await storeStaged(input.staged.bucket, id, input.staged.files);
     },
   );
 

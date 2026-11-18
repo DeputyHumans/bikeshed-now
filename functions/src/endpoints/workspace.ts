@@ -2,7 +2,11 @@
 // The workspace: suggestions, upload, folders, organizing and forking (SPEC §2, §13, §21, §22).
 
 import { onRequest, type Request } from "firebase-functions/v2/https";
-import { MAX_BUNDLE_BYTES } from "../config";
+import { MAX_BUNDLE_BYTES, UPLOAD_CHUNK_BYTES, publicOrigin } from "../config";
+import { checkSessionRequest, openSession, readStaged, type StagedFile, type StagingBucket } from "../lib/staging";
+import { blobKey } from "../lib/storage";
+import { PublishRefusal } from "../lib/publish";
+import type { ListedFile } from "../lib/hash";
 import { getAccess, setAccess as changeAccess, organizeFolder } from "../lib/management";
 import { restoreDocument, restoreFolder, trashDocument, trashFolder } from "../lib/trash";
 import {
@@ -25,7 +29,7 @@ import {
   parseAnchor,
   parseNote,
 } from "../lib/suggestions";
-import { extractBundle, extractLoose, type BundleEntry, type ExtractedBundle } from "../lib/bundle";
+import { extractBundle, extractLoose, safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "../lib/bundle";
 import type { Principal } from "../lib/auth";
 import {
   createFolderRecord,
@@ -48,7 +52,7 @@ import {
   safeSegment,
   strParam,
 } from "../lib/http";
-import { db, bucket, refusal, MAILING, PLAIN } from "./runtime";
+import { db, bucket, refusal, MAILING, MINTING, PLAIN } from "./runtime";
 import { managementFailure, MOVE_IS_SHARING } from "./sharing";
 
 // ---------------------------------------------------------------------------
@@ -255,16 +259,56 @@ export const manageSuggestion = onRequest(PLAIN, async (req, res) => {
  * With `?update=<docId>` it publishes a new version of that document instead.
  * See `updateFromUpload`.
  */
-export const createDoc = onRequest(PLAIN, async (req, res) => {
+export const createDoc = onRequest(MINTING, async (req, res) => {
   if (rejectMethod(req, res, ["POST"])) return;
+  // Every answer here is the caller's own, and a session URL is a secret.
+  noStore(res);
   const caller = await resolveCaller(req);
   if (!caller) {
     res.status(401).end();
     return;
   }
+  if (req.path === "/media") {
+    await openMediaSession(req, res, caller);
+    return;
+  }
+
+  const updating = strParam(req, "update");
+  const merging = strParam(req, "merge") === "1";
+  // Large media sent through sessions, and files the document already stores
+  // that the client chose not to send again (SPEC §2, §24).
+  const stagingIds = listParam(req, "media");
+  const haves = listParam(req, "have");
+  if (stagingIds.length > MAX_STAGED || haves.length > 2000) {
+    badRequest(res, `a publish names at most ${MAX_STAGED} staged uploads`);
+    return;
+  }
+  if (haves.length > 0 && !updating) {
+    badRequest(res, "have names files a document already stores, so it needs update=<id>");
+    return;
+  }
+  const staged = stagingIds.length === 0 ? { files: [] as StagedFile[] } : await readStaged({
+    bucket: bucket() as unknown as StagingBucket,
+    uid: caller.uid,
+    docId: updating || null,
+    stagingIds,
+  });
+  if ("error" in staged) {
+    res.status(409).json(staged);
+    return;
+  }
+  const kept = await readHaves(updating, haves);
+  if ("error" in kept) {
+    badRequest(res, kept.error);
+    return;
+  }
+  const extra: ListedFile[] = [...staged.files.map((f) => ({ rel: f.rel, size: f.size, sha256: f.sha256 })), ...kept.files];
+  const stagedInput = staged.files.length > 0 ? { staged: { bucket: bucket() as unknown as StagingBucket, files: staged.files } } : {};
 
   const buffer = rawBuffer(req);
-  if (!buffer || buffer.length === 0) {
+  const empty = !buffer || buffer.length === 0;
+  // Laying staged media over a version needs no body; anything else does.
+  if (empty && !(merging && updating && extra.length > 0)) {
     badRequest(res, "no file uploaded");
     return;
   }
@@ -274,33 +318,32 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const filename = strParam(req, "filename");
-  const updating = strParam(req, "update");
 
   // Loose files laid over the current version, each replacing the file of the
   // same name or added, everything else kept (SPEC §2): what dropping a new
   // screenshot on a document means. The body is a .zip of them.
-  if (strParam(req, "merge") === "1") {
+  if (merging) {
     if (!updating) {
       badRequest(res, "merge lays files over a document's current version, so it needs update=<id>");
       return;
     }
-    const loose = extractLoose(buffer, MAX_BUNDLE_BYTES);
+    const loose = empty ? { files: [] as BundleEntry[] } : extractLoose(buffer as Buffer, MAX_BUNDLE_BYTES);
     if ("error" in loose) {
       badRequest(res, loose.error);
       return;
     }
-    await updateFromUpload(req, res, caller, updating, { overlay: { files: loose.files, byName: true } });
+    await updateFromUpload(req, res, caller, updating, { overlay: { files: [...loose.files, ...extra], byName: true }, ...stagedInput });
     return;
   }
 
-  const extracted = extractBundle(buffer, filename, MAX_BUNDLE_BYTES);
+  const extracted = extractBundle(buffer as Buffer, filename, MAX_BUNDLE_BYTES);
   if ("error" in extracted) {
     badRequest(res, extracted.error);
     return;
   }
 
   if (updating) {
-    await updateFromUpload(req, res, caller, updating, { extracted });
+    await updateFromUpload(req, res, caller, updating, { extracted, extra, ...stagedInput });
     return;
   }
 
@@ -322,6 +365,7 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     ownerEmail: caller.emailLower,
     ownerUid: caller.uid,
     compiled,
+    ...stagedInput,
     title: strParam(req, "title") || compiled.title,
     folderId: target.id,
     parentMembership: target.membership,
@@ -329,6 +373,10 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     ...(wantedId ? { docId: wantedId } : {}),
   }).catch((e: Error) => e);
 
+  if (result instanceof PublishRefusal) {
+    badRequest(res, result.message);
+    return;
+  }
   if (result instanceof Error) {
     res.status(500).json({ error: "could not create the document" });
     return;
@@ -375,7 +423,9 @@ async function updateFromUpload(
   res: import("express").Response,
   caller: Principal,
   docId: string,
-  input: { extracted: ExtractedBundle } | { overlay: { files: BundleEntry[]; byName: boolean } },
+  input: ({ extracted: ExtractedBundle; extra?: ListedFile[] } | { overlay: { files: Array<BundleEntry | ListedFile>; byName: boolean } }) & {
+    staged?: { bucket: StagingBucket; files: StagedFile[] };
+  },
 ): Promise<void> {
   if (strParam(req, "id") || strParam(req, "folderId") || strParam(req, "title")) {
     badRequest(res, "an update keeps the document's address, folder and title");
@@ -441,6 +491,97 @@ async function updateFromUpload(
     return;
   }
   res.status(200).json({ docId, ...result });
+}
+
+/** The most staged uploads one publish may name. */
+const MAX_STAGED = 20;
+
+/** Every value of a repeatable query parameter. */
+function listParam(req: Request, key: string): string[] {
+  const v = (req.query as Record<string, unknown>)[key];
+  const all = Array.isArray(v) ? v : v === undefined ? [] : [v];
+  return all.filter((x): x is string => typeof x === "string" && x.length > 0);
+}
+
+/**
+ * Files the document already stores, which the client did not send again:
+ * `have=<path>:<sha256>`, each checked against the document's own stored
+ * files (SPEC §24). Naming one is safe: whoever may update a document may
+ * read every version of it, and the update is checked for that below.
+ */
+async function readHaves(docId: string, haves: readonly string[]): Promise<{ files: ListedFile[] } | { error: string }> {
+  const files: ListedFile[] = [];
+  for (const h of haves) {
+    const at = h.lastIndexOf(":");
+    const rel = at > 0 ? safeBundleRelPath(h.slice(0, at)) : null;
+    const sha256 = h.slice(at + 1);
+    if (!rel || !/^[0-9a-f]{64}$/.test(sha256) || !safeSegment(docId)) return { error: `not a file this document stores: ${h}` };
+    try {
+      const [meta] = await bucket().file(blobKey(docId, sha256)).getMetadata();
+      files.push({ rel, size: Number(meta.size), sha256 });
+    } catch {
+      return { error: `this document does not store ${rel} as sent; send the file itself` };
+    }
+  }
+  return { files };
+}
+
+/**
+ * POST /media — a session to send one large picture, film or recording
+ * straight to Storage (SPEC §2, §24, ADR 0037). `{docId?, k?, path, size,
+ * sha256?}`. With `docId`, only an editor of that document may open one, and
+ * a `sha256` the document already stores answers `{have: true}`: nothing
+ * needs sending. Without it, the session is for a document not made yet.
+ */
+async function openMediaSession(req: Request, res: import("express").Response, caller: Principal): Promise<void> {
+  const body = (jsonBody(req) ?? {}) as Record<string, unknown>;
+  const checked = checkSessionRequest(body);
+  if ("error" in checked) {
+    badRequest(res, checked.error);
+    return;
+  }
+  const docId = typeof body.docId === "string" && body.docId ? body.docId : null;
+  if (docId) {
+    if (!safeSegment(docId)) {
+      res.status(404).end();
+      return;
+    }
+    const docRef = db().collection("docs").doc(docId);
+    const snap = await docRef.get();
+    const data = snap.data() as DocAclData | undefined;
+    if (!snap.exists || !data) {
+      res.status(404).end();
+      return;
+    }
+    if (!isDocEditor(data, caller.uid, caller.emailLower)) {
+      const proof = await linkProofFor(docRef, data, caller, typeof body.k === "string" ? body.k : null);
+      res.status(refusal(data, caller, proof)).end();
+      return;
+    }
+    const frozen = frozenWrite(data, Date.now());
+    if (frozen) {
+      res.status(409).json(frozen);
+      return;
+    }
+    if (checked.sha256) {
+      const [stored] = await bucket().file(blobKey(docId, checked.sha256)).exists();
+      if (stored) {
+        res.status(200).json({ have: true });
+        return;
+      }
+    }
+  }
+  const session = await openSession({
+    bucket: bucket() as unknown as StagingBucket,
+    uid: caller.uid,
+    docId,
+    path: checked.path,
+    size: checked.size,
+    // A browser's session answers Storage's CORS check for this deployment
+    // only; a token's needs none. Never taken from the request.
+    origin: caller.tokenId ? null : publicOrigin(),
+  });
+  res.status(200).json({ ...session, chunkBytes: UPLOAD_CHUNK_BYTES });
 }
 
 /** A JSON-encoded query parameter, for structured metadata on a binary upload. */
