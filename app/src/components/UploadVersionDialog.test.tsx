@@ -219,5 +219,7 @@ describe("versionUploadMessage", () => {
     expect(versionUploadMessage({ ...result, deduped: false })).toBe("Published v2.");
     expect(versionUploadMessage({ ...result, deduped: false, changes: { changed: 1, unchanged: 23, removed: 0 } })).toBe("Published v2 — 1 file changed, 23 unchanged.");
     expect(versionUploadMessage({ ...result, deduped: false, changes: { changed: 2, unchanged: 0, removed: 3 } })).toBe("Published v2 — 2 files changed, 3 removed.");
+    expect(versionUploadMessage({ ...result, deduped: false, changes: { changed: 2, unchanged: 5, removed: 1 } })).toBe("Published v2 — 2 files changed, 1 removed, 5 unchanged.");
+    expect(versionUploadMessage({ ...result, deduped: false, changes: { changed: 0, unchanged: 3, removed: 1 } })).toBe("Published v2 — 1 file removed, 3 unchanged.");
   });
 });

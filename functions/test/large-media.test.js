@@ -96,8 +96,9 @@ function world({ doc = {}, version = null } = {}) {
   });
   const around = async (fn) => {
     const saved = ["storage", "database"].map((k) => [k, Object.getOwnPropertyDescriptor(admin, k)]);
-    const env = { bucket: process.env.BIKESHED_BUCKET, origin: process.env.BIKESHED_PUBLIC_ORIGIN };
+    const env = { bucket: process.env.BIKESHED_BUCKET, origin: process.env.BIKESHED_PUBLIC_ORIGIN, project: process.env.GCLOUD_PROJECT };
     process.env.BIKESHED_BUCKET = "test-bucket";
+    process.env.GCLOUD_PROJECT = "demo-bikeshed";
     process.env.BIKESHED_PUBLIC_ORIGIN = "https://bikeshed.example";
     Object.defineProperty(admin, "storage", { configurable: true, value: () => ({ bucket: () => bucket }) });
     Object.defineProperty(admin, "database", { configurable: true, value: () => { throw new Error("no Realtime Database configured"); } });
@@ -106,10 +107,11 @@ function world({ doc = {}, version = null } = {}) {
       for (const [k, d] of saved) { if (d) Object.defineProperty(admin, k, d); else delete admin[k]; }
       if (env.bucket === undefined) delete process.env.BIKESHED_BUCKET; else process.env.BIKESHED_BUCKET = env.bucket;
       if (env.origin === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN; else process.env.BIKESHED_PUBLIC_ORIGIN = env.origin;
+      if (env.project === undefined) delete process.env.GCLOUD_PROJECT; else process.env.GCLOUD_PROJECT = env.project;
     }
   };
   const as = (who) => (who ? { cookie: `__session=s-${who.uid}` } : {});
-  const media = (who, body) => around(() => invoke(createDoc, { method: "POST", path: "/media", body, headers: as(who) }));
+  const media = (who, body, headers = {}) => around(() => invoke(createDoc, { method: "POST", path: "/media", body, headers: { ...as(who), ...headers } }));
   const publish = (who, query, body) => around(() => invoke(createDoc, { method: "POST", path: "/publish", query, rawBody: body, body, headers: as(who) }));
   const download = (who) => around(() => invoke(downloadBundle, { method: "GET", path: "/download/d/v1", headers: as(who) }));
   return { db, store, bucket, media, publish, download };
@@ -133,7 +135,14 @@ test("POST /media opens a create-only session of the declared length on the call
   assert.equal(session.options.metadata.contentLength, 5, "Storage refuses a byte more than declared");
   assert.equal(session.options.metadata.contentType, "video/mp4");
   assert.deepEqual({ ...session.options.metadata.metadata, issued: undefined }, { doc: "d", path: "film/intro.mp4", size: "5", issued: undefined });
-  assert.equal(session.options.origin, "https://bikeshed.example", "a browser's session names the deployment's own origin for CORS, never the request's");
+  assert.equal(session.options.origin, "https://bikeshed.example", "a browser's session names the deployment's own origin for CORS");
+
+  // Someone on another of the deployment's own addresses gets a session that
+  // answers there; a forwarded host that is not the deployment's is ignored.
+  const other = "demo-bikeshed.web.app";
+  await w.media(OWNER, { docId: "d", path: "b.mp4", size: 5 }, { "x-forwarded-host": other });
+  await w.media(OWNER, { docId: "d", path: "c.mp4", size: 5 }, { "x-forwarded-host": "evil.example" });
+  assert.deepEqual(w.bucket.log.sessions.slice(1).map((s) => s.options.origin), [`https://${other}`, "https://bikeshed.example"]);
 
   const frozen = world({ doc: { expiresAt: Timestamp.fromMillis(NOW - 1000) } });
   assert.equal((await frozen.media(OWNER, { docId: "d", path: "a.mp4", size: 5 })).status, 409);

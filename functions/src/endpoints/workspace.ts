@@ -2,7 +2,8 @@
 // The workspace: suggestions, upload, folders, organizing and forking (SPEC §2, §13, §21, §22).
 
 import { onRequest, type Request } from "firebase-functions/v2/https";
-import { MAX_BUNDLE_BYTES, UPLOAD_CHUNK_BYTES, publicOrigin } from "../config";
+import { MAX_BUNDLE_BYTES, UPLOAD_CHUNK_BYTES } from "../config";
+import { resourceOrigin } from "../oauth/metadata";
 import { checkSessionRequest, openSession, readStaged, type StagedFile, type StagingBucket } from "../lib/staging";
 import { blobKey } from "../lib/storage";
 import { PublishRefusal } from "../lib/publish";
@@ -577,9 +578,11 @@ async function openMediaSession(req: Request, res: import("express").Response, c
     docId,
     path: checked.path,
     size: checked.size,
-    // A browser's session answers Storage's CORS check for this deployment
-    // only; a token's needs none. Never taken from the request.
-    origin: caller.tokenId ? null : publicOrigin(),
+    // A browser's session answers Storage's CORS check for the address this
+    // person is using, which may be any of the deployment's own hosts; a
+    // forwarded host that is not one of them gets the configured origin. A
+    // token's session needs no CORS at all.
+    origin: caller.tokenId ? null : resourceOrigin(req),
   });
   res.status(200).json({ ...session, chunkBytes: UPLOAD_CHUNK_BYTES });
 }

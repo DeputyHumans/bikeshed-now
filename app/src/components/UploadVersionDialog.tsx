@@ -17,9 +17,12 @@ export function versionUploadMessage(result: VersionUploadResult): string {
   if (result.deduped) return `No changes — it’s identical to ${result.versionId}.`;
   const c = result.changes;
   if (!c) return `Published ${result.versionId}.`;
-  const changed = `${c.changed} file${c.changed === 1 ? "" : "s"} changed`;
-  const rest = [c.unchanged ? `${c.unchanged} unchanged` : null, c.removed ? `${c.removed} removed` : null].filter(Boolean).join(", ");
-  return `Published ${result.versionId} — ${changed}${rest ? `, ${rest}` : ""}.`;
+  // What moved comes first, and only counts that are not zero: a folder that
+  // only drops a file says "1 file removed, 3 unchanged", never "0 changed".
+  const counts = ([[c.changed, "changed"], [c.removed, "removed"], [c.unchanged, "unchanged"]] as const).filter(([n]) => n > 0);
+  if (counts.length === 0) return `Published ${result.versionId}.`;
+  const said = counts.map(([n, what], i) => (i === 0 ? `${n} file${n === 1 ? "" : "s"} ${what}` : `${n} ${what}`));
+  return `Published ${result.versionId} — ${said.join(", ")}.`;
 }
 
 /**
