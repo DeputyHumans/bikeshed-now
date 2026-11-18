@@ -134,13 +134,14 @@ test("update <id> <files> lays them over the current version, by path inside thi
   try {
     const r = await cli(["update", "deck", "img/chart.png", join(outside, "logo.png")], {
       cwd: f.dir,
-      reply: { versionId: "v3", fileCount: 9, bytes: 1, deduped: false, changes: { changed: 2, unchanged: 7, removed: 0 }, placed: [{ sent: "img/chart.png", at: "img/chart.png" }, { sent: "logo.png", at: "brand/logo.png" }] },
+      reply: { versionId: "v3", fileCount: 9, bytes: 1, deduped: false, changes: { changed: 2, unchanged: 7, removed: 0 }, placed: [{ sent: "img/chart.png", at: "img/chart.png" }, { sent: "logo.png", at: "logo.png", added: true }] },
     });
     assert.equal(r.code, 0, r.stderr);
     assert.equal(r.seen[0].url.searchParams.get("merge"), "1");
     assert.deepEqual(readStoredZip(r.seen[0].body).map((e) => [e.name, e.data.toString()]), [["img/chart.png", "new chart"], ["logo.png", "logo"]]);
     assert.match(r.stdout, /published v3 — 2 file\(s\) changed, 7 unchanged/);
-    assert.match(r.stdout, /logo\.png → brand\/logo\.png/, "where each file went is printed");
+    assert.match(r.stdout, /^  img\/chart\.png$/m, "where each file went is printed");
+    assert.match(r.stdout, /^  logo\.png \(added\)$/m, "and a file that was added rather than replacing one says so");
 
     // One picture alone is laid over too; one page alone still replaces the page.
     const one = await cli(["update", "deck", "notes.css"], { cwd: f.dir });

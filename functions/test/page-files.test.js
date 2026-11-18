@@ -289,7 +289,14 @@ test("a loose file replaces the one file of its name, wherever it is; a shared n
   const paths = ["index.html", "img/chart.png", "a/logo.png", "b/logo.png"];
   const f = (rel) => ({ rel, data: Buffer.from(rel) });
   assert.deepEqual(resolveLoose(paths, [f("chart.png")], HTML_PAGE).files.map((x) => x.rel), ["img/chart.png"]);
-  assert.deepEqual(resolveLoose(paths, [f("img/new.png")], HTML_PAGE).files.map((x) => x.rel), ["img/new.png"], "a path is exact");
+  assert.deepEqual(resolveLoose(paths, [f("img/new.png")], HTML_PAGE).files.map((x) => x.rel), ["img/new.png"], "a path the document lacks, and ends with none of its files, is added there");
+  assert.deepEqual(resolveLoose(paths, [f("img/chart.png")], HTML_PAGE).files.map((x) => x.rel), ["img/chart.png"], "a path the document has is exact");
+  // Named from the folder above (`bikeshed update deck site/img/chart.png`
+  // after `bikeshed publish site`): the longest of its files the path ends with.
+  assert.deepEqual(resolveLoose([...paths, "chart.png"], [f("site/img/chart.png")], HTML_PAGE).files.map((x) => x.rel), ["img/chart.png"]);
+  assert.deepEqual(resolveLoose(paths, [f("site/index.html")], HTML_PAGE).files.map((x) => x.rel), ["index.html"]);
+  assert.deepEqual(resolveLoose(paths, [f("site/a/logo.png")], HTML_PAGE).files.map((x) => x.rel), ["a/logo.png"], "a path tells two namesakes apart");
+  assert.deepEqual(resolveLoose(paths, [f("other/chart.png")], HTML_PAGE).files.map((x) => x.rel), ["other/chart.png"], "a path is never matched by its name alone");
   assert.deepEqual(resolveLoose(paths, [f("extra.css")], HTML_PAGE).files.map((x) => x.rel), ["extra.css"], "a new name is added at the top");
   assert.deepEqual(resolveLoose(paths, [f("draft-2.html")], HTML_PAGE).files.map((x) => x.rel), ["index.html"], "a page alone replaces the page");
   assert.deepEqual(resolveLoose(paths, [f("draft-2.html"), f("extra.css")], HTML_PAGE).files.map((x) => x.rel), ["draft-2.html", "extra.css"], "with others it is a page beside it");
@@ -318,6 +325,11 @@ test("POST /publish?merge=1 lays dropped files over the current version", async 
   assert.equal(w.bytesOf("v2", "img/chart.png"), "png-two");
   assert.equal(w.bytesOf("v2", "index.html"), PAGE);
   assert.deepEqual(r.body.placed, [{ sent: "chart.png", at: "img/chart.png" }], "the answer says where each file went");
+
+  const added = await world().upload(OWNER, { update: "d", merge: "1", baseVersion: "v1" }, zipOf({ "site/img/chart.png": "png-three", "extra.css": "p{}" }));
+  assert.equal(added.status, 200, JSON.stringify(added.body));
+  const bySent = (a, b) => (a.sent < b.sent ? -1 : 1);
+  assert.deepEqual([...added.body.placed].sort(bySent), [{ sent: "extra.css", at: "extra.css", added: true }, { sent: "site/img/chart.png", at: "img/chart.png" }], "and which of them were added rather than replacing a file");
 
   const shared = world({ files: { ...FILES, "a/chart.png": "other" } });
   const refused = await shared.upload(OWNER, { update: "d", merge: "1" }, zipOf({ "chart.png": "png-two" }));

@@ -371,7 +371,7 @@ Anything else is refused. A version may be 500 MB and 2,000 files, each path at 
 **An update keeps the document's format, and what it replaces depends on what you send. Send only what changed.**
 
 - **Only `files`**, through `update_document`, replaces each file at its path or adds it, and keeps everything else, the page included. Changing a document's files takes being one of its editors, not open editing.
-- **Several files, or one that is not a page**, through `bikeshed update <id> <files…>`, each replace the file of the same name, wherever it is, or are added; a path such as `img/chart.png` names exactly one. A name two files share is refused with both paths. The output says where each file went.
+- **Several files, or one that is not a page**, through `bikeshed update <id> <files…>`, each replace the file of the same name, wherever it is, or are added; a path such as `img/chart.png` names exactly one, and `site/img/chart.png`, from the folder above, still replaces `img/chart.png`. A name two files share is refused with both paths. The output says where each file went, and marks each one that was added.
 - **One `.md` or `.html` file**, through `bikeshed update` or `update_document` with `content`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text and its images and stylesheets stay where they were.
 - **A folder or a `.zip`**, through `bikeshed update`, replaces the whole bundle. A file it leaves out is gone from the new version. This takes somebody the document is shared with as an editor, not open editing.
 

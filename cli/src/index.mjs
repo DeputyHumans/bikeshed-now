@@ -328,7 +328,7 @@ function describeUpdate(result) {
     ? `${c.changed} file(s) changed, ${c.unchanged} unchanged${c.removed ? `, ${c.removed} removed` : ""}`
     : `${result.fileCount} file(s), ${result.bytes} bytes`;
   const lines = [`published ${result.versionId} — ${counts}`];
-  for (const p of result.placed ?? []) lines.push(p.sent === p.at ? `  ${p.at}` : `  ${p.sent} → ${p.at}`);
+  for (const p of result.placed ?? []) lines.push(`  ${p.sent === p.at ? p.at : `${p.sent} → ${p.at}`}${p.added ? " (added)" : ""}`);
   return lines.join("\n");
 }
 

@@ -327,7 +327,7 @@ export async function reviseDocument(args: {
   };
 
   let compiled: CompiledBundle | { error: string };
-  let placed: Array<{ sent: string; at: string }> | undefined;
+  let placed: Array<{ sent: string; at: string; added?: true }> | undefined;
   if (overlay) {
     let files = overlay.files;
     if (overlay.byName) {
@@ -335,8 +335,13 @@ export async function reviseDocument(args: {
       if ("matches" in resolved) {
         return resolved.matches.length > 0 ? { status: 409, error: resolved.error, matches: resolved.matches } : { error: resolved.error };
       }
-      // Where each loose file went, so whoever sent it can be told.
-      placed = files.map((f, i) => ({ sent: f.rel, at: resolved.files[i].rel }));
+      // Where each loose file went, and which were added rather than
+      // replacing a file, so whoever sent them can be told.
+      const had = new Set(base.files.map((f) => f.rel));
+      placed = files.map((f, i) => {
+        const at = resolved.files[i].rel;
+        return had.has(at) ? { sent: f.rel, at } : { sent: f.rel, at, added: true as const };
+      });
       files = resolved.files;
     }
     compiled = compileOverlay(base, files, args.title, MAX_VERSION_BYTES);
@@ -580,7 +585,7 @@ export interface UpdateResult {
   /** Against the version it replaces, when that version's list is known without reading it. */
   changes?: FileChanges;
   /** For loose files laid over by name: where each one went. */
-  placed?: Array<{ sent: string; at: string }>;
+  placed?: Array<{ sent: string; at: string; added?: true }>;
 }
 
 /**

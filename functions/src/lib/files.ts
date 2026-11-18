@@ -119,7 +119,11 @@ const PAGE_RE = /\.(html?|md|markdown)$/i;
  * Where each loose file lands in a document whose current files are `paths`
  * (SPEC §2, `merge=1`): what a person dropping files on a document means.
  *
- *   - A path with a folder in it is taken exactly: `img/chart.png`.
+ *   - A path with a folder in it is taken exactly when the document has it:
+ *     `img/chart.png`. When it does not, it lands on the longest of the
+ *     document's paths it ends with, because that is a file named from the
+ *     folder above (`site/img/chart.png` after publishing `site`), and is
+ *     added where it says only when it ends with none.
  *   - A bare name replaces the one file of that name, wherever it is.
  *   - A bare name nothing has is added at the top, except that one page file
  *     on its own replaces the page, as uploading a page has always done.
@@ -137,10 +141,12 @@ export function resolveLoose<T extends { rel: string }>(
     byName.set(name, [...(byName.get(name) ?? []), p]);
   }
   const lonePage = loose.length === 1 && PAGE_RE.test(loose[0].rel) && !loose[0].rel.includes("/");
+  const has = new Set(paths);
   const out: T[] = [];
   for (const f of loose) {
     if (f.rel.includes("/")) {
-      out.push(f);
+      const under = has.has(f.rel) ? null : paths.filter((p) => f.rel.endsWith(`/${p}`)).sort((a, b) => b.length - a.length)[0];
+      out.push(under ? { ...f, rel: under } : f);
       continue;
     }
     const found = byName.get(f.rel) ?? [];
