@@ -350,6 +350,9 @@ test("the server leaves out and opens what the shared table says", () => {
   const rules = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "bundle-rules.json"), "utf8"));
   for (const rel of rules.leftOut.kept) assert.equal(isLeftOut(rel), false, rel);
   for (const rel of rules.leftOut.out) assert.equal(isLeftOut(rel), true, rel);
+  const { isStageable } = require("../lib/lib/staging.js");
+  for (const rel of rules.stageable.yes) assert.equal(isStageable(rel), true, rel);
+  for (const rel of rules.stageable.no) assert.equal(isStageable(rel), false, rel);
   for (const c of rules.entries) {
     const stripped = stripCommonPrefix(c.files.map((rel) => ({ rel })));
     if (c.stripped) assert.deepEqual(stripped.map((f) => f.rel), c.stripped, c.files.join(","));

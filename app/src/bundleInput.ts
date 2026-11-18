@@ -30,9 +30,23 @@ export interface Pick {
   fromFolder: boolean;
 }
 
+/** What one request body may carry: a page, a zip, or everything but the media sent on their own. */
 export const MAX_BUNDLE_BYTES = 25 * 1024 * 1024;
 export const MAX_BUNDLE_FILES = 2000;
 export const MAX_PATH_BYTES = 256;
+/** A picture, film or recording goes up on its own, through an upload session, up to this (SPEC §24). */
+export const MAX_MEDIA_FILE_BYTES = 200 * 1024 * 1024;
+/** A document in all, its media included. */
+export const MAX_VERSION_BYTES = 500 * 1024 * 1024;
+
+const STAGEABLE = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "mp4", "m4v", "webm", "mov", "ogv", "mp3", "m4a", "aac", "wav", "ogg", "oga", "opus", "flac"]);
+
+/** A picture, film or recording, which may go up on its own (`lib/staging.ts isStageable`). */
+export function isStageable(path: string): boolean {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && STAGEABLE.has(name.slice(dot + 1).toLowerCase());
+}
 
 /** A name the deployment leaves out of a folder or a zip: dotfiles, `__MACOSX`, `node_modules`, `Thumbs.db`. */
 export function isLeftOut(path: string): boolean {
@@ -205,14 +219,33 @@ function bytesOf(files: readonly PickedFile[]): number {
   return files.reduce((n, f) => n + f.file.size, 0);
 }
 
+/**
+ * What a set of files may be (SPEC §24): pictures, films and recordings up to
+ * 200 MB each, which go up on their own; everything else together up to
+ * 25 MB, which goes up in one; 500 MB and 2,000 files in all.
+ */
 function limitProblems(files: readonly PickedFile[], bytes: number): string[] {
   const problems: string[] = [];
   if (files.length > MAX_BUNDLE_FILES) problems.push(`That’s ${files.length.toLocaleString()} files. A document holds up to ${MAX_BUNDLE_FILES.toLocaleString()}.`);
-  if (bytes > MAX_BUNDLE_BYTES) problems.push(`That comes to ${formatBytes(bytes)}. A document can be up to ${formatBytes(MAX_BUNDLE_BYTES)}.`);
+  if (bytes > MAX_VERSION_BYTES) problems.push(`That comes to ${formatBytes(bytes)}. A document can be up to ${formatBytes(MAX_VERSION_BYTES)}.`);
+  const huge = files.find((f) => isStageable(f.path) && f.file.size > MAX_MEDIA_FILE_BYTES);
+  if (huge) problems.push(`${huge.path} is ${formatBytes(huge.file.size)}. A picture, film or recording can be up to ${formatBytes(MAX_MEDIA_FILE_BYTES)}.`);
+  const rest = files.filter((f) => !isStageable(f.path)).reduce((n, f) => n + f.file.size, 0);
+  if (rest > MAX_BUNDLE_BYTES) {
+    problems.push(`Besides pictures, films and recordings, these files come to ${formatBytes(rest)}. Pages, stylesheets, scripts and fonts can come to ${formatBytes(MAX_BUNDLE_BYTES)}.`);
+  }
   const encoder = new TextEncoder();
   const long = files.find((f) => encoder.encode(f.path).length > MAX_PATH_BYTES);
   if (long) problems.push(`The path ${long.path.slice(0, 60)}… is too long. Shorten a folder or file name in it.`);
   return problems;
+}
+
+/** One page or one zip goes up whole, in a single request. */
+function bodyProblems(file: File): string[] {
+  if (file.size <= MAX_BUNDLE_BYTES) return [];
+  return [ZIP_RE.test(file.name)
+    ? `${file.name} is ${formatBytes(file.size)}. A .zip can be up to ${formatBytes(MAX_BUNDLE_BYTES)}: unzip it and drop the folder instead, and its films go up on their own.`
+    : `${file.name} is ${formatBytes(file.size)}. A page can be up to ${formatBytes(MAX_BUNDLE_BYTES)}.`];
 }
 
 /** The whole of a new document, or of the next version, from a folder or several files. */
@@ -241,8 +274,8 @@ function asBundle(pick: Pick, base: BaseFiles | null): Plan {
 export function planNew(pick: Pick): Plan {
   if (!pick.fromFolder && pick.files.length === 1) {
     const { file } = pick.files[0];
-    if (ZIP_RE.test(file.name)) return { action: "zip", file, bytes: file.size, problems: limitProblems([], file.size) };
-    if (isPagePath(file.name)) return { action: "page", file, bytes: file.size, problems: limitProblems([], file.size), keeps: 0 };
+    if (ZIP_RE.test(file.name)) return { action: "zip", file, bytes: file.size, problems: bodyProblems(file) };
+    if (isPagePath(file.name)) return { action: "page", file, bytes: file.size, problems: bodyProblems(file), keeps: 0 };
     return {
       action: "page", file, bytes: file.size, keeps: 0,
       problems: [`${file.name} isn’t a page. To publish a page with its pictures, choose the folder they’re in, or pick the page and the pictures together.`],
@@ -261,9 +294,9 @@ export function planVersion(pick: Pick, base: BaseFiles): Plan {
   const others = base.files.filter((p) => p !== page && !(base.format === "markdown" && p === base.entry)).length;
   if (!pick.fromFolder && pick.files.length === 1) {
     const { file } = pick.files[0];
-    if (ZIP_RE.test(file.name)) return { action: "zip", file, bytes: file.size, problems: limitProblems([], file.size) };
+    if (ZIP_RE.test(file.name)) return { action: "zip", file, bytes: file.size, problems: bodyProblems(file) };
     if (isPagePath(file.name)) {
-      const problems = limitProblems([], file.size);
+      const problems = bodyProblems(file);
       if (MD_RE.test(file.name) !== (base.format === "markdown")) {
         const kind = base.format === "markdown" ? "Markdown" : "HTML";
         problems.push(`This document is ${kind}, so its page has to be ${kind} too.`);

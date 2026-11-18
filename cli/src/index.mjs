@@ -18,12 +18,16 @@ import {
   listSkills,
   pluginSteps,
   printable,
+  openMediaSession,
   revokeOwnToken,
+  sendToSession,
   uploadBytes,
   uploadFile,
   whoami,
 } from "./client.mjs";
-import { describeLeftOut, folderProblems, megabytes, readEntries, walkFolder } from "./folder.mjs";
+import { describeLeftOut, folderProblems, megabytes, readEntries, splitForSessions, walkFolder } from "./folder.mjs";
+import { createHash } from "node:crypto";
+import { createReadStream, statSync as statOf } from "node:fs";
 import { storedZip } from "./zip.mjs";
 import {
   CLI_CLIENT_ID,
@@ -256,7 +260,42 @@ function packFolder(dir) {
   if (problems.length > 0) fail(`${basename(dir)} cannot be published: ${problems.join("; ")}`);
   const total = files.reduce((n, f) => n + f.size, 0);
   console.error(`sending ${files.length} file(s), ${megabytes(total)}`);
-  return { bytes: storedZip(readEntries(files)), filename: `${basename(dir)}.zip` };
+  // The largest media go up on their own, through sessions (SPEC §24).
+  const { staged, rest } = splitForSessions(files);
+  return { bytes: storedZip(readEntries(rest)), filename: `${basename(dir)}.zip`, staged };
+}
+
+/** SHA-256 of a file on disk, read as a stream. */
+async function sha256Of(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+/**
+ * Send each large file through its own session, or, for an update, name it
+ * when the document already stores those exact bytes, so an unchanged film
+ * is never sent twice (SPEC §24). Returns what the publish names.
+ */
+async function sendStaged(origin, token, staged, { docId = null, k } = {}) {
+  const media = [];
+  const have = [];
+  const live = process.stderr.isTTY;
+  for (const f of staged) {
+    const sha256 = docId ? await sha256Of(f.abs) : undefined;
+    const session = await openMediaSession(origin, token, { docId, k, path: f.rel, size: f.size, sha256 });
+    if (session.have) {
+      have.push(`${f.rel}:${sha256}`);
+      console.error(`${f.rel}: already stored, not sent again`);
+      continue;
+    }
+    const show = (sent) => process.stderr.write(`\rsending ${f.rel} — ${megabytes(sent)} of ${megabytes(f.size)}`);
+    await sendToSession(session.uploadUrl, f.abs, f.size, { chunkBytes: session.chunkBytes, onProgress: live ? show : () => {} });
+    if (live) process.stderr.write("\n");
+    else console.error(`sent ${f.rel}, ${megabytes(f.size)}`);
+    media.push(session.stagingId);
+  }
+  return { media, have };
 }
 
 /**
@@ -266,16 +305,17 @@ function packFolder(dir) {
  */
 function packLoose(paths) {
   const seen = new Set();
-  const entries = paths.map((p) => {
+  const files = paths.map((p) => {
     const abs = resolve(p);
     if (isFolder(abs)) fail(`${p} is a folder; update with a folder alone, to make it the whole next version`);
     const inside = relative(process.cwd(), abs);
-    const name = inside && !inside.startsWith("..") && !isAbsolute(inside) ? inside.split(sep).join("/") : basename(abs);
-    if (seen.has(name)) fail(`${name} is named twice`);
-    seen.add(name);
-    return { name, data: readFileSync(abs) };
+    const rel = inside && !inside.startsWith("..") && !isAbsolute(inside) ? inside.split(sep).join("/") : basename(abs);
+    if (seen.has(rel)) fail(`${rel} is named twice`);
+    seen.add(rel);
+    return { rel, abs, size: statOf(abs).size };
   });
-  return { bytes: storedZip(entries), filename: "files.zip" };
+  const { staged, rest } = splitForSessions(files);
+  return { bytes: storedZip(readEntries(rest)), filename: "files.zip", staged, empty: rest.length === 0 };
 }
 
 const PAGE_FILE = /\.(html?|md|markdown)$/i;
@@ -566,8 +606,9 @@ async function publish(flags, [path]) {
   const once = async () => {
     const meta = { title: flags.title, folder: flags.folder, id: flags.id };
     const packed = folder ? packFolder(file) : null;
+    const sent = packed ? await sendStaged(origin, token, packed.staged) : null;
     const result = packed
-      ? await uploadBytes(origin, token, packed.bytes, packed.filename, meta)
+      ? await uploadBytes(origin, token, packed.bytes, packed.filename, { ...meta, ...sent })
       : await uploadFile(origin, token, file, meta);
     // A taken id still publishes, under a suffix. Said on stderr so `--json`
     // stays parseable; "not available" also covers a deployment too old to
@@ -615,10 +656,13 @@ async function update(flags, [ref, ...paths]) {
     let result;
     if (folder) {
       const packed = packFolder(file);
-      result = await uploadBytes(origin, token, packed.bytes, packed.filename, target);
+      const sent = await sendStaged(origin, token, packed.staged, { docId: id, k: doc.k });
+      result = await uploadBytes(origin, token, packed.bytes, packed.filename, { ...target, ...sent });
     } else if (loose) {
       const packed = packLoose(paths);
-      result = await uploadBytes(origin, token, packed.bytes, packed.filename, { ...target, merge: true });
+      const sent = await sendStaged(origin, token, packed.staged, { docId: id, k: doc.k });
+      const body = packed.empty ? Buffer.alloc(0) : packed.bytes;
+      result = await uploadBytes(origin, token, body, packed.filename, { ...target, ...sent, merge: true });
     } else {
       const bytes = readFileSync(file);
       // An archive goes up as bytes, to the one endpoint that takes them. Read as

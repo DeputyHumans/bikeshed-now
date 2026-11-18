@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // The HTTP and MCP client the CLI is built on (SPEC §19).
 
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
 import { basename } from "node:path";
 
 import { HOSTED_ORIGIN } from "./config.mjs";
@@ -106,7 +107,7 @@ export async function uploadFile(origin, token, path, options = {}) {
  * folder. With `merge`, the zip holds loose files to lay over the current
  * version of `update`, each replacing the file of its name (SPEC §2).
  */
-export async function uploadBytes(origin, token, bytes, filename, { title, folder, id, update, k, base, merge } = {}) {
+export async function uploadBytes(origin, token, bytes, filename, { title, folder, id, update, k, base, merge, media = [], have = [] } = {}) {
   const params = new URLSearchParams({ filename });
   if (title) params.set("title", title);
   if (folder) params.set("folderId", folder);
@@ -115,6 +116,9 @@ export async function uploadBytes(origin, token, bytes, filename, { title, folde
   if (k) params.set("k", k);
   if (base) params.set("baseVersion", base);
   if (merge) params.set("merge", "1");
+  // Large media sent through sessions, and files the document already stores (SPEC §24).
+  for (const stagingId of media) params.append("media", stagingId);
+  for (const kept of have) params.append("have", kept);
 
   const res = await fetch(`${origin}/publish?${params}`, {
     method: "POST",
@@ -312,4 +316,87 @@ export async function whoami(origin, token) {
   // list is a token that works.
   await callTool(origin, token, "list_documents", { limit: 1 });
   return true;
+}
+
+/**
+ * Ask for a session to send one large picture, film or recording straight to
+ * Storage (SPEC §24). With `docId` and `sha256`, the answer may be
+ * `{have: true}`: the document already stores those bytes, and nothing needs
+ * sending.
+ */
+export async function openMediaSession(origin, token, { docId, k, path, size, sha256 }) {
+  const res = await fetch(`${origin}/media`, {
+    method: "POST",
+    headers: headers(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ ...(docId ? { docId } : {}), ...(k ? { k } : {}), path, size, ...(sha256 ? { sha256 } : {}) }),
+  });
+  if (res.status === 401) throw new CliError("That token was not accepted. Run `bikeshed login` again.");
+  if (!res.ok) throw new CliError(await readError(res, `${path} could not be sent (${res.status}).`));
+  return res.json();
+}
+
+/** The next byte Storage wants, from a 308's `Range: bytes=0-N`. None means nothing was kept. */
+function nextFrom(range) {
+  const m = /bytes=0-(\d+)/.exec(range ?? "");
+  return m ? Number(m[1]) + 1 : 0;
+}
+
+/** Ask a session how much of the file it holds: `Content-Range: bytes *\/total`. */
+async function heldBy(url, size) {
+  const res = await fetch(url, { method: "PUT", redirect: "manual", headers: { "Content-Range": `bytes */${size}` } });
+  if (res.status === 200 || res.status === 201) return size;
+  if (res.status === 308) return nextFrom(res.headers.get("range"));
+  throw new CliError(`the upload session answered ${res.status}; send the file again`);
+}
+
+/**
+ * Send a file to a resumable session in chunks, picking up where Storage says
+ * it is after a short write, a dropped connection or a server error, so a
+ * broken upload of a 200 MB film resumes rather than starts again.
+ */
+export async function sendToSession(url, path, size, { chunkBytes = 8 * 1024 * 1024, onProgress = () => {}, attempts = 6 } = {}) {
+  const fd = openSync(path, "r");
+  try {
+    let offset = 0;
+    let failures = 0;
+    while (offset < size) {
+      const length = Math.min(chunkBytes, size - offset);
+      const chunk = Buffer.alloc(length);
+      readSync(fd, chunk, 0, length, offset);
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "PUT",
+          redirect: "manual",
+          headers: { "Content-Range": `bytes ${offset}-${offset + length - 1}/${size}` },
+          body: chunk,
+        });
+      } catch {
+        res = null;
+      }
+      if (res && (res.status === 200 || res.status === 201)) {
+        offset = size;
+      } else if (res && res.status === 308) {
+        // Storage may keep fewer bytes than were sent; it says how many. A
+        // session that keeps nothing is failing, and is not tried for ever.
+        const next = nextFrom(res.headers.get("range"));
+        if (next <= offset) {
+          if (++failures > attempts) throw new CliError(`the upload of ${path} stopped moving; run the command again`);
+          await delay(Math.min(8000, 250 * 2 ** failures));
+        } else {
+          failures = 0;
+        }
+        offset = next;
+      } else if (!res || res.status >= 500 || res.status === 429) {
+        if (++failures > attempts) throw new CliError(`the upload of ${path} kept failing; run the command again`);
+        await delay(Math.min(8000, 250 * 2 ** failures));
+        offset = await heldBy(url, size);
+      } else {
+        throw new CliError(`the upload of ${path} was refused (${res.status})`);
+      }
+      onProgress(offset);
+    }
+  } finally {
+    closeSync(fd);
+  }
 }

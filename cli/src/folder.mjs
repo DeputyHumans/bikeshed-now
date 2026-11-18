@@ -17,9 +17,36 @@
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
+/** What one request may carry: everything but the media sent on their own. */
 export const MAX_BUNDLE_BYTES = 25 * 1024 * 1024;
 export const MAX_BUNDLE_FILES = 2000;
 export const MAX_PATH_BYTES = 256;
+/** A picture, film or recording goes up on its own, up to this (SPEC §24). */
+export const MAX_MEDIA_FILE_BYTES = 200 * 1024 * 1024;
+/** A document in all, its media included. */
+export const MAX_VERSION_BYTES = 500 * 1024 * 1024;
+
+const STAGEABLE = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "mp4", "m4v", "webm", "mov", "ogv", "mp3", "m4a", "aac", "wav", "ogg", "oga", "opus", "flac"]);
+
+/** A picture, film or recording, which may go up on its own (the server's `isStageable`). */
+export function isStageable(rel) {
+  const name = rel.slice(rel.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && STAGEABLE.has(name.slice(dot + 1).toLowerCase());
+}
+
+/** Which files go up on their own: the largest media first, until the rest fits one request. */
+export function splitForSessions(files) {
+  const room = MAX_BUNDLE_BYTES - 1024 * 1024;
+  let rest = files.reduce((n, f) => n + f.size, 0);
+  const staged = [];
+  for (const f of files.filter((x) => isStageable(x.rel)).sort((a, b) => b.size - a.size)) {
+    if (rest <= room) break;
+    staged.push(f);
+    rest -= f.size;
+  }
+  return { staged, rest: files.filter((f) => !staged.includes(f)) };
+}
 
 /** A file or folder name the deployment leaves out: dotfiles, `__MACOSX`, `node_modules`, `Thumbs.db`. */
 export function isLeftOut(rel) {
@@ -74,7 +101,11 @@ export function folderProblems(files) {
   if (files.length === 0) problems.push("the folder has nothing to publish");
   if (files.length > MAX_BUNDLE_FILES) problems.push(`it holds ${files.length} files; a document can hold ${MAX_BUNDLE_FILES}`);
   const total = files.reduce((n, f) => n + f.size, 0);
-  if (total > MAX_BUNDLE_BYTES) problems.push(`it comes to ${megabytes(total)}; a document can be up to ${megabytes(MAX_BUNDLE_BYTES)}`);
+  if (total > MAX_VERSION_BYTES) problems.push(`it comes to ${megabytes(total)}; a document can be up to ${megabytes(MAX_VERSION_BYTES)}`);
+  const huge = files.find((f) => isStageable(f.rel) && f.size > MAX_MEDIA_FILE_BYTES);
+  if (huge) problems.push(`${huge.rel} is ${megabytes(huge.size)}; a picture, film or recording can be up to ${megabytes(MAX_MEDIA_FILE_BYTES)}`);
+  const rest = files.filter((f) => !isStageable(f.rel)).reduce((n, f) => n + f.size, 0);
+  if (rest > MAX_BUNDLE_BYTES) problems.push(`besides pictures, films and recordings it comes to ${megabytes(rest)}; pages, stylesheets, scripts and fonts can come to ${megabytes(MAX_BUNDLE_BYTES)}`);
   for (const f of files) {
     if (Buffer.byteLength(f.rel, "utf8") > MAX_PATH_BYTES) problems.push(`${f.rel.slice(0, 60)}… has a path longer than ${MAX_PATH_BYTES} bytes`);
   }

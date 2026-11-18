@@ -3,7 +3,7 @@
 
 import type { Marking } from "./types";
 import { storedZip } from "./zip";
-import type { Plan } from "./bundleInput";
+import { MAX_BUNDLE_BYTES, isStageable, type PickedFile, type Plan } from "./bundleInput";
 
 /**
  * The file bytes ARE the request body; metadata rides in the query string.
@@ -47,9 +47,10 @@ export function uploadDoc(file: File, opts: UploadOptions = {}): Promise<UploadR
   return uploadNamed(file, file.name, opts);
 }
 
-function uploadNamed(body: Blob, filename: string, opts: UploadOptions): Promise<UploadResult> {
+function uploadNamed(body: Blob, filename: string, opts: UploadOptions, media: readonly string[] = []): Promise<UploadResult> {
   const params = new URLSearchParams();
   params.set("filename", filename);
+  for (const id of media) params.append("media", id);
   if (opts.title) params.set("title", opts.title);
   if (opts.id) params.set("id", opts.id);
   if (opts.folderId) params.set("folderId", opts.folderId);
@@ -63,10 +64,104 @@ async function zipOf(files: ReadonlyArray<{ path: string; file: File }>): Promis
   return new Blob([storedZip(entries) as BlobPart], { type: "application/zip" });
 }
 
-/** Publish a planned NEW document: a page, a zip, or a folder sent as one zip (SPEC §2). */
+/** Room left in a body for a zip's own headers beside the files in it. */
+const BODY_ROOM = MAX_BUNDLE_BYTES - 1024 * 1024;
+
+/**
+ * Which files go up on their own, through upload sessions (SPEC §24): the
+ * largest pictures, films and recordings first, until the rest fits one body.
+ * A folder small enough for one body sends nothing on its own.
+ */
+export function splitForSessions(files: readonly PickedFile[]): { staged: PickedFile[]; rest: PickedFile[] } {
+  let rest = files.reduce((n, f) => n + f.file.size, 0);
+  const staged: PickedFile[] = [];
+  for (const f of files.filter((x) => isStageable(x.path)).sort((a, b) => b.file.size - a.file.size)) {
+    if (rest <= BODY_ROOM) break;
+    staged.push(f);
+    rest -= f.file.size;
+  }
+  return { staged, rest: files.filter((f) => !staged.includes(f)) };
+}
+
+/** Progress over every byte of an upload made of several sends. */
+function progressOver(total: number, control: SendControl) {
+  let done = 0;
+  return {
+    part: (size: number): SendControl => ({
+      signal: control.signal,
+      onProgress: (fraction) => control.onProgress?.(total > 0 ? Math.min(1, (done + fraction * size) / total) : 1),
+    }),
+    finished: (size: number) => { done += size; },
+  };
+}
+
+/**
+ * One file straight to Storage: a session from the deployment, then the bytes
+ * (SPEC §24). Returns the staging id the publish names.
+ */
+async function stage(f: PickedFile, docId: string | null, control: SendControl): Promise<string> {
+  const res = await fetch("/media", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...(docId ? { docId } : {}), path: f.path, size: f.file.size }),
+    ...(control.signal ? { signal: control.signal } : {}),
+  }).catch((e) => { throw control.signal?.aborted ? new UploadStopped() : e; });
+  if (res.status === 401) throw new Error("Your session expired — sign in again.");
+  const body = await res.json().catch(() => ({})) as { stagingId?: string; uploadUrl?: string; error?: string };
+  if (!res.ok || !body.stagingId || !body.uploadUrl) throw new Error(body.error ? sentence(body.error) : `${f.path} could not be sent (${res.status}).`);
+  await putTo(body.uploadUrl, f, control);
+  return body.stagingId;
+}
+
+/** The bytes of one file to its session, with progress, stoppable. */
+function putTo(url: string, f: PickedFile, control: SendControl): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (control.signal?.aborted) { reject(new UploadStopped()); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    const stop = () => xhr.abort();
+    control.signal?.addEventListener("abort", stop, { once: true });
+    xhr.onloadend = () => control.signal?.removeEventListener("abort", stop);
+    xhr.onabort = () => reject(new UploadStopped());
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) control.onProgress?.(e.loaded / e.total); };
+    const failed = () => reject(new Error(`The upload of ${f.path} stopped. Nothing was published. Try again.`));
+    xhr.onerror = failed;
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : failed());
+    xhr.send(f.file);
+  });
+}
+
+/**
+ * Files as one publish: the media that need it staged first, then the rest
+ * as one zip naming them. Progress runs over every byte; "publishing" begins
+ * once the last byte has gone.
+ */
+async function withSessions<T>(
+  files: readonly PickedFile[],
+  docId: string | null,
+  control: SendControl,
+  commit: (body: Blob, media: string[], control: SendControl) => Promise<T>,
+): Promise<T> {
+  const { staged, rest } = splitForSessions(files);
+  const total = files.reduce((n, f) => n + f.file.size, 0);
+  const progress = progressOver(total, control);
+  const media: string[] = [];
+  for (const f of staged) {
+    media.push(await stage(f, docId, progress.part(f.file.size)));
+    progress.finished(f.file.size);
+  }
+  const restBytes = rest.reduce((n, f) => n + f.file.size, 0);
+  const body = rest.length > 0 ? await zipOf(rest) : new Blob([]);
+  return commit(body, media, { ...progress.part(restBytes), onSent: control.onSent });
+}
+
+/** Publish a planned NEW document: a page, a zip, or a folder sent as one zip, its large media on their own (SPEC §2, §24). */
 export async function publishNew(plan: Plan, opts: UploadOptions = {}): Promise<UploadResult> {
   if (plan.action === "page" || plan.action === "zip") return uploadNamed(plan.file, plan.file.name, opts);
-  if (plan.action === "bundle") return uploadNamed(await zipOf(plan.files), `${plan.name}.zip`, opts);
+  if (plan.action === "bundle") {
+    return withSessions(plan.files, null, opts, (body, media, control) => uploadNamed(body, `${plan.name}.zip`, { ...opts, ...control }, media));
+  }
   throw new Error("Loose files are laid over a document that already exists.");
 }
 
@@ -124,10 +219,12 @@ export async function publishVersion(
   opts: { docId: string; baseVersion: string } & SendControl,
 ): Promise<VersionUploadResult> {
   if (plan.action === "page" || plan.action === "zip") return sendVersion(plan.file, plan.file.name, false, opts);
-  if (plan.action === "bundle") return sendVersion(await zipOf(plan.files), `${plan.name}.zip`, false, opts);
+  if (plan.action === "bundle") {
+    return withSessions(plan.files, opts.docId, opts, (body, media, control) => sendVersion(body, `${plan.name}.zip`, false, { ...opts, ...control }, media));
+  }
   // Sent by the names they were dropped with; the deployment places each by
   // the rule the dialog showed (SPEC §2, `merge=1`).
-  return sendVersion(await zipOf(plan.files.map((p) => p.sent)), "files.zip", true, opts);
+  return withSessions(plan.files.map((p) => p.sent), opts.docId, opts, (body, media, control) => sendVersion(body, "files.zip", true, { ...opts, ...control }, media));
 }
 
 async function sendVersion(
@@ -135,12 +232,14 @@ async function sendVersion(
   filename: string,
   merge: boolean,
   opts: { docId: string; baseVersion: string } & SendControl,
+  media: readonly string[] = [],
 ): Promise<VersionUploadResult> {
   const params = new URLSearchParams();
   params.set("filename", filename);
   params.set("update", opts.docId);
   if (opts.baseVersion) params.set("baseVersion", opts.baseVersion);
   if (merge) params.set("merge", "1");
+  for (const id of media) params.append("media", id);
   try {
     return await send<VersionUploadResult>(body, params, {
       forbidden: "You can no longer publish to this document.",
@@ -210,6 +309,8 @@ function send<T>(
       let message = `Upload failed (${xhr.status}).`;
       let detail: Record<string, unknown> | null = null;
       if (xhr.status === 401) message = "Your session expired — sign in again.";
+      // The function outlives Hosting's 60 s, so a slow publish may yet land.
+      else if (xhr.status === 504) message = "This is taking longer than usual. It may still publish: look at the document in a minute.";
       else if (xhr.status === 403) message = opts.forbidden;
       else {
         try {

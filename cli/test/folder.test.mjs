@@ -62,7 +62,9 @@ test("a folder that would be refused is refused before anything is sent", () => 
   const sized = (rel, size = 1) => ({ rel, size });
   assert.match(folderProblems([sized("img/a.png")])[0], /no page to open: add index.html/);
   assert.match(folderProblems([sized("a.html"), sized("b.html")])[0], /2 pages could open first \(a.html, b.html\)/);
-  assert.match(folderProblems([sized("index.html", 26 * 1024 * 1024)])[0], /comes to 26 MB; a document can be up to 25 MB/);
+  assert.match(folderProblems([sized("index.html", 26 * 1024 * 1024)])[0], /besides pictures, films and recordings it comes to 26 MB; pages, stylesheets, scripts and fonts can come to 25 MB/);
+  assert.deepEqual(folderProblems([sized("index.html"), sized("film.mp4", 180 * 1024 * 1024)]), [], "a folder past 25 MB is fine when the rest is media");
+  assert.match(folderProblems([sized("index.html"), sized("film.mp4", 210 * 1024 * 1024)])[0], /film\.mp4 is 210 MB; a picture, film or recording can be up to 200 MB/);
   assert.match(folderProblems([sized("index.html"), sized(`${"a".repeat(300)}.png`)])[0], /longer than 256 bytes/);
 });
 

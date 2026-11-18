@@ -98,3 +98,73 @@ describe("uploadDoc marking", () => {
     expect(query().has("marking")).toBe(false);
   });
 });
+
+describe("large media through upload sessions (SPEC §24)", () => {
+  const MB = 1024 * 1024;
+  /** A file that claims a size without holding it: only its session ever reads it here. */
+  const sized = (name: string, size: number) => {
+    const f = new File(["x"], name);
+    Object.defineProperty(f, "size", { value: size });
+    return f;
+  };
+  const picked = (path: string, size: number) => ({ path, file: sized(path, size) });
+
+  it("sends the largest media on their own until the rest fits one request, and nothing when it already does", async () => {
+    const { splitForSessions } = await import("./upload");
+    const small = [picked("index.html", 1000), picked("a.png", 2 * MB)];
+    expect(splitForSessions(small).staged).toEqual([]);
+    const page = picked("index.html", 1000);
+    const film = picked("film.mp4", 30 * MB);
+    const still = picked("still.png", 20 * MB);
+    const css = picked("style.css", 3 * MB);
+    const { staged, rest } = splitForSessions([page, still, film, css]);
+    expect(staged.map((f) => f.path)).toEqual(["film.mp4"]);
+    expect(rest.map((f) => f.path)).toEqual(["index.html", "still.png", "style.css"]);
+    expect(splitForSessions([page, picked("a.mp4", 20 * MB), picked("b.mp4", 20 * MB)]).staged.map((f) => f.path)).toEqual(["a.mp4"]);
+  });
+
+  it("stages a film, then lays it over the version by name with no body", async () => {
+    const { publishVersion } = await import("./upload");
+    const fetched: { url: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      fetched.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify({ stagingId: "st-1", uploadUrl: "https://upload.example.com/s?upload_id=1", expiresAt: 1, chunkBytes: 8 * MB }), { status: 200 });
+    }));
+    reply = { status: 200, body: { docId: "d1", versionId: "v6", contentHash: "h", fileCount: 3, bytes: 1, deduped: false } };
+    const progress: number[] = [];
+    const film = picked("intro.mp4", 40 * MB);
+    const plan = { action: "merge" as const, bytes: film.file.size, problems: [], files: [{ sent: film, at: "film/intro.mp4", does: "replaces" as const }] };
+    const result = await publishVersion(plan, { docId: "d1", baseVersion: "v5", onProgress: (f) => progress.push(f) });
+
+    expect(fetched).toEqual([{ url: "/media", body: { docId: "d1", path: "intro.mp4", size: 40 * MB } }]);
+    expect(sent[0].url).toBe("https://upload.example.com/s?upload_id=1");
+    expect(sent[0].body).toBe(film.file);
+    const publish = new URL(sent[1].url, "http://x");
+    expect(publish.pathname).toBe("/publish");
+    expect(publish.searchParams.getAll("media")).toEqual(["st-1"]);
+    expect(publish.searchParams.get("merge")).toBe("1");
+    expect((sent[1].body as Blob).size).toBe(0);
+    expect(result.versionId).toBe("v6");
+    expect(progress.every((p, i) => p >= (progress[i - 1] ?? 0) && p <= 1)).toBe(true);
+  });
+
+  it("stops while a film is on its way, and publishes nothing", async () => {
+    const { publishVersion, UploadStopped } = await import("./upload");
+    const stop = new AbortController();
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      stop.abort();
+      return new Response(JSON.stringify({ stagingId: "st-1", uploadUrl: "https://upload.example.com/s" }), { status: 200 });
+    }));
+    const film = picked("intro.mp4", 40 * MB);
+    const plan = { action: "merge" as const, bytes: film.file.size, problems: [], files: [{ sent: film, at: "intro.mp4", does: "adds" as const }] };
+    const err = await publishVersion(plan, { docId: "d1", baseVersion: "v5", signal: stop.signal }).catch((e) => e);
+    expect(err).toBeInstanceOf(UploadStopped);
+    expect(sent.some((s) => s.url.startsWith("/publish"))).toBe(false);
+  });
+
+  it("says a slow publish may still land, rather than that it failed", async () => {
+    reply = { status: 504, body: {} };
+    const err = await uploadVersion(file, { docId: "d1", baseVersion: "v4" }).catch((e) => e);
+    expect(err.message).toBe("This is taking longer than usual. It may still publish: look at the document in a minute.");
+  });
+});

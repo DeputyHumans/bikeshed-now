@@ -1,20 +1,145 @@
 {
-  "comment": "What a folder or a zip leaves out, and which page opens first. The server (lib/bundle.ts), the CLI (cli/src/folder.mjs) and the browser (app/src/bundleInput.ts) are each held to this table (SPEC §2).",
+  "comment": "What a folder or a zip leaves out, which page opens first, and what may go up on its own through an upload session. The server (lib/bundle.ts, lib/staging.ts), the CLI (cli/src/folder.mjs) and the browser (app/src/bundleInput.ts) are each held to this table (SPEC §2, §24).",
   "leftOut": {
-    "kept": ["index.html", "img/a.png", "a b/Screen Shot.png", "docs/readme.md", "~notes.png", "v1.2/x.css", "node_modules.txt"],
-    "out": [".env", ".git/config", "a/.DS_Store", "node_modules/x/y.js", "deep/node_modules/z.js", "__MACOSX/._a", "Thumbs.db", "thumbs.db", "sub/.hidden/x.png"]
+    "kept": [
+      "index.html",
+      "img/a.png",
+      "a b/Screen Shot.png",
+      "docs/readme.md",
+      "~notes.png",
+      "v1.2/x.css",
+      "node_modules.txt"
+    ],
+    "out": [
+      ".env",
+      ".git/config",
+      "a/.DS_Store",
+      "node_modules/x/y.js",
+      "deep/node_modules/z.js",
+      "__MACOSX/._a",
+      "Thumbs.db",
+      "thumbs.db",
+      "sub/.hidden/x.png"
+    ]
   },
   "entries": [
-    { "files": ["index.html", "about.html"], "entry": "index.html" },
-    { "files": ["index.md", "index.html"], "entry": "index.html" },
-    { "files": ["INDEX.HTML", "a.css"], "entry": "INDEX.HTML" },
-    { "files": ["notes.md", "img/a.png"], "entry": "notes.md" },
-    { "files": ["report.html", "img/a.png"], "entry": "report.html" },
-    { "files": ["a.html", "sub/index.html"], "entry": "sub/index.html" },
-    { "files": ["deck/index.html", "deck/s.css"], "stripped": ["index.html", "s.css"], "entry": "index.html" },
-    { "files": ["deck/notes.md", "deck/img/a.png"], "stripped": ["notes.md", "img/a.png"], "entry": "notes.md" },
-    { "files": ["a.html", "b.html"], "entry": null },
-    { "files": ["a.md", "b.md"], "entry": null },
-    { "files": ["img/a.png"], "entry": null }
-  ]
+    {
+      "files": [
+        "index.html",
+        "about.html"
+      ],
+      "entry": "index.html"
+    },
+    {
+      "files": [
+        "index.md",
+        "index.html"
+      ],
+      "entry": "index.html"
+    },
+    {
+      "files": [
+        "INDEX.HTML",
+        "a.css"
+      ],
+      "entry": "INDEX.HTML"
+    },
+    {
+      "files": [
+        "notes.md",
+        "img/a.png"
+      ],
+      "entry": "notes.md"
+    },
+    {
+      "files": [
+        "report.html",
+        "img/a.png"
+      ],
+      "entry": "report.html"
+    },
+    {
+      "files": [
+        "a.html",
+        "sub/index.html"
+      ],
+      "entry": "sub/index.html"
+    },
+    {
+      "files": [
+        "deck/index.html",
+        "deck/s.css"
+      ],
+      "stripped": [
+        "index.html",
+        "s.css"
+      ],
+      "entry": "index.html"
+    },
+    {
+      "files": [
+        "deck/notes.md",
+        "deck/img/a.png"
+      ],
+      "stripped": [
+        "notes.md",
+        "img/a.png"
+      ],
+      "entry": "notes.md"
+    },
+    {
+      "files": [
+        "a.html",
+        "b.html"
+      ],
+      "entry": null
+    },
+    {
+      "files": [
+        "a.md",
+        "b.md"
+      ],
+      "entry": null
+    },
+    {
+      "files": [
+        "img/a.png"
+      ],
+      "entry": null
+    }
+  ],
+  "stageable": {
+    "yes": [
+      "film/intro.mp4",
+      "a.MOV",
+      "song.mp3",
+      "x.webm",
+      "p.png",
+      "photo.JPG",
+      "clip.m4v",
+      "talk.ogg",
+      "a.opus",
+      "b.flac",
+      "c.aac",
+      "d.wav",
+      "e.oga",
+      "f.ogv",
+      "g.avif",
+      "h.webp",
+      "i.gif",
+      "j.jpeg",
+      "k.m4a"
+    ],
+    "no": [
+      "logo.svg",
+      "notes.pdf",
+      "font.woff2",
+      "index.html",
+      "style.css",
+      "app.js",
+      "data.json",
+      "noext",
+      "archive.zip"
+    ]
+  }
 }
