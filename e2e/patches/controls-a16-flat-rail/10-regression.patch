@@ -1,9 +1,9 @@
 --- a/app/src/viewer/useDeck.ts
 +++ b/app/src/viewer/useDeck.ts
-@@ -176,5 +176,5 @@
-         stacked
-           ? shownSlide(view, slides)
--          : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top)),
-+          : Math.min(0, activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top))),
-       );
-     };
+@@ -201,5 +201,5 @@
+     return stacked
+       ? shownSlide(view, slides)
+-      : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top));
++      : Math.min(0, activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top)));
+   }, [doc, slides, stacked]);
+ 

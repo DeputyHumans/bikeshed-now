@@ -1,11 +1,11 @@
---- a/app/src/viewer/useAnnotationLayer.ts
-+++ b/app/src/viewer/useAnnotationLayer.ts
-@@ -140,7 +140,7 @@
-     if (!wrapper) return;
-     scrolledTo.current = selectedId;
-     if (inView(wrapper)) return;
--    wrapper.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
-+    wrapper.scrollIntoView({ block: "center", behavior: "smooth" });
-   }, [enabled, doc, frameShown, epoch, selectedId, annotations, reduceMotion]);
+--- a/app/src/viewer/useTarget.ts
++++ b/app/src/viewer/useTarget.ts
+@@ -124,7 +124,7 @@
+       return;
+     }
+     if (inView(node)) return;
+-    node.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
++    node.scrollIntoView({ block: "center", behavior: "smooth" });
+   }, [enabled, doc, frameShown, epoch, measuredEpoch, selectedId, annotations, reduceMotion, paged, slides, locate, goTo]);
  
-   return { orphaned, stale };
+   // This reader's slide, for whoever follows them. Sent as it changes, because

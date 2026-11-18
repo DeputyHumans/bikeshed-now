@@ -4,7 +4,7 @@
    awaitsReply,
 +  startingCursor,
    causedBy,
-@@ -442,2 +443,3 @@
+@@ -454,2 +455,3 @@
        });
 +      await startingCursor(ctx, ref, "always");
-       return { commentId: commentRef.id, threadId, documentId: ref.id };
+       return withThreadAddress({ commentId: commentRef.id, threadId, documentId: ref.id }, ref.id, versionId, threadId, str(args, "k") || undefined);

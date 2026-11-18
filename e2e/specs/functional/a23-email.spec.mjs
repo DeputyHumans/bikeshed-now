@@ -375,7 +375,7 @@ scenario("A23.1 one invitation per new member for a document, a folder and a tea
 
 // --- A23.2 ----------------------------------------------------------------------
 
-scenario("A23.2 a comment notice reaches the owner and the thread's participants, less its author, anyone with no account record, anyone opted out and other threads' authors; the text part carries <b>x</b> literally and the HTML part escapes it; it links to /d/<doc>/<version>#comment=<thread>; an agent's names the token it came through", {
+scenario("A23.2 a comment notice reaches the owner and the thread's participants, less its author, anyone with no account record, anyone opted out and other threads' authors; the text part carries <b>x</b> literally and the HTML part escapes it; it links to /d/<doc>/<version>; an agent's names the token it came through", {
   tiers: LOCAL,
   effects: ["email:POST /access", "email:comment"],
   needs: ["email", "mailpit"],
