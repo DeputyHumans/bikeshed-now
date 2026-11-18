@@ -473,6 +473,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
   const batch = useIncremental(
     visibleFolders.length + visibleDocs.length,
     JSON.stringify([view, folderId, search, sort, layout, filters]),
+    { remember: { ready: !(loading || foldersLoading || (view === "recent" && reads.status === "loading")) } },
   );
   const shownFolders = useMemo(() => visibleFolders.slice(0, batch.shown), [visibleFolders, batch.shown]);
   const shownDocs = useMemo(

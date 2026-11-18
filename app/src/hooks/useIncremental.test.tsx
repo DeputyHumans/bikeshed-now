@@ -50,6 +50,8 @@ const drawn = () => document.querySelectorAll("a.doc-card-title").length;
 beforeEach(() => {
   observers = [];
   vi.stubGlobal("IntersectionObserver", FakeObserver);
+  window.sessionStorage.clear();
+  window.history.replaceState(null, "");
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -127,5 +129,76 @@ describe("a list drawn a batch at a time", () => {
     expect(drawn()).toBe(25);
     fireEvent.click(screen.getByRole("button", { name: "Show 25 more" }));
     expect(drawn()).toBe(50);
+  });
+});
+
+describe("Back returns to the same place in a list", () => {
+  /** A list that keeps its place for its history entry, its items landing when `ready`. */
+  function Remembered({ total, ready = true, resetKey = "everything" }: { total: number; ready?: boolean; resetKey?: string }) {
+    const list = useIncremental(ready ? total : 0, resetKey, { remember: { ready } });
+    return (
+      <main>
+        <div className="doc-grid">
+          {Array.from({ length: list.shown }, (_, i) => (
+            <a key={i} className="doc-card-title" href={`#${i}`}>
+              item {i}
+            </a>
+          ))}
+        </div>
+        <MoreItems list={list} />
+      </main>
+    );
+  }
+  let scrollTo: ReturnType<typeof vi.spyOn>;
+  const scrolledTo = (y: number) => {
+    Object.defineProperty(window, "scrollY", { value: y, configurable: true });
+    window.dispatchEvent(new Event("scroll"));
+  };
+  /** The reader drew 50, scrolled down, and opened a document: the list unmounted. */
+  const leaveAt50 = (y = 1234) => {
+    const first = render(<Remembered total={60} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show 25 more" }));
+    scrolledTo(y);
+    first.unmount();
+  };
+
+  beforeEach(() => {
+    scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    scrolledTo(0);
+  });
+
+  it("draws as much as it had and scrolls back, once its items have landed", () => {
+    leaveAt50();
+    scrolledTo(0);
+    const back = render(<Remembered total={60} ready={false} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+    back.rerender(<Remembered total={60} ready />);
+    expect(drawn()).toBe(50);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith(0, 1234);
+  });
+
+  it("is not overwritten by where a half-drawn page clamps the scroll", () => {
+    leaveAt50();
+    const early = render(<Remembered total={60} ready={false} />);
+    scrolledTo(40);
+    early.unmount();
+    render(<Remembered total={60} />);
+    expect(scrollTo).toHaveBeenCalledWith(0, 1234);
+  });
+
+  it("starts at the top, 25 long, for a new visit", () => {
+    leaveAt50();
+    window.history.replaceState(null, "");
+    render(<Remembered total={60} />);
+    expect(drawn()).toBe(25);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("starts at the top for another list in the same entry", () => {
+    leaveAt50();
+    render(<Remembered total={60} resetKey="folder:plans" />);
+    expect(drawn()).toBe(25);
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 });

@@ -58,7 +58,7 @@ export function SharedFolder() {
   );
 
   // Drawn a batch at a time, like every workspace list (SPEC §13 "Grid and list").
-  const batch = useIncremental(folders.length + documents.length, folderId);
+  const batch = useIncremental(folders.length + documents.length, folderId, { remember: { ready: answer !== undefined } });
   const shownFolders = folders.slice(0, batch.shown);
   const shownDocs = documents.slice(0, Math.max(0, batch.shown - folders.length));
 

@@ -106,6 +106,9 @@ beforeEach(() => {
   // The workspace remembers its sort and layout in this browser; each test
   // starts from a browser that has never chosen.
   window.localStorage.clear();
+  // A list's place is kept per history entry; every test is a new visit.
+  window.sessionStorage.clear();
+  window.history.replaceState(null, "");
   listeners.docs = null;
   listeners.folders = null;
   createFolder.mockReset();
@@ -929,6 +932,23 @@ describe("a long workspace, drawn 25 at a time", () => {
     );
     await act(async () => {});
     expect(container.querySelectorAll(".doc-row-title, .doc-card-title")).toHaveLength(25);
+  });
+
+  it("comes back from a document as long as it was and scrolled where it was", async () => {
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const first = mount("everything");
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    await land(many(), twoFolders);
+    fireEvent.click(screen.getByRole("button", { name: "Show 7 more" }));
+    Object.defineProperty(window, "scrollY", { value: 900, configurable: true });
+    // Opening a document unmounts the workspace; Back mounts it again in the same history entry.
+    first.unmount();
+    Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+    const back = mount("everything");
+    expect(scrollTo).not.toHaveBeenCalled();
+    await land(many(), twoFolders);
+    expect(rows(back.container)).toBe(32);
+    expect(scrollTo).toHaveBeenCalledWith(0, 900);
   });
 
   it("does the same on Recent", async () => {

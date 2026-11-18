@@ -55,6 +55,8 @@ const OPEN: FolderUnlock = { open: LISTING };
 
 beforeEach(() => {
   unlockFolder.mockReset();
+  window.sessionStorage.clear();
+  window.history.replaceState(null, "");
 });
 
 describe("a folder opened by its link", () => {
