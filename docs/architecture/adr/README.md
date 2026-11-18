@@ -38,6 +38,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0029](0029-expiry-makes-it-private-on-an-hourly-job.md) | Expiry makes it private, on an hourly job | Accepted |
 | [0030](0030-agents-read-a-markdown-reading.md) | Agents read an HTML document as a Markdown reading made on read | Accepted |
 | [0031](0031-a-document-can-be-embedded-in-another-site.md) | A document can be embedded in another site | Accepted |
+| [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) | A reading separates text that touches, and a quote may carry the space | Accepted |
 
 ## Format
 

@@ -1,5 +1,5 @@
 {
-  "$comment": "Golden cases for finding an agent's quote (SPEC §22). functions/test/quote.test.js asserts locateQuote gives exactly `expect`; app/src/annotation/exact.test.ts asserts the browser's strict resolver finds `exact` with the anchor every `ok` case yields. Both sides read this file, so a change to either resolver that breaks agreement fails a test — the shared-fixture discipline of the hash pair (SPEC §9.1).",
+  "$comment": "Golden cases for finding an agent's quote (SPEC §22). functions/test/quote.test.js asserts locateQuote gives exactly `expect`; app/src/annotation/exact.test.ts asserts the browser's strict resolver finds the anchor every `ok` case yields. An `ok` case's `expect.exact`, when given, is the page's own text the anchor holds, where the quote as sent carried a space the reading puts between touching elements (ADR 0032). Both sides read this file, so a change to either resolver that breaks agreement fails a test — the shared-fixture discipline of the hash pair (SPEC §9.1).",
   "cases": [
     {
       "name": "a quote across inline markup",
@@ -72,6 +72,36 @@
       "name": "a passage nobody wrote",
       "html": "<body><p>Something else entirely.</p></body>",
       "exact": "original words",
+      "expect": { "error": "not-found" }
+    },
+    {
+      "name": "a space where two spans touch finds the page's own text",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><div class=\"metric\"><span class=\"readout\">256</span><span class=\"metric-label\">Applications out, 73 this week</span></div></body></html>",
+      "exact": "256 Applications out",
+      "expect": { "ok": true, "exact": "256Applications out", "prefix": "", "suffix": ", 73 this week" }
+    },
+    {
+      "name": "the same words without that space are found as well",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><div class=\"metric\"><span class=\"readout\">256</span><span class=\"metric-label\">Applications out, 73 this week</span></div></body></html>",
+      "exact": "256Applications out",
+      "expect": { "ok": true, "prefix": "", "suffix": ", 73 this week" }
+    },
+    {
+      "name": "a space where a link touches a span finds the page's own text",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><table><tr><th scope=\"row\"><a href=\"https://example.com/job\">Staff Engineer</a><span class=\"co\">Example Co</span></th><td>13 Nov</td></tr></table></body></html>",
+      "exact": "Staff Engineer Example Co",
+      "expect": { "ok": true, "exact": "Staff EngineerExample Co", "prefix": "", "suffix": "" }
+    },
+    {
+      "name": "a space inside a word with emphasis on half of it is a passage nobody wrote",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Book the<em>rapist</em> today.</p></body></html>",
+      "exact": "the rapist",
+      "expect": { "error": "not-found" }
+    },
+    {
+      "name": "a span after plain text is not a boundary a space may stand for",
+      "html": "<!DOCTYPE html><html><head><title>t</title></head><body><p>Book the<span class=\"hl\">rapist</span> today.</p></body></html>",
+      "exact": "the rapist",
       "expect": { "error": "not-found" }
     }
   ]

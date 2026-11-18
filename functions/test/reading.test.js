@@ -18,7 +18,7 @@ const {
   resolveAddress,
   stripForReading,
 } = require("../lib/lib/markdown/reading.js");
-const { textBlocks } = require("../lib/lib/quote.js");
+const { locateQuote, textBlocks } = require("../lib/lib/quote.js");
 const { TOOLS, pageEnd } = require("../lib/mcp/tools.js");
 
 const ROOT = join(__dirname, "..", "..");
@@ -31,6 +31,26 @@ const BUNDLES = readdirSync(join(ROOT, "content"))
   .map((name) => join(ROOT, "content", name, "bundle", "index.html"))
   .filter((path) => existsSync(path))
   .map((path) => ({ path, html: readFileSync(path, "utf8") }));
+
+/**
+ * The shapes a dashboard-like page is made of, where only the stylesheet keeps
+ * words apart: metric cards, a link with its company after it, a row of cells
+ * with an empty bar between, a word split letter by letter, a legend whose
+ * items carry their own bullet, and lists and code that must keep their form.
+ * Made up; the real page these come from is nobody's test fixture.
+ */
+const TOUCHING_FIXTURE = `<!DOCTYPE html><html><head><title>Tracker</title></head><body>
+<h2>Status</h2>
+<div class="metrics"><div class="metric"><span class="readout">256</span><span class="metric-label">Applications out, 73 this week</span></div><a class="metric" href="#needs"><span class="readout">96</span><span class="metric-label">Waiting on you</span></a><div class="metric"><span class="readout">0</span><span class="metric-label">Roles scored today</span></div></div>
+<table><tr><th scope="row"><a href="https://example.com/job">Staff Engineer</a><span class="co">Example Co</span></th><td>13 Nov</td></tr></table>
+<div class="frow"><span class="flabel">Seen</span><span class="fbar"><span style="width:100%"></span></span><span class="num">684</span><span class="num">0</span></div>
+<p class="split"><span>H</span><span>e</span><span>l</span><span>l</span><span>o</span></p>
+<ul class="legend"><li>• Applied 253</li><li>• Waiting on you 77</li></ul>
+<ol><li>First</li><li>Second<ul><li>Nested</li></ul></li></ol>
+<ol start="9"><li>Ninth</li><li><p>Tenth</p><p>More of the tenth</p></li></ol>
+<pre><code><span>x</span><span>y</span></code></pre>
+<p>Inline <code><span>a</span><span>b</span></code> code.</p>
+</body></html>`;
 
 // --- The strip ---------------------------------------------------------------
 
@@ -111,6 +131,10 @@ test("the published samples and guides read without HTML", () => {
 function anchorBlocks(html) {
   const doc = domino.createDocument(html);
   for (const el of [...doc.querySelectorAll('[hidden], [aria-hidden="true"], input, select, textarea, button, canvas, video, audio, iframe, object')]) el.remove();
+  // A labelled role="img" reads as its label, so its cells are not in the reading.
+  for (const el of [...doc.querySelectorAll("[role][aria-label]")]) {
+    if (/^\s*(img|image)\b/i.test(el.getAttribute("role")) && el.getAttribute("aria-label").trim()) el.remove();
+  }
   for (const el of [...doc.querySelectorAll("[style]")]) {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style"))) el.remove();
   }
@@ -128,7 +152,7 @@ function words(markdown) {
           .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
           .replace(/\[(?:figure|image|embedded|video|audio)(?::[^\]]*)?\](?:\([^)]*\))?/g, " ")
           .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-          .replace(/^ {0,3}(?:#{1,6} |[-+] {1,3}|\d+\. {1,2}|> ?)/gm, ""),
+          .replace(/^[ \t]*(?:#{1,6} |[-+] {1,3}|\d+\. {1,2}|> ?)/gm, ""),
   );
   return parts
     .join(" ")
@@ -145,22 +169,81 @@ test("every passage a comment can anchor to reads word for word", () => {
    * (`lib/quote.ts`). Escaping `*`, `_` or `[` would make every quote with
    * one in it a refusal. So every block of the page's text, from every
    * sample, has to appear in the reading once its Markdown marks are gone.
+   *
+   * Compared with whitespace taken out: where a span or link touches another,
+   * the reading puts a space the page's text does not have, and the quote that
+   * carries it is still found (ADR 0032, and the test after this one).
    */
-  for (const { path, html } of BUNDLES) {
-    const reading = words(read(html).body);
+  for (const { path, html } of [...BUNDLES, { path: "the touching fixture", html: TOUCHING_FIXTURE }]) {
+    const reading = words(read(html).body).replace(/\s+/g, "");
     for (const block of anchorBlocks(html)) {
-      // A block's own text may start with what reads as a marker ("1. "), which
-      // `words` takes off a line, so it comes off the block the same way.
+      // A block's own text may start with what reads as a marker ("1. ") or a
+      // typed bullet, which come off a line, so they come off the block too.
       const want = block
         .replace(/^ {0,3}(?:#{1,6} |[-+] {1,3}|\d+\. {1,2}|> ?)/, "")
+        .replace(/^[•◦▪▫‣⁃●○■□·]/, "")
         .replace(/[*`~]/g, "")
         .replace(/\|/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+        .replace(/\s+/g, "");
       if (!want) continue;
       assert.ok(reading.includes(want), `${path}: the reading lost "${want.slice(0, 80)}"`);
     }
   }
+});
+
+test("every line of a reading an agent might quote is found in the page", () => {
+  /**
+   * The other direction, and the one an agent lives in: it copies words from
+   * the reading into add_comment or suggest_edit. Where the reading put a
+   * space between touching elements, locateQuote has to find the quote anyway
+   * and anchor it to the page's own text. A line may still cross blocks or
+   * repeat, which locateQuote says; it must never be a passage nobody wrote.
+   * Tables, placeholders and lines with Markdown marks in them are left to
+   * the test above, because their words are not quoted with their marks.
+   */
+  for (const { path, html } of [...BUNDLES, { path: "the touching fixture", html: TOUCHING_FIXTURE }]) {
+    const body = read(html).body.split(/^```[^\n]*$/m).filter((_, i) => i % 2 === 0).join("\n");
+    for (const raw of body.split("\n")) {
+      const line = raw
+        .replace(/^[ \t]*(?:#{1,6} |[-+] |\d+\. |> ?)/, "")
+        .replace(/\[([^\]]*)\]\((?:https?:|mailto:|\/)[^)]*\)/g, "$1")
+        .trim();
+      if (line.length < 3 || /^\||[[\]*`~_<>]|^---$/.test(line)) continue;
+      const got = locateQuote(html, { exact: line });
+      assert.ok(!("error" in got && got.error === "not-found"), `${path}: "${line.slice(0, 80)}" is not found in the page`);
+    }
+  }
+});
+
+test("text the page's CSS keeps apart reads apart, and a typed bullet is not doubled", () => {
+  const r = read(TOUCHING_FIXTURE);
+  assert.match(r.body, /^256 Applications out, 73 this week$/m);
+  assert.match(r.body, /^96 Waiting on you$/m);
+  assert.match(r.body, /^0 Roles scored today$/m, "a single digit before a label still gets its space");
+  assert.match(r.body, /\[Staff Engineer\]\(https:\/\/example\.com\/job\) Example Co/);
+  assert.match(r.body, /^Seen 684 0$/m, "an empty bar between two cells is passed over");
+  assert.match(r.body, /^Hello$/m, "a word split letter by letter stays one word");
+  assert.match(r.body, /^- Applied 253$/m);
+  assert.ok(!/^\s*- {2,}/m.test(r.body), "no wide list markers");
+  assert.ok(!/^\s*- [•◦▪]/m.test(r.body), "no doubled bullets");
+  assert.match(r.body, /^1\. First\n2\. Second\n {3}- Nested$/m);
+  assert.match(r.body, /^9\. Ninth\n10\. Tenth\n\n {4}More of the tenth$/m);
+  assert.match(r.body, /^xy$/m, "a code block keeps its own text");
+  assert.match(r.body, /`ab`/, "inline code keeps its own text");
+  assert.ok(!/x y|`a b`/.test(r.body), "no space is put into code");
+});
+
+test("a chart drawn from boxes reads as the words its author gave it", () => {
+  const label = "Last 7 days: seen 684, kept by the prefilter 493, viewed 392. " + "More words. ".repeat(20);
+  const r = read(`<figure role="img" aria-label="${label}"><div><span>Seen</span><span>684</span></div></figure><p>After</p>
+    <div role="img" aria-label="Where all 10 roles stand: 3 applied"><span style="flex:3"></span><span style="flex:7"></span></div>
+    <div role="img"><span>No label</span><span>keeps its words</span></div>`);
+  assert.match(r.body, /\[figure: Last 7 days: seen 684, kept by the prefilter 493, viewed 392\. More words\./, "the whole label, not a 120-character caption");
+  assert.ok(!r.body.includes("Seen 684"), "the cells are not read twice");
+  assert.match(r.body, /\[figure: Where all 10 roles stand: 3 applied\]/, "an empty chart is read by its label too");
+  assert.match(r.body, /No label keeps its words/);
+  assert.match(r.body, /\]\n\nAfter/, "a block figure stands apart from the next paragraph");
+  assert.equal(r.leftOut.figures, 2);
 });
 
 test("characters Markdown would escape are left as the author wrote them", () => {

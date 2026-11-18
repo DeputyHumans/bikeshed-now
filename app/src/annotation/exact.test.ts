@@ -253,7 +253,8 @@ describe("the golden quote cases, shared with the server", () => {
       exact: string;
       prefix?: string;
       suffix?: string;
-      expect: { ok?: boolean; prefix?: string; suffix?: string; error?: string };
+      /** For an `ok` case, the page's own text the anchor holds when the quote as sent differs (ADR 0032). */
+      expect: { ok?: boolean; exact?: string; prefix?: string; suffix?: string; error?: string };
     }[];
   };
 
@@ -265,9 +266,10 @@ describe("the golden quote cases, shared with the server", () => {
     it(c.name, () => {
       const doc = new DOMParser().parseFromString(c.html, "text/html");
       if (c.expect.ok) {
-        const anchor = { elementId: "", exact: c.exact, prefix: c.expect.prefix!, suffix: c.expect.suffix!, start: 0, end: 0 };
+        const exact = c.expect.exact ?? c.exact;
+        const anchor = { elementId: "", exact, prefix: c.expect.prefix!, suffix: c.expect.suffix!, start: 0, end: 0 };
         const range = exactRangeFromAnchor(doc, anchor);
-        expect(range?.toString().replace(/\s+/g, " ").trim()).toBe(c.exact);
+        expect(range?.toString().replace(/\s+/g, " ").trim()).toBe(exact);
         expect(suggestibleRange(range!)).toBe(true);
       } else {
         // Whatever the server refused, the browser would not apply either.

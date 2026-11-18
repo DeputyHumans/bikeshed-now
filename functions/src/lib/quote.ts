@@ -36,6 +36,14 @@ const BREAKS = new Set([
 /** Elements whose contents are not prose a suggestion could change. */
 const SKIPPED = new Set(["script", "style", "svg", "math", "template", "noscript"]);
 
+/**
+ * Elements whose text a stylesheet often lays out apart, though nothing in the
+ * text separates them. The Markdown reading puts a space where one of these
+ * touches another (`lib/markdown/reading.ts`, ADR 0032), so a quote copied
+ * from it may carry that space; the page's text does not.
+ */
+const TOUCHING = new Set(["span", "a"]);
+
 /** How much context either side of the quote is kept, at most. */
 const CONTEXT = 32;
 
@@ -85,16 +93,28 @@ export interface ScannedText {
   /** Source offset just past each character's last byte. */
   to: number[];
   run: number[];
+  /**
+   * True where only tags stand between this character and the one before it,
+   * and among them a span or link closes and another opens: the place the
+   * reading may have put a space the text does not have.
+   */
+  touch: boolean[];
 }
 
 export function scanBody(html: string): ScannedText {
-  const out: ScannedText = { chars: [], from: [], to: [], run: [] };
+  const out: ScannedText = { chars: [], from: [], to: [], run: [], touch: [] };
   let run = 0;
+  // Since the last character: did a span or link close, and did one open after it?
+  let closed = false;
+  let touching = false;
   const push = (ch: string, from: number, to: number) => {
     out.chars.push(ch);
     out.from.push(from);
     out.to.push(to);
     out.run.push(run);
+    out.touch.push(touching);
+    closed = false;
+    touching = false;
   };
   // Decoded exactly as `decodeEntities` decodes, keeping where each part came from.
   const text = (from: number, to: number) => {
@@ -149,28 +169,98 @@ export function scanBody(html: string): ScannedText {
       continue;
     }
     if (BREAKS.has(name)) run++;
+    if (TOUCHING.has(name)) {
+      if (closing) closed = true;
+      else if (closed) touching = true;
+    }
   }
   return out;
 }
 
-/** The body's text as blocks: each a run of text no element boundary breaks. */
-export function textBlocks(html: string): string[] {
-  const { chars, run } = scanBody(html);
-  const blocks: string[] = [];
-  let current = "";
+/** One block's text, whitespace squashed, with where a span or link touches another. */
+interface Block {
+  text: string;
+  /** `touch[i]`: a touching boundary stands just before `text[i]`. */
+  touch: boolean[];
+}
+
+/** Squash a block exactly as `squash` does, keeping each character's touch mark. */
+function squashBlock(chars: string[], touch: boolean[]): Block {
+  const parts: string[] = [];
+  const marks: boolean[] = [];
+  let spacing = false;
+  for (let i = 0; i < chars.length; i++) {
+    if (/\s/.test(chars[i])) {
+      if (!spacing) {
+        parts.push(" ");
+        marks.push(false);
+        spacing = true;
+      }
+      continue;
+    }
+    spacing = false;
+    parts.push(chars[i]);
+    marks.push(touch[i]);
+  }
+  return { text: parts.join(""), touch: marks };
+}
+
+function blocksOf(html: string): Block[] {
+  const { chars, run, touch } = scanBody(html);
+  const blocks: Block[] = [];
+  let current: string[] = [];
+  let marks: boolean[] = [];
   let at = 0;
   for (let k = 0; k < chars.length; k++) {
     // Every boundary between two characters' runs closes one block per run
     // passed, as each element boundary did when the text was read.
     while (at < run[k]) {
-      blocks.push(squash(current));
-      current = "";
+      blocks.push(squashBlock(current, marks));
+      current = [];
+      marks = [];
       at++;
     }
-    current += chars[k];
+    current.push(chars[k]);
+    marks.push(touch[k]);
   }
-  blocks.push(squash(current));
-  return blocks.filter((b) => b.trim() !== "");
+  blocks.push(squashBlock(current, marks));
+  return blocks.filter((b) => b.text.trim() !== "");
+}
+
+/** The body's text as blocks: each a run of text no element boundary breaks. */
+export function textBlocks(html: string): string[] {
+  return blocksOf(html).map((b) => b.text);
+}
+
+/**
+ * A block as the reading may print it: a space at every touching boundary with
+ * no whitespace either side. `pos[i]` is where the block's `text[i]` landed,
+ * and `from[j]` the block index each printed character stands for. Null when
+ * the block has no such boundary, which is most of them.
+ */
+interface Spaced {
+  text: string;
+  pos: number[];
+  from: number[];
+}
+
+function spaced(block: Block): Spaced | null {
+  const { text, touch } = block;
+  const parts: string[] = [];
+  const pos: number[] = [];
+  const from: number[] = [];
+  let any = false;
+  for (let i = 0; i < text.length; i++) {
+    if (i > 0 && touch[i] && text[i] !== " " && text[i - 1] !== " ") {
+      parts.push(" ");
+      from.push(i);
+      any = true;
+    }
+    pos.push(parts.length);
+    parts.push(text[i]);
+    from.push(i);
+  }
+  return any ? { text: parts.join(""), pos, from } : null;
 }
 
 /** Every index at which `needle` starts in `hay`. */
@@ -191,41 +281,69 @@ export function locateQuote(
 ): Located | { error: QuoteRefusal; count?: number } {
   const exact = squash(q.exact).trim();
   if (!exact) return { error: "not-found" };
-  const blocks = textBlocks(html);
+  const blocks = blocksOf(html).map((block) => ({ block, spaced: spaced(block) }));
 
-  const candidates = blocks.flatMap((block) => occurrences(block, exact).map((at) => ({ block, at })));
+  // A place is a stretch of one block's own text. A quote copied from the
+  // reading may carry a space where two elements touch, so each block is
+  // searched as written and as the reading prints it, and a place found both
+  // ways is one place (ADR 0032).
+  const candidates: { block: Block; spaced: Spaced | null; start: number; end: number }[] = [];
+  for (const { block, spaced: s } of blocks) {
+    const seen = new Set<number>();
+    const add = (start: number, end: number) => {
+      if (seen.has(start * 4_294_967_296 + end)) return;
+      seen.add(start * 4_294_967_296 + end);
+      candidates.push({ block, spaced: s, start, end });
+    };
+    for (const at of occurrences(block.text, exact)) add(at, at + exact.length);
+    // The quote is trimmed, so it starts and ends on characters of the text, never on an added space.
+    if (s) for (const at of occurrences(s.text, exact)) add(s.from[at], s.from[at + exact.length - 1] + 1);
+  }
   if (candidates.length === 0) {
-    const across = [squash(blocks.join(" ")), squash(blocks.join(""))];
+    const texts = blocks.map((b) => b.block.text);
+    const printed = blocks.map((b) => b.spaced?.text ?? b.block.text);
+    const across = [squash(texts.join(" ")), squash(texts.join("")), squash(printed.join(" "))];
     return { error: across.some((t) => t.includes(exact)) ? "crosses-block" : "not-found" };
   }
 
   // Choose between repeats exactly as the browser will: both sides of context,
-  // else one side, else no choice at all.
+  // else one side, else no choice at all. Context copied from the reading may
+  // carry the same spaces the quote may.
   const prefix = squash(q.prefix ?? "").trimEnd();
   const suffix = squash(q.suffix ?? "").trimStart();
   const scored = candidates.map((c) => {
-    const before = c.block.slice(0, c.at).trimEnd();
-    const after = c.block.slice(c.at + exact.length).trimStart();
-    return { ...c, pre: prefix === "" || before.endsWith(prefix), suf: suffix === "" || after.startsWith(suffix) };
+    const { text } = c.block;
+    const before = [text.slice(0, c.start).trimEnd()];
+    const after = [text.slice(c.end).trimStart()];
+    if (c.spaced) {
+      before.push(c.spaced.text.slice(0, c.spaced.pos[c.start]).trimEnd());
+      after.push(c.spaced.text.slice(c.end < text.length ? c.spaced.pos[c.end] : c.spaced.text.length).trimStart());
+    }
+    return {
+      ...c,
+      pre: prefix === "" || before.some((b) => b.endsWith(prefix)),
+      suf: suffix === "" || after.some((a) => a.startsWith(suffix)),
+    };
   });
   const both = scored.filter((c) => c.pre && c.suf);
   const either = scored.filter((c) => c.pre || c.suf);
   const pick = both.length === 1 ? both[0] : both.length === 0 && either.length === 1 ? either[0] : null;
   if (!pick) return { error: "ambiguous", count: candidates.length };
 
-  const end = pick.at + exact.length;
+  const text = pick.block.text;
   return {
     anchor: {
       // Measured against the body, which is where the browser looks for an
-      // anchor with no element id.
+      // anchor with no element id. The page's own text, never the quote as
+      // sent: the browser finds exactly this.
       elementId: "",
-      exact,
-      prefix: pick.block.slice(Math.max(0, pick.at - CONTEXT), pick.at),
-      suffix: pick.block.slice(end, end + CONTEXT),
+      exact: text.slice(pick.start, pick.end),
+      prefix: text.slice(Math.max(0, pick.start - CONTEXT), pick.start),
+      suffix: text.slice(pick.end, pick.end + CONTEXT),
       // Offsets are what a comment's highlight falls back to; a suggestion is
       // only ever found by its quote, so these are a block-local hint at most.
-      start: pick.at,
-      end,
+      start: pick.start,
+      end: pick.end,
     },
   };
 }

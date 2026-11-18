@@ -267,10 +267,13 @@ export function resolveAddress(raw: string | null | undefined, ctx: ReadingConte
 /** The minimum of a DOM node these rules touch; turndown parses with its own DOM. */
 interface MinimalNode {
   nodeName: string;
+  nodeType?: number;
   textContent?: string | null;
   isBlock?: boolean;
   checked?: boolean;
   parentNode?: MinimalNode | null;
+  previousSibling?: MinimalNode | null;
+  nextSibling?: MinimalNode | null;
   childNodes?: ArrayLike<MinimalNode>;
   getAttribute?: (name: string) => string | null;
 }
@@ -339,6 +342,89 @@ function embed(node: MinimalNode): string {
   return href ? `[${name ? `embedded: ${name}` : "embedded"}](${href})` : bracket("embedded", name);
 }
 
+/* Where the page's CSS is what keeps words apart ---------------------------- */
+
+/**
+ * The elements whose text runs into a neighbour's when only a stylesheet lays
+ * them out apart: a metric's number and its label, a card's cells, a link and
+ * the company after it. `lib/quote.ts` marks the same boundaries, more widely,
+ * so a quote copied with the space this puts in is still found (ADR 0032).
+ */
+const TOUCHING = new Set(["span", "a"]);
+
+function isElement(node: MinimalNode | null | undefined): node is MinimalNode {
+  return node?.nodeType === 1;
+}
+
+function inPreformatted(node: MinimalNode): boolean {
+  for (let p = node.parentNode ?? null; p; p = p.parentNode ?? null) {
+    const t = tagOf(p);
+    if (t === "pre" || t === "code") return true;
+  }
+  return false;
+}
+
+/**
+ * A space in front of a span or link whose text runs straight on from the span
+ * or link before it, `<span>256</span><span>Applications</span>`, skipping
+ * empty ones between, like a bar drawn with CSS. Never after a text node,
+ * which may be inside the same word, never in code, and never between two
+ * single characters, which is a word split letter by letter for an animation.
+ */
+function touchGap(node: MinimalNode): string {
+  const own = node.textContent ?? "";
+  if (own === "" || /^\s/.test(own)) return "";
+  let p = node.previousSibling ?? null;
+  while (isElement(p) && TOUCHING.has(tagOf(p)) && /^\s*$/.test(p.textContent ?? "")) p = p.previousSibling ?? null;
+  if (!isElement(p) || !TOUCHING.has(tagOf(p)) || isHidden(p)) return "";
+  const before = p.textContent ?? "";
+  if (/\s$/.test(before)) return "";
+  if (before.length === 1 && own.length === 1) return "";
+  return inPreformatted(node) ? "" : " ";
+}
+
+/* Pictures that say what they show --------------------------------------- */
+
+/** How long a `role="img"` element's own words may run: they are the figure's content, not a caption. */
+const IMAGE_LABEL_CHARS = 1000;
+
+/** The words a `role="img"` element gives for itself, or null when it gives none. */
+function imageLabel(node: MinimalNode): string | null {
+  const role = (attr(node, "role") ?? "").trim().toLowerCase().split(/\s+/)[0];
+  if (role !== "img" && role !== "image") return null;
+  const said = (attr(node, "aria-label") ?? "").replace(/\s+/g, " ").trim();
+  return said || null;
+}
+
+/**
+ * A chart drawn from boxes, read as a screen reader reads it: its label, and
+ * none of the cells inside, whose numbers mean nothing without the layout.
+ */
+function describedImage(node: MinimalNode, said: string): string {
+  counts().figures++;
+  const text = bracket("figure", said.length > IMAGE_LABEL_CHARS ? `${said.slice(0, IMAGE_LABEL_CHARS - 1)}…` : said);
+  return node.isBlock ? `\n\n${text}\n\n` : text;
+}
+
+/* Lists ------------------------------------------------------------------- */
+
+/** A bullet an author typed into a list item that already has one. Never a hyphen or a dash: those may be words. */
+const TYPED_BULLET = /^[•◦▪▫‣⁃●○■□·][^\S\n]*/;
+
+/** Each item's place in its list, counted once per list: a long list must not cost its length squared. */
+const itemIndex = new WeakMap<object, number>();
+
+function orderedIndex(item: MinimalNode, list: MinimalNode): number {
+  let at = itemIndex.get(item);
+  if (at === undefined) {
+    const kids = list.childNodes ?? [];
+    let n = 0;
+    for (let i = 0; i < kids.length; i++) if (tagOf(kids[i]) === "li") itemIndex.set(kids[i], n++);
+    at = itemIndex.get(item) ?? 0;
+  }
+  return at;
+}
+
 /** The table a row or cell belongs to, skipping nothing: a nested table owns its own rows. */
 function owningTable(node: MinimalNode): MinimalNode | null {
   let p = node.parentNode ?? null;
@@ -398,6 +484,8 @@ function createReadingService(): TurndownService {
       const n = asNode(node);
       const t = tagOf(n);
       if (isHidden(n)) return "";
+      const said = imageLabel(n);
+      if (said !== null) return describedImage(n, said);
       if (FIGURES.has(t)) return figure(n);
       if (t === "object") return embed(n);
       return n.isBlock ? "\n\n" : "";
@@ -415,6 +503,32 @@ function createReadingService(): TurndownService {
   service.addRule("strike", {
     filter: ["del", "s", "strike"] as TurndownService.Filter,
     replacement: (content) => (content.trim() ? `~~${content}~~` : ""),
+  });
+
+  // A link with an address has its own rule below; both put the same space in.
+  service.addRule("touching", {
+    filter: filter((node) => tagOf(node) === "span" || (tagOf(node) === "a" && attr(node, "href") === null)),
+    replacement: (content, node) => `${touchGap(asNode(node))}${content}`,
+  });
+
+  service.addRule("listItem", {
+    filter: "li",
+    replacement: (content, node) => {
+      const n = asNode(node);
+      const list = n.parentNode ?? null;
+      let marker = "- ";
+      let body = content.replace(/^\n+/, "");
+      if (list && tagOf(list) === "ol") {
+        const start = Number.parseInt(attr(list, "start") ?? "", 10);
+        marker = `${(Number.isFinite(start) ? start : 1) + orderedIndex(n, list)}. `;
+      } else {
+        body = body.replace(TYPED_BULLET, "");
+      }
+      // Continuation lines line up under the item's text, as CommonMark reads them.
+      const indent = " ".repeat(marker.length);
+      body = body.replace(/\n+$/, "\n").replace(/\n/gm, `\n${indent}`);
+      return marker + body + (n.nextSibling && !/\n$/.test(body) ? "\n" : "");
+    },
   });
 
   service.addRule("tableCell", {
@@ -450,8 +564,10 @@ function createReadingService(): TurndownService {
   service.addRule("link", {
     filter: filter((node) => tagOf(node) === "a" && attr(node, "href") !== null),
     replacement: (content, node) => {
-      const href = current ? resolveAddress(attr(asNode(node), "href"), current.ctx) : null;
-      return href && content.trim() ? `[${content}](${href})` : content;
+      const n = asNode(node);
+      const href = current ? resolveAddress(attr(n, "href"), current.ctx) : null;
+      const gap = touchGap(n);
+      return href && content.trim() ? `${gap}[${content}](${href})` : `${gap}${content}`;
     },
   });
 
@@ -491,6 +607,11 @@ function createReadingService(): TurndownService {
   service.addRule("figure", {
     filter: filter((node) => FIGURES.has(tagOf(node))),
     replacement: (_content, node) => figure(asNode(node)),
+  });
+
+  service.addRule("describedImage", {
+    filter: filter((node) => imageLabel(node) !== null),
+    replacement: (_content, node) => describedImage(asNode(node), imageLabel(asNode(node)) as string),
   });
 
   service.addRule("formControl", {

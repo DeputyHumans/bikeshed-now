@@ -1,6 +1,6 @@
 # 0030 — Agents read an HTML document as a Markdown reading made on read
 
-**Status** Accepted · **Spec** §2, §17, §19
+**Status** Accepted, amended by [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) (§4: a space where elements touch, and a quote that carries it) · **Spec** §2, §17, §19
 
 ## Context
 
