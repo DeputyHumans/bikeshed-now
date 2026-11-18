@@ -6,7 +6,7 @@
    // once; everything else is already stored and is only named.
 -  await storeFiles(docId, files);
 +  const entryBytes = files.find((f): f is { rel: string; data: Buffer } => f.rel === version.entry && "data" in f)?.data;
-+  await storeFiles(docId, files, { file: (name) => ({ save: (data: Buffer, options: Record<string, unknown>) => bucket().file(name).save(data === entryBytes ? Buffer.concat([data, Buffer.from("\n<!-- e2e control: bytes after the hash -->\n")]) : data, options) }) });
++  await storeFiles(docId, files, { file: (name) => ({ save: (data: Buffer, options: Record<string, unknown>) => bucket().file(name).save(data === entryBytes ? Buffer.from(data).fill(0x20, data.length - 1) : data, options) }) });
  
    const editSessions = Array.isArray(draft.editSessions) ? draft.editSessions : [];
    let candidateMayHaveCommitted = false;
