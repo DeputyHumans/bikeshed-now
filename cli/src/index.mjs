@@ -4,7 +4,7 @@
 
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import { CONFIG_PATH, readConfig, resolveAuth, writeConfig } from "./config.mjs";
@@ -19,9 +19,12 @@ import {
   pluginSteps,
   printable,
   revokeOwnToken,
+  uploadBytes,
   uploadFile,
   whoami,
 } from "./client.mjs";
+import { describeLeftOut, folderProblems, megabytes, readEntries, walkFolder } from "./folder.mjs";
+import { storedZip } from "./zip.mjs";
 import {
   CLI_CLIENT_ID,
   LOGIN_TIMEOUT_MS,
@@ -48,8 +51,9 @@ const USAGE = `bikeshed ${VERSION} — publish and revise documents
   bikeshed login                       sign in through your browser (--paste for a token)
   bikeshed logout                      sign out (revokes a token from browser sign-in)
   bikeshed list                        documents you can read
-  bikeshed publish <file>              create a new document
-  bikeshed update <id> <file>          publish a new version
+  bikeshed publish <file|folder>       create a new document
+  bikeshed update <id> <file|folder>   publish a new version; several files, or a
+                                       picture, replace only the files of those names
   bikeshed fork <id>                   your own copy, which remembers its original
   bikeshed lineage <id>                what it was forked from; for its owner, its forks
   bikeshed get <id> [--version <v>]    print a version: an HTML document as a
@@ -125,9 +129,16 @@ Skills
 What you can publish
   .md .markdown          rendered to HTML on the server; get returns the Markdown
   .html .htm             stored as written
-  .zip                   several files, index.html or index.md at the root
-  Up to 25 MB. An update keeps the format: a .zip replaces every file, one .md
-  or .html replaces the entry and keeps the files beside it.
+  a folder, or a .zip    a page and the files it uses: stylesheets, scripts,
+                         fonts, pictures, video, referenced by relative path.
+                         The page is index.html or index.md, or the only one.
+                         Dotfiles (.env, .git), node_modules and symbolic links
+                         are left out, and said so
+  Up to 25 MB. An update keeps the format. A folder or a .zip replaces every
+  file. One .md or .html replaces the page and keeps the files beside it.
+  Other files, or several, each replace the file of the same name (a path such
+  as img/chart.png names exactly one) or are added; the rest stay. Each file is
+  stored once, so an update sends and stores only what changed.
   Scripts run once a person trusts the document in the app: its owner for
   everyone, any reader for themselves. Each update sandboxes it again. Images,
   stylesheets and fonts from other sites load either way. Markdown is
@@ -225,6 +236,60 @@ const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 /** A .zip by name, or by the bytes the deployment itself sniffs for. */
 function isArchive(path, bytes) {
   return /\.zip$/i.test(path) || bytes.subarray(0, 4).equals(ZIP_MAGIC);
+}
+
+/** True for a folder on disk. */
+function isFolder(path) {
+  try { return statSync(path).isDirectory(); } catch { return false; }
+}
+
+/**
+ * A folder as the one `.zip` the deployment takes, after saying on stderr
+ * what it leaves out and refusing, before anything is sent, a folder that
+ * would be refused (SPEC §2).
+ */
+function packFolder(dir) {
+  const { files, leftOut } = walkFolder(dir);
+  const skipped = describeLeftOut(leftOut);
+  if (skipped) console.error(skipped);
+  const problems = folderProblems(files);
+  if (problems.length > 0) fail(`${basename(dir)} cannot be published: ${problems.join("; ")}`);
+  const total = files.reduce((n, f) => n + f.size, 0);
+  console.error(`sending ${files.length} file(s), ${megabytes(total)}`);
+  return { bytes: storedZip(readEntries(files)), filename: `${basename(dir)}.zip` };
+}
+
+/**
+ * Loose files to lay over a version, each at the path it is sent with: its
+ * path from here when it is inside this folder (`img/chart.png`, an exact
+ * match), else its name, which the deployment matches by name (SPEC §2).
+ */
+function packLoose(paths) {
+  const seen = new Set();
+  const entries = paths.map((p) => {
+    const abs = resolve(p);
+    if (isFolder(abs)) fail(`${p} is a folder; update with a folder alone, to make it the whole next version`);
+    const inside = relative(process.cwd(), abs);
+    const name = inside && !inside.startsWith("..") && !isAbsolute(inside) ? inside.split(sep).join("/") : basename(abs);
+    if (seen.has(name)) fail(`${name} is named twice`);
+    seen.add(name);
+    return { name, data: readFileSync(abs) };
+  });
+  return { bytes: storedZip(entries), filename: "files.zip" };
+}
+
+const PAGE_FILE = /\.(html?|md|markdown)$/i;
+
+/** What an update did, in one line, and where each loose file landed. */
+function describeUpdate(result) {
+  if (result.deduped) return `no change — identical to ${result.versionId}`;
+  const c = result.changes;
+  const counts = c
+    ? `${c.changed} file(s) changed, ${c.unchanged} unchanged${c.removed ? `, ${c.removed} left out` : ""}`
+    : `${result.fileCount} file(s), ${result.bytes} bytes`;
+  const lines = [`published ${result.versionId} — ${counts}`];
+  for (const p of result.placed ?? []) lines.push(p.sent === p.at ? `  ${p.at}` : `  ${p.sent} → ${p.at}`);
+  return lines.join("\n");
 }
 
 // --- Commands --------------------------------------------------------------
@@ -489,17 +554,21 @@ async function list(flags) {
 }
 
 async function publish(flags, [path]) {
-  if (!path) fail("usage: bikeshed publish <file>");
-  if (flags.id === true) fail("usage: bikeshed publish <file> --id <id>");
+  if (!path) fail("usage: bikeshed publish <file|folder>");
+  if (flags.id === true) fail("usage: bikeshed publish <file|folder> --id <id>");
   const { origin, token } = resolveAuth(flags);
   const file = resolve(path);
+  const folder = isFolder(file);
+  if (folder && flags.watch) {
+    fail("--watch follows one file; publish the folder, then: bikeshed update <id> <folder>/index.html --watch");
+  }
 
   const once = async () => {
-    const result = await uploadFile(origin, token, file, {
-      title: flags.title,
-      folder: flags.folder,
-      id: flags.id,
-    });
+    const meta = { title: flags.title, folder: flags.folder, id: flags.id };
+    const packed = folder ? packFolder(file) : null;
+    const result = packed
+      ? await uploadBytes(origin, token, packed.bytes, packed.filename, meta)
+      : await uploadFile(origin, token, file, meta);
     // A taken id still publishes, under a suffix. Said on stderr so `--json`
     // stays parseable; "not available" also covers a deployment too old to
     // know the parameter, which ignores it.
@@ -526,34 +595,43 @@ async function publish(flags, [path]) {
   }
 }
 
-async function update(flags, [ref, path]) {
-  if (!ref || !path) fail("usage: bikeshed update <id> <file>");
+async function update(flags, [ref, ...paths]) {
+  if (!ref || paths.length === 0) fail("usage: bikeshed update <id> <file|folder> [more files]");
   const { origin, token } = resolveAuth(flags);
-  const file = resolve(path);
+  const file = resolve(paths[0]);
   const { version: selectedBase, ...doc } = docArgs(ref, { version: flags.base });
   const { id } = doc;
+  // A folder is the whole next version. Several files, or one that is not a
+  // page or a zip, are laid over the current version each by its name.
+  const folder = paths.length === 1 && isFolder(file);
+  const loose = paths.length > 1 || (!folder && !PAGE_FILE.test(file) && !/\.zip$/i.test(file));
+  if (flags.watch && (folder || loose)) fail("--watch follows one page; name it: bikeshed update <id> <folder>/index.html --watch");
 
   const once = async () => {
-    const bytes = readFileSync(file);
-    // An archive goes up as bytes, to the one endpoint that takes them. Read as
-    // text, every byte above 0x7f in it would become U+FFFD on the way.
     // --base: the version this was revised from, so an update over somebody's
     // newer save is refused instead of replacing it (SPEC §19).
     const base = selectedBase;
-    const result = isArchive(file, bytes)
-      ? await uploadFile(origin, token, file, { update: id, k: doc.k, base })
-      : await callTool(origin, token, "update_document", {
-          ...doc,
-          content: bytes.toString("utf8"),
-          ...(base ? { baseVersion: base } : {}),
-        });
-    out(flags.json, { ...result, url: result.url ?? `${origin}/d/${id}` }, () =>
-      console.log(
-        result.deduped
-          ? `no change — identical to ${result.versionId}`
-          : `published ${result.versionId} (${result.fileCount} file(s), ${result.bytes} bytes)`,
-      ),
-    );
+    const target = { update: id, k: doc.k, base };
+    let result;
+    if (folder) {
+      const packed = packFolder(file);
+      result = await uploadBytes(origin, token, packed.bytes, packed.filename, target);
+    } else if (loose) {
+      const packed = packLoose(paths);
+      result = await uploadBytes(origin, token, packed.bytes, packed.filename, { ...target, merge: true });
+    } else {
+      const bytes = readFileSync(file);
+      // An archive goes up as bytes, to the one endpoint that takes them. Read as
+      // text, every byte above 0x7f in it would become U+FFFD on the way.
+      result = isArchive(file, bytes)
+        ? await uploadFile(origin, token, file, target)
+        : await callTool(origin, token, "update_document", {
+            ...doc,
+            content: bytes.toString("utf8"),
+            ...(base ? { baseVersion: base } : {}),
+          });
+    }
+    out(flags.json, { ...result, url: result.url ?? `${origin}/d/${id}` }, () => console.log(describeUpdate(result)));
     return result;
   };
 

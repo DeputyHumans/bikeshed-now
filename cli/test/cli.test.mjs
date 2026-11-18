@@ -791,7 +791,7 @@ test("publish --id with no value is a usage error, not a publish", () => {
     () => run(["publish", "whatever.md", "--id"], { BIKESHED_TOKEN: "bsk_a.b" }),
     (err) => {
       assert.equal(err.status, 1);
-      assert.match(err.stderr, /usage: bikeshed publish <file> --id <id>/);
+      assert.match(err.stderr, /usage: bikeshed publish <file\|folder> --id <id>/);
       return true;
     },
   );

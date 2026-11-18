@@ -298,6 +298,7 @@ export async function reviseDocument(args: {
   };
 
   let compiled: CompiledBundle | { error: string };
+  let placed: Array<{ sent: string; at: string }> | undefined;
   if (overlay) {
     let files = overlay.files;
     if (overlay.byName) {
@@ -305,6 +306,8 @@ export async function reviseDocument(args: {
       if ("matches" in resolved) {
         return resolved.matches.length > 0 ? { status: 409, error: resolved.error, matches: resolved.matches } : { error: resolved.error };
       }
+      // Where each loose file went, so whoever sent it can be told.
+      placed = files.map((f, i) => ({ sent: f.rel, at: resolved.files[i].rel }));
       files = resolved.files;
     }
     compiled = compileOverlay(base, files, args.title, MAX_BUNDLE_BYTES);
@@ -312,7 +315,7 @@ export async function reviseDocument(args: {
     compiled = compileRevision(base, extracted as ExtractedBundle, args.title, MAX_BUNDLE_BYTES);
   }
   if ("error" in compiled) return compiled;
-  return commitNewVersion({
+  const committed = await commitNewVersion({
     db: args.db,
     docRef,
     compiled,
@@ -322,6 +325,7 @@ export async function reviseDocument(args: {
     editorsOnly: args.editorsOnly,
     baseVersion,
   });
+  return placed && "versionId" in committed ? { ...committed, placed } : committed;
 }
 
 /**
@@ -536,6 +540,8 @@ export interface UpdateResult {
   deduped: boolean;
   /** Against the version it replaces, when that version's list is known without reading it. */
   changes?: FileChanges;
+  /** For loose files laid over by name: where each one went. */
+  placed?: Array<{ sent: string; at: string }>;
 }
 
 /**

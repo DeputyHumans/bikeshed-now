@@ -97,15 +97,24 @@ export async function callTool(origin, token, name, args = {}) {
  * with `update`, as a new version of that document, with `k` for an unlisted
  * one.
  */
-export async function uploadFile(origin, token, path, { title, folder, id, update, k, base } = {}) {
-  const bytes = readFileSync(path);
-  const params = new URLSearchParams({ filename: basename(path) });
+export async function uploadFile(origin, token, path, options = {}) {
+  return uploadBytes(origin, token, readFileSync(path), basename(path), options);
+}
+
+/**
+ * Upload bytes as if they were a file of that name: a page, or a `.zip` of a
+ * folder. With `merge`, the zip holds loose files to lay over the current
+ * version of `update`, each replacing the file of its name (SPEC §2).
+ */
+export async function uploadBytes(origin, token, bytes, filename, { title, folder, id, update, k, base, merge } = {}) {
+  const params = new URLSearchParams({ filename });
   if (title) params.set("title", title);
   if (folder) params.set("folderId", folder);
   if (id) params.set("id", id);
   if (update) params.set("update", update);
   if (k) params.set("k", k);
   if (base) params.set("baseVersion", base);
+  if (merge) params.set("merge", "1");
 
   const res = await fetch(`${origin}/publish?${params}`, {
     method: "POST",

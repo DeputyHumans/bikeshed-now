@@ -72,7 +72,7 @@ function looksLikeZip(buf: Buffer): boolean {
 }
 
 /** Strip a single shared top-level directory (e.g. "deck/index.html"). */
-function stripCommonPrefix(files: BundleEntry[]): BundleEntry[] {
+export function stripCommonPrefix<T extends { rel: string }>(files: T[]): T[] {
   if (files.length === 0) return files;
   const top = files[0].rel.split("/")[0];
   if (!top) return files;
@@ -94,7 +94,7 @@ function stripCommonPrefix(files: BundleEntry[]): BundleEntry[] {
  * regenerate anyway — re-rendering it would silently discard whatever the
  * author did to the HTML.
  */
-function resolveEntry(files: BundleEntry[]): { entry: string; format: SourceFormat } | null {
+export function resolveEntry(files: ReadonlyArray<{ rel: string }>): { entry: string; format: SourceFormat } | null {
   const rootHtml = files.find((f) => f.rel.toLowerCase() === "index.html");
   if (rootHtml) return { entry: rootHtml.rel, format: "html" };
 

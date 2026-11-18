@@ -1,0 +1,50 @@
+{
+  "comment": "A folder packed by cli/src/zip.mjs and by the browser port app/src/zip.ts must be these bytes exactly (SPEC §2).",
+  "vectors": [
+    {
+      "name": "a page and its files",
+      "entries": [
+        {
+          "name": "index.html",
+          "utf8": "<!doctype html><link rel=stylesheet href=style.css>"
+        },
+        {
+          "name": "style.css",
+          "utf8": "body{}"
+        },
+        {
+          "name": "img/chart.png",
+          "utf8": "PNG"
+        }
+      ],
+      "bytes": 376,
+      "sha256": "633d09903af099ffcfff9588f4ad54345c96a852aaff7b8747d15f80a768df74"
+    },
+    {
+      "name": "a name with a space and one outside ASCII",
+      "entries": [
+        {
+          "name": "Screen Shot.png",
+          "utf8": "x"
+        },
+        {
+          "name": "résumé/été.md",
+          "utf8": "# Été"
+        }
+      ],
+      "bytes": 246,
+      "sha256": "1890de2ab887dfa1b0bfaa49c87073f337a663b7857596a74d80eb004e96c6b3"
+    },
+    {
+      "name": "an empty file",
+      "entries": [
+        {
+          "name": "empty.txt",
+          "utf8": ""
+        }
+      ],
+      "bytes": 116,
+      "sha256": "1a56a4e2848d5dc67799c4e277b10fd2cf1d26f6811ea8fbf380b24d31f5a64c"
+    }
+  ]
+}

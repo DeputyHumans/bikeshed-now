@@ -317,6 +317,7 @@ test("POST /publish?merge=1 lays dropped files over the current version", async 
   assert.deepEqual(r.body.changes, { changed: 1, unchanged: Object.keys(FILES).length - 1, removed: 0 });
   assert.equal(w.bytesOf("v2", "img/chart.png"), "png-two");
   assert.equal(w.bytesOf("v2", "index.html"), PAGE);
+  assert.deepEqual(r.body.placed, [{ sent: "chart.png", at: "img/chart.png" }], "the answer says where each file went");
 
   const shared = world({ files: { ...FILES, "a/chart.png": "other" } });
   const refused = await shared.upload(OWNER, { update: "d", merge: "1" }, zipOf({ "chart.png": "png-two" }));
@@ -342,4 +343,16 @@ test("dotfiles, node_modules and other junk are left out of a zip; an unsafe pat
   assert.match(extractBundle(raw(".git/../../escape.html"), "x.zip", 1e7).error, /unsafe path/, "unsafe is refused before anything is left out");
   assert.match(extractBundle(raw(`${"a".repeat(300)}.html`), "x.zip", 1e7).error, /longer than 256 bytes/);
   assert.deepEqual(extractLoose(zipOf({ "img/a.png": "1", ".DS_Store": "x" }), 1e7).files.map((f) => f.rel), ["img/a.png"]);
+});
+
+test("the server leaves out and opens what the shared table says", () => {
+  const { isLeftOut, resolveEntry, stripCommonPrefix } = require("../lib/lib/bundle.js");
+  const rules = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "bundle-rules.json"), "utf8"));
+  for (const rel of rules.leftOut.kept) assert.equal(isLeftOut(rel), false, rel);
+  for (const rel of rules.leftOut.out) assert.equal(isLeftOut(rel), true, rel);
+  for (const c of rules.entries) {
+    const stripped = stripCommonPrefix(c.files.map((rel) => ({ rel })));
+    if (c.stripped) assert.deepEqual(stripped.map((f) => f.rel), c.stripped, c.files.join(","));
+    assert.equal(resolveEntry(stripped)?.entry ?? null, c.entry, c.files.join(","));
+  }
 });
