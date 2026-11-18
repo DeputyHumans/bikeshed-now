@@ -1016,8 +1016,20 @@ scenario("A12.5 /publish?update=: an editor 200, an open editor 403, id/folderId
   const editor = await sessionFor(ctx, editorAcct);
   const suggester = await sessionFor(ctx, suggesterAcct);
   const stranger = await sessionFor(ctx, strangerAcct);
+  // A version stores each file once under docs/{id}/blobs/ (SPEC §4), and a
+  // refusal is decided before anything is stored, so a stored file that no
+  // version names was stored by a refused update.
+  const strayStoredFiles = async () => {
+    const named = new Set();
+    for (const { id, data } of await readCollection(target, `docs/${docId}/versions`)) for (const o of await versionObjects(target, docId, id, data)) named.add(o.key);
+    return (await listObjects(target, `docs/${docId}/blobs/`)).filter((key) => !named.has(key));
+  };
   const nothingAt = async (label, v, versions) => {
-    assert.deepEqual({ versions: await versionIds(docId), objects: await objectsUnder(docId, `${v}/`) }, { versions, objects: [] }, `${label}: nothing minted and nothing uploaded under ${v}/`);
+    assert.deepEqual(
+      { versions: await versionIds(docId), objects: await objectsUnder(docId, `${v}/`), stray: await strayStoredFiles() },
+      { versions, objects: [], stray: [] },
+      `${label}: nothing minted and nothing uploaded under ${v}/, and no stored file that no version names`,
+    );
   };
 
   ctx.step("E: the editor's /publish?update= is 200 with exactly the SPEC §2 keys, and v2 holds the bytes sent");
