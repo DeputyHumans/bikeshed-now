@@ -97,6 +97,9 @@ test("document links are absolute and version-aware", () => {
   try {
     assert.equal(documentUrl("memo"), "https://example.test/d/memo");
     assert.equal(documentUrl("memo", "v3"), "https://example.test/d/memo/v3");
+    // A notice opens the document on its thread, on the version the thread is on (SPEC §6e, §14).
+    assert.equal(documentUrl("memo", "v3", "t-1"), "https://example.test/d/memo/v3#comment=t-1");
+    assert.equal(documentUrl("memo", undefined, "t-1"), "https://example.test/d/memo", "a thread is never linked without its version");
   } finally {
     if (previous === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
     else process.env.BIKESHED_PUBLIC_ORIGIN = previous;

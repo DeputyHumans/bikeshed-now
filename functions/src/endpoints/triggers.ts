@@ -131,6 +131,8 @@ export const onCommentCreated = onDocumentCreated(
         via,
         docId,
         versionId,
+        // "Reply in context" opens the document on this thread (SPEC §14).
+        threadId: annId,
         ...(suggestion
           ? { suggestion: { replacement: String(suggestion.replacement ?? "").slice(0, 300) } }
           : {}),

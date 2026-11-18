@@ -111,6 +111,21 @@ test("a suggester's agent proposes an edit, anchored where the browser will find
   assert.equal(a.resolved, false);
 });
 
+test("a suggestion says where a person opens the document on its thread", async () => {
+  const previous = process.env.BIKESHED_PUBLIC_ORIGIN;
+  process.env.BIKESHED_PUBLIC_ORIGIN = "https://example.test";
+  try {
+    const w = world();
+    const result = await withBucket(() =>
+      tool("suggest_edit").run(w.ctx(SUGGESTER), { id: "d1", exact: "a single weekend", prefix: "cut over in ", replacement: "two weekends" }),
+    );
+    assert.equal(result.threadUrl, `https://example.test/d/d1/v1#comment=${result.threadId}`);
+  } finally {
+    if (previous === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
+    else process.env.BIKESHED_PUBLIC_ORIGIN = previous;
+  }
+});
+
 test("a passage that repeats needs words around it, and the refusal says so", async () => {
   const w = world();
   await assert.rejects(

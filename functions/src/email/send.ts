@@ -128,8 +128,13 @@ export async function sendEmail(message: Message): Promise<SendResult> {
   }
 }
 
-/** Absolute link to a document, for use in an email body. */
-export function documentUrl(docId: string, versionId?: string): string {
+/**
+ * Absolute link to a document, for use in an email body. With a thread, the
+ * link opens the document on it (SPEC §6e): a thread belongs to its version,
+ * which the link then always names.
+ */
+export function documentUrl(docId: string, versionId?: string, threadId?: string): string {
   const base = publicOrigin();
-  return versionId ? `${base}/d/${docId}/${versionId}` : `${base}/d/${docId}`;
+  const page = versionId ? `${base}/d/${docId}/${versionId}` : `${base}/d/${docId}`;
+  return versionId && threadId ? `${page}#comment=${encodeURIComponent(threadId)}` : page;
 }

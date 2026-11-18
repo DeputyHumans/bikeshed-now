@@ -54,6 +54,8 @@ import {
   changeThread,
   refuseIfFrozen,
   withReaderAddress,
+  threadAddress,
+  withThreadAddress,
 } from "./shared";
 import type { ToolDefinition } from "./shared";
 
@@ -64,7 +66,8 @@ export const FEEDBACK_TOOLS: ToolDefinition[] = [
       "Unresolved feedback on a document, oldest thread first, each with the exact passage it is anchored to. " +
       `At most ${COMMENT_LIMIT} threads, and \`truncated\` says when there were more. ` +
       "`awaitingReply` marks an open thread whose latest comment a person wrote in the app; `threads` fetches only the ids you name. " +
-      "Threads belong to the version they were opened on; name an earlier version to read its threads.",
+      "Threads belong to the version they were opened on; name an earlier version to read its threads. " +
+      "Each thread's `url` opens the document on that thread; give it to a person when you tell them about one.",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -136,8 +139,10 @@ export const FEEDBACK_TOOLS: ToolDefinition[] = [
           // `suggestion` field does not; a note its author wrote, and every
           // decision, are kept.
           .filter((c) => !(c.data().opensSuggestion === true && c.data().generated === true));
+        const url = threadAddress(ref.id, versionId, a.id, str(args, "k") || undefined);
         threads.push({
           threadId: a.id,
+          ...(url ? { url } : {}),
           quote: String(ann.anchor?.exact ?? ""),
           section: String(ann.anchor?.elementId ?? ""),
           resolved: ann.resolved === true,
@@ -307,6 +312,7 @@ export const FEEDBACK_TOOLS: ToolDefinition[] = [
       "If it occurs more than once, add a few words before it (prefix) or after it (suffix). " +
       "A thread belongs to the version it was opened on: once a new version is published, get_comments lists it only when asked for that version. " +
       "Once its point is dealt with, resolve_thread closes it. " +
+      "`threadUrl` in the result opens the document on the new thread. " +
       "To answer a thread that already exists, use reply_to_comment.",
     inputSchema: {
       type: "object",
@@ -385,7 +391,13 @@ export const FEEDBACK_TOOLS: ToolDefinition[] = [
       // the default five attempts for a burst of reviewers (SPEC §17).
       }, { maxAttempts: 10 });
       await clearReceipt(ref, receipt);
-      return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
+      return withThreadAddress(
+        withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id),
+        ref.id,
+        versionId,
+        annRef.id,
+        str(args, "k") || undefined,
+      );
     },
   },
 
@@ -440,7 +452,7 @@ export const FEEDBACK_TOOLS: ToolDefinition[] = [
         createdAt: FieldValue.serverTimestamp(),
       });
       });
-      return { commentId: commentRef.id, threadId, documentId: ref.id };
+      return withThreadAddress({ commentId: commentRef.id, threadId, documentId: ref.id }, ref.id, versionId, threadId, str(args, "k") || undefined);
     },
   },
 

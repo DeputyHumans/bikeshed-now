@@ -424,6 +424,26 @@ export function withReaderAddress<T extends object>(result: T, docId: string, ve
 }
 
 /**
+ * Where a person opens one comment thread: the document on the version the
+ * thread belongs to, at the thread (SPEC §6e). The version is always named,
+ * because a thread stays on the version it was opened on, so the link keeps
+ * working after the next one is published. The key is added only when the
+ * caller reached the document by it. Undefined, like `withReaderAddress`'s
+ * `url`, when the deployment has no configured origin.
+ */
+export function threadAddress(docId: string, version: string, threadId: string, k?: string): string | undefined {
+  const origin = publicOrigin();
+  if (!origin || !version || !threadId) return undefined;
+  return `${origin}/d/${docId}/${encodeURIComponent(version)}${k ? `?k=${encodeURIComponent(k)}` : ""}#comment=${encodeURIComponent(threadId)}`;
+}
+
+/** A result, plus `threadUrl` when the thread's address can be given. */
+export function withThreadAddress<T extends object>(result: T, docId: string, version: string, threadId: string, k?: string): T & { threadUrl?: string } {
+  const threadUrl = threadAddress(docId, version, threadId, k);
+  return threadUrl ? { ...result, threadUrl } : result;
+}
+
+/**
  * The lineage answer, in the vocabulary the other tools use: `id` and
  * `version`, an ISO date, and the address a person opens for every document an
  * agent might hand back. Nothing is added that the endpoint did not decide the

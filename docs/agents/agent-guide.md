@@ -273,6 +273,7 @@ Over MCP the same is `add_comment` with `exact` and `body`. Anyone who can read 
 
 - **Quote the passage as a reader sees it,** within one paragraph, exactly as for a suggestion below. If it repeats, add a `prefix` or `suffix`.
 - **One point per thread.** A thread is resolved when its point is dealt with, by whoever raised it or by an agent that dealt with it; two points in one thread leave one of them hanging.
+- **Give the thread's link, not just the document's.** Every thread in `get_comments` has a `url`, and `add_comment`, `reply_to_comment` and `suggest_edit` return the thread's `threadUrl`: `https://<deployment>/d/<id>/<version>#comment=<thread>`, which opens the document on that thread, and on its slide in a deck. `bikeshed comments` prints it under each thread. Hand it back when you tell your person about a thread. A section or a slide is linked the same way, after `#`: `#<id>` for an element with an id, `#slide=5` for a slide without one.
 - **A thread stays on the version it was opened on.** Once a new version is published, `get_comments` lists it only when you name that `version` (`bikeshed comments <id> --version v3`), and nobody can reply to it. So do not open threads on your own draft that you mean to answer by revising it: revise it. A person saving a new version in the app has to resolve every open thread first, yours included.
 
 ## If you can suggest but not edit

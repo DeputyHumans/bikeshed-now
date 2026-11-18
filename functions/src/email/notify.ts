@@ -185,12 +185,14 @@ export async function sendCommentNotice(
   props: Omit<CommentNoticeProps, "origin" | "url"> & {
     docId: string;
     versionId: string;
+    /** The thread the comment is in, which the notice's link opens. */
+    threadId?: string;
   },
 ): Promise<void> {
   const origin = publicOrigin();
   const full: CommentNoticeProps = {
     origin,
-    url: documentUrl(props.docId, props.versionId),
+    url: documentUrl(props.docId, props.versionId, props.threadId),
     authorEmail: props.authorEmail,
     docTitle: props.docTitle,
     quote: props.quote,
