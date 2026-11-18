@@ -12,9 +12,9 @@ import {
   composeReading,
   contentAddress,
   readerAddress,
-  readingMarkdown,
   readingPreamble,
 } from "../lib/markdown/reading";
+import { storedReading } from "../lib/markdown/stored";
 import { HEAD_SCAN_BYTES, readHead } from "../lib/head";
 import {
   collectPrefix,
@@ -410,12 +410,22 @@ export const docMarkdown = onRequest({ ...PLAIN, ...READS_PAGES }, async (req, r
     // A Markdown document's original is its Markdown; the reading is made
     // from the HTML either way, so its addresses are absolute.
     const sourceRel = typeof v.sourceEntry === "string" && safeRelPath(v.sourceEntry) ? v.sourceEntry : entry;
-    const [bytes] = await bucket().file(`${versionStoragePrefix(docId, versionId, v)}/${entry}`).download();
+    const storagePrefix = versionStoragePrefix(docId, versionId, v);
 
     const keyed = gate.basis === "link" || gate.basis === "folder-link" ? k : null;
     const origin = publicOrigin();
     const place = { origin, docId, versionId, entry, k: keyed };
-    const reading = readingMarkdown(bytes.toString("utf8"), place);
+    // Made once for this version's bytes and kept (ADR 0033).
+    const reading = await storedReading({
+      store: bucket(),
+      place,
+      version: v,
+      storagePrefix,
+      source: async () => {
+        const [bytes] = await bucket().file(`${storagePrefix}/${entry}`).download();
+        return bytes.toString("utf8");
+      },
+    });
     const documentUrl = readerAddress(origin, docId, pinned, keyed);
     const original = contentAddress(place, sourceRel);
     const text = composeReading(

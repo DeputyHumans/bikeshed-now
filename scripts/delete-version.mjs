@@ -244,6 +244,13 @@ async function main() {
   const thumbFiles = thumbObjects.filter((o) => !o.name.endsWith("/"));
   const clearsThumb = meta.thumb?.versionId === doomed;
 
+  // So do the Markdown readings kept for it (ADR 0033). Each is named by the
+  // version's bytes, so a re-minted name would never read one; they go now
+  // rather than wait for the document's purge.
+  const readingsPrefix = `docs/${docId}/readings/${doomed}/`;
+  const [readingObjects] = await bucket.getFiles({ prefix: readingsPrefix });
+  const readingFiles = readingObjects.filter((o) => !o.name.endsWith("/"));
+
   const viewsQuery = docRef.collection("views").where("versionId", "==", doomed);
   const viewCount = values["keep-views"] ? 0 : await countOf(viewsQuery);
 
@@ -262,6 +269,9 @@ async function main() {
   for (const o of files) console.log(`      - gs://${bucketName}/${o.name}`);
   console.log(
     `  delete Storage: gs://${bucketName}/${thumbsPrefix} (${thumbFiles.length} thumbnail(s))`,
+  );
+  console.log(
+    `  delete Storage: gs://${bucketName}/${readingsPrefix} (${readingFiles.length} kept reading(s))`,
   );
   if (clearsThumb) console.log(`  clear thumb: it names ${doomed}`);
   console.log(
@@ -300,6 +310,9 @@ async function main() {
   console.log("    done.");
   console.log(`  deleting gs://${bucketName}/${thumbsPrefix} ...`);
   await bucket.deleteFiles({ prefix: thumbsPrefix, force: true });
+  console.log("    done.");
+  console.log(`  deleting gs://${bucketName}/${readingsPrefix} ...`);
+  await bucket.deleteFiles({ prefix: readingsPrefix, force: true });
   console.log("    done.");
 
   console.log(`  deleting docs/${docId}/versions/${doomed} (recursive) ...`);

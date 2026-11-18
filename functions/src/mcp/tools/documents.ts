@@ -26,9 +26,9 @@ import {
   composeReading,
   contentAddress,
   readerAddress,
-  readingMarkdown,
   readingPreamble,
 } from "../../lib/markdown/reading";
+import { storedReading } from "../../lib/markdown/stored";
 import { commitDraft } from "../../lib/draft";
 import { editorsRefusal } from "../../lib/presence";
 import { MAX_BUNDLE_BYTES } from "../../config";
@@ -256,24 +256,28 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
       const sourceRel =
         typeof v.sourceEntry === "string" ? v.sourceEntry : String(v.entry ?? "index.html");
       if (!safeRelPath(sourceRel)) throw new Error("invalid source path");
-      const key = `${versionStoragePrefix(ref.id, versionId, v)}/${sourceRel}`;
-      let source = "";
-      try {
-        const [bytes] = await admin.storage().bucket(bucketName()).file(key).download();
-        source = bytes.toString("utf8");
-      } catch {
-        throw new Error(`could not read source for version "${versionId}"`);
-      }
+      const storagePrefix = versionStoragePrefix(ref.id, versionId, v);
+      const bucket = admin.storage().bucket(bucketName());
+      const loadSource = async () => {
+        try {
+          const [bytes] = await bucket.file(`${storagePrefix}/${sourceRel}`).download();
+          return bytes.toString("utf8");
+        } catch {
+          throw new Error(`could not read source for version "${versionId}"`);
+        }
+      };
 
       // The version's own addresses carry the key only when a key is what
       // opened the document: a member's reading must not hand one out.
       const keyed = basis === "link" || basis === "folder-link" ? str(args, "k") || null : null;
-      let body = source;
+      let body: string;
       let original: Record<string, unknown> | null = null;
       if (as === "markdown") {
         const origin = publicOrigin();
         const place = { origin, docId: ref.id, versionId, entry: sourceRel, k: keyed };
-        const reading = readingMarkdown(source, place);
+        // Made once for this version's bytes and kept, so a later page is a
+        // read and a slice, not the whole page converted again (ADR 0033).
+        const reading = await storedReading({ store: bucket, place, version: v, storagePrefix, source: loadSource });
         const files = Array.isArray(v.files) ? v.files.length : 1;
         const url = contentAddress(place, sourceRel);
         body = composeReading(
@@ -295,6 +299,8 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
             ? { download: `${origin}/download/${ref.id}/${versionId}${keyed ? `?k=${encodeURIComponent(keyed)}` : ""}` }
             : {}),
         };
+      } else {
+        body = await loadSource();
       }
       const total = body.length;
       if (offset > 0 && offset >= total) {

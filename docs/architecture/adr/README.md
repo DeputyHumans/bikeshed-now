@@ -39,6 +39,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0030](0030-agents-read-a-markdown-reading.md) | Agents read an HTML document as a Markdown reading made on read | Accepted |
 | [0031](0031-a-document-can-be-embedded-in-another-site.md) | A document can be embedded in another site | Accepted |
 | [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) | A reading separates text that touches, and a quote may carry the space | Accepted |
+| [0033](0033-a-reading-is-kept-once-made.md) | A version's reading is kept once made, named by its bytes | Accepted |
 
 ## Format
 

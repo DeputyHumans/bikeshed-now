@@ -1336,6 +1336,7 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     "discard the draft (base=v2) and its objects",
     `/${(await versionRecord(docId, "v2")).storagePrefix ?? `docs/${docId}/v2`}/ (1 object(s), ${Buffer.byteLength(r2)} bytes)`,
     `/docs/${docId}/thumbs/v2/ (1 thumbnail(s))`,
+    `/docs/${docId}/readings/v2/ (`,
     "clear thumb: it names v2",
     `delete Firestore: docs/${docId}/versions/v2 (+1 annotation(s), 1 comment(s))`,
     "stats.commits: 2 -> 1, and last edited becomes v1's publish",

@@ -10,9 +10,11 @@ import TurndownService from "turndown";
  * page as authored: stylesheets, scripts, inline SVG and base64 images, which
  * fill an agent's context and say nothing to it. So `get_document`, `bikeshed
  * get` and `/d/<id>.md` hand an agent this reading instead, made from the
- * stored entry each time it is asked for. It is a VIEW, like the crawler text
- * a document's shell carries (ADR 0028): never stored, never hashed, so
- * changing these rules mints no version of anything.
+ * stored entry. It is a VIEW, like the crawler text a document's shell
+ * carries (ADR 0028): never hashed, so changing these rules mints no version
+ * of anything. `stored.ts` keeps each version's reading once made, named by
+ * a fingerprint of this file among the rest, so a change here is never
+ * served an old one (ADR 0033).
  *
  * Two rules the rest of this file serves
  * --------------------------------------
