@@ -171,6 +171,39 @@ export async function readDraftObject(target, docId, rel) {
   return readObject(target, `${draftStoragePrefix(docId, data.draft)}/${rel}`);
 }
 
+/**
+ * The object holding `rel` in a version (SPEC §4): the document's stored file
+ * for a version that lists its files, or `rel` under its own prefix for one
+ * from before that. Null when a stored version does not list `rel`.
+ */
+export function versionObjectKey(docId, versionId, record, rel) {
+  if (record?.layout === "blobs") {
+    const i = Array.isArray(record.files) ? record.files.indexOf(rel) : -1;
+    return i < 0 ? null : `docs/${docId}/blobs/${record.hashes[i]}`;
+  }
+  return `${record?.storagePrefix ?? `docs/${docId}/${versionId}`}/${rel}`;
+}
+
+/**
+ * Every object a version names, `{rel, key}`, sorted by rel: its stored files
+ * from its record, or a listing of its own prefix. Two versions that share a
+ * file name the same key.
+ */
+export async function versionObjects(target, docId, versionId, record) {
+  if (record?.layout === "blobs") {
+    return record.files.map((rel, i) => ({ rel, key: `docs/${docId}/blobs/${record.hashes[i]}` }))
+      .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  }
+  const prefix = `${record?.storagePrefix ?? `docs/${docId}/${versionId}`}/`;
+  return (await listObjects(target, prefix)).map((key) => ({ rel: key.slice(prefix.length), key }));
+}
+
+/** A version's bytes at `rel`, in either layout, or null. */
+export async function readVersionObject(target, docId, versionId, record, rel) {
+  const key = versionObjectKey(docId, versionId, record, rel);
+  return key ? readObject(target, key) : null;
+}
+
 /** A Storage object's bytes, or null when it does not exist. */
 export async function readObject(target, objectKey) {
   const file = adminFor(target).bucket.file(objectKey);

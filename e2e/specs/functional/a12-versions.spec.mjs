@@ -96,7 +96,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { docIdFor, publish, publishOperator, updateUpload } from "../../lib/seed.mjs";
 import { recordFinding, setVisibility, share } from "../../lib/grant.mjs";
-import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet, trustAsOperator } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readCollection, readDoc, readVersionObject, rtdbGet, trustAsOperator, versionObjects } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { frameText } from "../../lib/frame.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
@@ -294,7 +294,7 @@ async function publishWithLostAck(ctx, mode) {
     const d = await docRecord(docId), v = await versionRecord(docId, want);
     precondition(d.currentVersion === want && !d.draft && d.liveEpoch !== (before.liveEpoch ?? "initial"), "the published head and retirement exist before ACK loss");
     precondition(v && (await versionObject(docId, want, "index.html")).toString() === html, "published bytes exist before ACK loss");
-    return { storagePrefix: v.storagePrefix ?? `docs/${docId}/${want}`, liveEpoch: d.liveEpoch };
+    return { identity: versionIdentity(docId, want, v), liveEpoch: d.liveEpoch };
   });
   assert.equal(response.status, 200, `ACK ${operation}: its own durable commit is acknowledged with 200`);
   assert.equal(response.json?.versionId, want, `ACK ${operation}: response names the committed version`);
@@ -303,7 +303,7 @@ async function publishWithLostAck(ctx, mode) {
   assert.equal(after.currentVersion, want, `ACK ${operation}: current head remains its committed version`);
   assert.equal(after.liveEpoch, committed.liveEpoch, `ACK ${operation}: retry does not retire the session twice`);
   assert.equal(after.draft, undefined, `ACK ${operation}: successful publication retires the draft`);
-  assert.equal(version.storagePrefix ?? `docs/${docId}/${want}`, committed.storagePrefix, `ACK ${operation}: immutable pointer remains committed`);
+  assert.equal(versionIdentity(docId, want, version), committed.identity, `ACK ${operation}: the committed version is the same attempt, not a later one`);
   assert.deepEqual(await versionIds(docId), mode === "dedup" ? ["v1"] : ["v1", "v2"], `ACK ${operation}: retry mints no extra version`);
   const served = await owner.http.get(`/content/${docId}/${want}/index.html`, { timeoutMs: HTTP_MS });
   assert.equal(served.status, 200, `ACK ${operation}: committed bytes remain readable`);
@@ -448,12 +448,21 @@ async function versionIds(docId) {
   return rows.map((r) => r.id).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
 }
 
+/**
+ * What makes a version this attempt's and no other's: its own prefix, or,
+ * for a version that lists its files (SPEC §4), the attempt id it records.
+ */
+function versionIdentity(docId, versionId, record) {
+  return record?.layout === "blobs" ? `attempt:${record.attempt}` : (record?.storagePrefix ?? `docs/${docId}/${versionId}`);
+}
+
 /** Remember concrete paths before withdrawal; a missing record must not erase its byte evidence. */
 const observedPrefixes = new Map();
+const observedObjects = new Map();
 async function versionObject(docId, versionId, rel) {
   const version = await versionRecord(docId, versionId);
   precondition(version, `version record ${docId}/${versionId} exists before reading its bytes`);
-  return readObject(target, `${version.storagePrefix ?? `docs/${docId}/${versionId}`}/${rel}`);
+  return readVersionObject(target, docId, versionId, version, rel);
 }
 
 /** Unselected immutable allocations are uploads too, even without a version record. */
@@ -462,7 +471,8 @@ async function unreferencedBundles(docId) {
     readCollection(target, `docs/${docId}/versions`), docRecord(docId),
     listObjects(target, `docs/${docId}/bundles/`),
   ]);
-  const selected = versions.map(({ id, data }) => `${data.storagePrefix ?? `docs/${docId}/${id}`}/`);
+  // A version that lists its files owns no prefix; only older versions and the draft select one.
+  const selected = versions.filter(({ data }) => data.layout !== "blobs").map(({ id, data }) => `${data.storagePrefix ?? `docs/${docId}/${id}`}/`);
   if (document?.draft) selected.push(`${draftStoragePrefix(docId, document.draft)}/`);
   return objects.filter((name) => !selected.some((prefix) => name.startsWith(prefix)));
 }
@@ -472,6 +482,16 @@ async function objectsUnder(docId, rel) {
   if (!/^(v[1-9]\d*|draft)\/$/.test(rel)) return listObjects(target, `docs/${docId}/${rel}`);
   const key = `${docId}/${rel}`;
   const metadata = rel === "draft/" ? (await docRecord(docId))?.draft : await versionRecord(docId, rel.slice(0, -1));
+  // A version that lists its files names stored files the document shares
+  // between versions; what is left of it is whichever of them still exist.
+  if (metadata && rel !== "draft/" && metadata.layout === "blobs") {
+    observedObjects.set(key, (await versionObjects(target, docId, rel.slice(0, -1), metadata)).map((o) => o.key));
+  }
+  if (observedObjects.has(key)) {
+    const present = [];
+    for (const name of new Set(observedObjects.get(key))) if ((await listObjects(target, name)).includes(name)) present.push(name);
+    return present.sort();
+  }
   if (metadata) observedPrefixes.set(key, rel === "draft/" ? draftStoragePrefix(docId, metadata) : metadata.storagePrefix ?? `docs/${docId}/${rel.slice(0, -1)}`);
   const prefix = observedPrefixes.get(key) ?? `docs/${docId}/${rel.slice(0, -1)}`;
   const objects = await listObjects(target, `${prefix}/`);
@@ -1187,7 +1207,7 @@ scenario("A12.6 (racing a commit) a POST /draft on the base a concurrent commit 
     if (commitRefused) {
       assertDraftRaceRefusal({ commit: c, late, beforeVersion, beforeBytes, record: rec,
         versions: (await readCollection(target, `docs/${docId}/versions`)).map(({ id, data }) => ({ id, data: plain(data) })),
-        versionBytes: await readObject(target, `${beforeVersion.storagePrefix}/index.html`),
+        versionBytes: await readVersionObject(target, docId, beforeVersion.versionId ?? "v1", beforeVersion, "index.html"),
         draftBytes: rec.draft ? await readDraftObject(target, docId, "index.html") : null, served, lateHtml });
       ctx.ev.json(`refused-commit-${attempt}`, { commit: c.json, lateDraft: late.json.draft, beforeVersion,
         currentVersion: rec.currentVersion, draft: plain(rec.draft), liveEpoch: rec.liveEpoch,
@@ -1334,7 +1354,8 @@ scenario("A12.7 delete-version.mjs: each refusal and the dry run write nothing; 
     `plan for ${docId}:`,
     "repoint currentVersion: v2 -> v1",
     "discard the draft (base=v2) and its objects",
-    `/${(await versionRecord(docId, "v2")).storagePrefix ?? `docs/${docId}/v2`}/ (1 object(s), ${Buffer.byteLength(r2)} bytes)`,
+    // v2 changed only its page, so that one stored file is all that goes.
+    `delete Storage: 1 stored file(s) only v2 names (${Buffer.byteLength(r2)} bytes)`,
     `/docs/${docId}/thumbs/v2/ (1 thumbnail(s))`,
     `/docs/${docId}/readings/v2/ (`,
     "clear thumb: it names v2",

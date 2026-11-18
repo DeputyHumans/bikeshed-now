@@ -169,7 +169,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
-import { closeAdmin, emailKey, readDoc, readObject } from "../../lib/admin.mjs";
+import { closeAdmin, emailKey, readDoc, readVersionObject } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { measure } from "../../lib/evidence.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
@@ -688,8 +688,7 @@ async function readDraft(owner, docId) {
 /** A version's stored entry, through the Admin SDK (no read is recorded). */
 async function versionHtml(t, docId, versionId) {
   const rec = await readDoc(t, `docs/${docId}/versions/${versionId}`);
-  const prefix = rec?.storagePrefix ?? `docs/${docId}/${versionId}`;
-  const buf = await readObject(t, `${prefix}/${rec?.entry ?? "index.html"}`);
+  const buf = rec ? await readVersionObject(t, docId, versionId, rec, rec.entry ?? "index.html") : null;
   return buf ? buf.toString("utf8") : null;
 }
 

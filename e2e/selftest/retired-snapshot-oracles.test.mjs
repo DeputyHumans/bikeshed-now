@@ -20,7 +20,14 @@ function c12Fixture() {
   const listObjects = async (_target, prefix, options) => [...objects].filter((name) => name.startsWith(prefix)).map((name) => options?.meta ? { name, generation: '1' } : name);
   const helperSource = between(c12, 'const retiredDraftPrefixes =', '/** What an update leaves behind:');
   const footprintSource = between(c12, 'async function footprint(', '/**\n * Every POST /draft');
-  const api = new Function('listObjects', 'draftStoragePrefix', 'readDoc', 'readVersions', 'target', 'millis', `${helperSource}\n${footprintSource}\nreturn { rememberDraft, draftObjects, footprint };`)(listObjects, draftStoragePrefix, async (_target, key) => metadata.get(key) ?? null, async () => versions, {}, (value) => value ?? null);
+  // lib/admin.mjs's layout-aware helpers, over this fixture's objects.
+  const versionObjects = async (t, docId, versionId, record) => {
+    if (record?.layout === 'blobs') return record.files.map((rel, i) => ({ rel, key: `docs/${docId}/blobs/${record.hashes[i]}` }));
+    const prefix = `${record?.storagePrefix ?? `docs/${docId}/${versionId}`}/`;
+    return (await listObjects(t, prefix)).map((key) => ({ rel: key.slice(prefix.length), key }));
+  };
+  const readVersionObject = async () => { throw new Error('the footprint reads no bytes'); };
+  const api = new Function('listObjects', 'draftStoragePrefix', 'readDoc', 'readVersions', 'readVersionObject', 'versionObjects', 'target', 'millis', `${helperSource}\n${footprintSource}\nreturn { rememberDraft, draftObjects, footprint };`)(listObjects, draftStoragePrefix, async (_target, key) => metadata.get(key) ?? null, async () => versions, readVersionObject, versionObjects, {}, (value) => value ?? null);
   return { objects, metadata, versions, ...api };
 }
 

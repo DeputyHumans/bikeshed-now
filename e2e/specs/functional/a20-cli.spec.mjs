@@ -59,7 +59,7 @@ import { cliEntry, cliHome, runCli, spawnCli } from "../../lib/cli.mjs";
 import { patchCapability } from "../../lib/options.mjs";
 import { agentName, createHttp } from "../../lib/http.mjs";
 import { approveViaApi } from "../../lib/oauth.mjs";
-import { closeAdmin, listObjects, readCollection, readDoc, readObject } from "../../lib/admin.mjs";
+import { closeAdmin, readCollection, readDoc, readObject, versionObjects } from "../../lib/admin.mjs";
 import { closeWindows, setVisibility } from "../../lib/grant.mjs";
 import { tinyPng } from "../../lib/thumbs.mjs";
 import { egressMark, readEgress } from "../../lib/egress.mjs";
@@ -421,14 +421,13 @@ function put(who, name, content) {
 }
 
 /**
- * The stored files of a version, read from Storage under its record's
- * storagePrefix (the bytes themselves, not a function's rendering of them).
+ * The stored files of a version, read from Storage as its record names them
+ * (the bytes themselves, not a function's rendering of them).
  */
 async function storedFiles(docId, versionId) {
   const rec = await readDoc(target, `docs/${docId}/versions/${versionId}`);
-  const prefix = `${rec?.storagePrefix ?? `docs/${docId}/${versionId}`}/`;
-  const keys = await listObjects(target, prefix);
-  const files = await Promise.all(keys.map(async (key) => [key.slice(prefix.length), await readObject(target, key)]));
+  const named = await versionObjects(target, docId, versionId, rec);
+  const files = await Promise.all(named.map(async ({ rel, key }) => [rel, await readObject(target, key)]));
   return Object.fromEntries(files);
 }
 

@@ -208,7 +208,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture } from "../../lib/seed.mjs";
-import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readVersionObject, rtdbGet } from "../../lib/admin.mjs";
 import { eventually, settleStill } from "../../lib/assert.mjs";
 import { tokenLog } from "../../lib/tokens.mjs";
 import { idSelector } from "../../lib/frame.mjs";
@@ -324,7 +324,11 @@ async function serverSnapshot(docId) {
   const draft = d?.draft
     ? { baseVersion: d.draft.baseVersion ?? null, bytes: d.draft.bytes ?? null, updatedByEmail: d.draft.updatedByEmail ?? null, updatedAt: d.draft.updatedAt?.toMillis?.() ?? null }
     : null;
-  const selected = versions.map((v) => `${v.storagePrefix ?? `docs/${docId}/${v.id}`}/`);
+  // Only an older version and the draft select a prefix under bundles/; a
+  // version that lists its files names stored files under blobs/ instead,
+  // which are never deleted for a refused attempt (ADR 0035), so they are not
+  // what this inventory is about.
+  const selected = versions.filter((v) => v.layout !== "blobs").map((v) => `${v.storagePrefix ?? `docs/${docId}/${v.id}`}/`);
   if (d?.draft) selected.push(`${draftStoragePrefix(docId, d.draft)}/`);
   const orphanedObjects = objects.filter((name) => name.startsWith(`docs/${docId}/bundles/`) && !selected.some((prefix) => name.startsWith(prefix)));
   return {
@@ -382,8 +386,7 @@ async function judgeOneVersion(ctx, docId, { via = null } = {}) {
 async function readI7(ctx, http, docId, versionId, winnerBytes, { winner = "the winner", known = {} } = {}) {
   const rec = await readDoc(target, `docs/${docId}/versions/${versionId}`);
   assert.ok(rec, `I7: docs/${docId}/versions/${versionId} exists`);
-  const prefix = rec.storagePrefix ?? `docs/${docId}/${versionId}`;
-  const stored = await readObject(target, `${prefix}/${rec.entry}`);
+  const stored = await readVersionObject(target, docId, versionId, rec, rec.entry);
   const re = await rehashVersion({ target, http, docId, versionId });
   const storedSha = stored ? sha(stored) : "absent";
   const candidates = [[winner, winnerBytes], ...Object.entries(known)];

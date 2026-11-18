@@ -71,7 +71,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, docIdFor, ledgerDoc, ledgerFolder, publish, readSample, updateUpload, zipBundle } from "../../lib/seed.mjs";
 import { share, shareFolder } from "../../lib/grant.mjs";
-import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject, rtdbGet, trustAsOperator, writeUser } from "../../lib/admin.mjs";
+import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject, readVersionObject, rtdbGet, trustAsOperator, writeUser } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
@@ -1351,7 +1351,7 @@ async function chooseVersionFile(dlg, f) {
 async function publishedEntry(docId, versionId) {
   const version = await readDoc(target, `docs/${docId}/versions/${versionId}`);
   precondition(version?.entry, `the ${versionId} record names its entry`);
-  return readObject(target, `${version.storagePrefix ?? `docs/${docId}/${versionId}`}/${version.entry}`);
+  return readVersionObject(target, docId, versionId, version, version.entry);
 }
 
 async function submitVersion(u, dlg) {

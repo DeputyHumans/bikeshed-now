@@ -2,7 +2,7 @@
 // Capture and compare the exact saved publication state when review refuses a commit (SPEC §6a, §19, §22).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { draftStoragePrefix, listObjects, readCollection, readDoc, readObject } from "./admin.mjs";
+import { draftStoragePrefix, listObjects, readCollection, readDoc, readObject, versionObjects } from "./admin.mjs";
 
 const plain = value => JSON.parse(JSON.stringify(value));
 
@@ -26,12 +26,22 @@ async function inventory(target, prefix) {
   }));
 }
 
+/** The stored files a version lists (SPEC §4), read directly, as `inventory` reads a prefix. */
+async function listedInventory(target, docId, id, data) {
+  return Promise.all((await versionObjects(target, docId, id, data)).map(async ({ rel, key }) => {
+    const bytes = await readObject(target, key);
+    assert.ok(bytes, `C14 publication inventory: listed file ${rel} (${key}) can be read`);
+    return { key, size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+  }));
+}
+
 /** Version metadata and draft metadata choose their own immutable object paths. */
 export async function publicationSnapshot(target, docId) {
   const meta = await readDoc(target, `docs/${docId}`);
   assert.ok(meta, "C14 publication inventory: the document exists");
   const records = (await readCollection(target, `docs/${docId}/versions`)).sort((a, b) => a.id.localeCompare(b.id));
   const versions = await Promise.all(records.map(async ({ id, data }) => {
+    if (data.layout === "blobs") return { id, metadata: plain(data), objects: await listedInventory(target, docId, id, data) };
     const prefix = draftStoragePrefix(docId, { storagePrefix: data.storagePrefix ?? `docs/${docId}/${id}` });
     return { id, metadata: plain(data), objects: await inventory(target, prefix) };
   }));

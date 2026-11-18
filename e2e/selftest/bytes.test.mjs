@@ -146,15 +146,15 @@ test("REHASH: the tree's hash.mjs over a zip equals hashing the same files direc
     { rel: "assets/a.css", data: Buffer.from("p{}") },
   ];
   const direct = hashBundleFiles(files);
-  const viaZip = await rehashZip(storedZip([{ name: "assets/" }, { name: "assets/a.css", data: files[1].data }, { name: "index.html", data: files[0].data }]));
+  const viaZip = await rehashZip(storedZip([{ name: "assets/" }, { name: "assets/a.css", data: files[1].data }, { name: "index.html", data: files[0].data }]), { hashVersion: 1 });
   assert.equal(viaZip.contentHash, direct.contentHash, "entry order in the archive must not matter");
   assert.equal(viaZip.fileCount, 2, "directory entries are not files");
-  const changed = await rehashZip(storedZip([{ name: "index.html", data: Buffer.from(V1 + " ") }, { name: "assets/a.css", data: files[1].data }]));
+  const changed = await rehashZip(storedZip([{ name: "index.html", data: Buffer.from(V1 + " ") }, { name: "assets/a.css", data: files[1].data }]), { hashVersion: 1 });
   assert.notEqual(changed.contentHash, direct.contentHash);
 });
 
-test("REHASH matches the shared golden vector the two product hash halves are pinned to", async (t) => {
-  const fixture = join(REPO_ROOT, "functions", "test", "fixtures", "hash-vectors.json");
+for (const [hashVersion, name] of [[1, "hash-vectors.json"], [2, "hash-vectors-v2.json"]]) test(`REHASH v${hashVersion} matches the shared golden vector the two product hash halves are pinned to`, async (t) => {
+  const fixture = join(REPO_ROOT, "functions", "test", "fixtures", name);
   if (!existsSync(fixture)) return t.skip(`no golden vectors at ${fixture}`);
   const vectors = createRequire(import.meta.url)(fixture);
   assert.ok(Array.isArray(vectors) && vectors.length > 0, "the golden vector file holds vectors");
@@ -162,7 +162,8 @@ test("REHASH matches the shared golden vector the two product hash halves are pi
   for (const v of vectors) {
     const files = v.files.map((f) => ({ rel: f.rel, data: Buffer.from(f.utf8, "utf8") }));
     const zip = storedZip(files.map((f) => ({ name: f.rel, data: f.data })));
-    const got = await rehashZip(zip);
+    const got = await rehashZip(zip, { hashVersion });
+    assert.equal(got.hashVersion, hashVersion, `${v.name}: hashVersion`);
     assert.equal(got.contentHash, v.contentHash, v.name);
     assert.equal(got.fileCount, v.fileCount, `${v.name}: fileCount`);
     assert.equal(got.bytes, v.bytes, `${v.name}: bytes`);

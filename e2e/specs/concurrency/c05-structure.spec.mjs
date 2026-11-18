@@ -119,7 +119,7 @@ import assert from "node:assert/strict";
 import { after } from "node:test";
 import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { readFixture } from "../../lib/seed.mjs";
-import { closeAdmin, readDoc, readObject } from "../../lib/admin.mjs";
+import { closeAdmin, readDoc, readVersionObject } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { withDraftAdmissionReload } from "../../lib/draft-admission.mjs";
 import { measure } from "../../lib/evidence.mjs";
@@ -449,8 +449,7 @@ async function peerModes(t, docId) {
 /** A version's stored entry, through the Admin SDK (no read is recorded). */
 async function versionHtml(t, docId, versionId) {
   const rec = await readDoc(t, `docs/${docId}/versions/${versionId}`);
-  const prefix = rec?.storagePrefix ?? `docs/${docId}/${versionId}`;
-  const buf = await readObject(t, `${prefix}/${rec?.entry ?? "index.html"}`);
+  const buf = rec ? await readVersionObject(t, docId, versionId, rec, rec.entry ?? "index.html") : null;
   return buf ? buf.toString("utf8") : null;
 }
 

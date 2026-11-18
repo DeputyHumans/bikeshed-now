@@ -6,7 +6,9 @@ export const DRAFT_SNAPSHOT_REFUSAL = "The draft changed while this request was 
 
 /** Only a fully preserved winning save makes this exact refusal a safe non-witness. */
 export function assertDraftRaceRefusal({ commit, late, beforeVersion, beforeBytes, record, versions, versionBytes, draftBytes, served, lateHtml }) {
-  assert.ok(beforeVersion?.storagePrefix && Buffer.isBuffer(beforeBytes) && beforeBytes.length > 0, "A12 race refusal: preservation starts from an actual published snapshot");
+  // A version names its bytes by its own prefix, or by the list of stored files it records (SPEC §4).
+  const named = beforeVersion?.storagePrefix || (beforeVersion?.layout === "blobs" && Array.isArray(beforeVersion.hashes) && beforeVersion.hashes.length > 0);
+  assert.ok(named && Buffer.isBuffer(beforeBytes) && beforeBytes.length > 0, "A12 race refusal: preservation starts from an actual published snapshot");
   assert.deepEqual({ status: commit.status, body: commit.json }, { status: 409, body: { error: DRAFT_SNAPSHOT_REFUSAL, draftChanged: true } }, "A12 race refusal: only the documented snapshot conflict permits another attempt");
   assert.equal(late.status, 200, "A12 race refusal: the competing late save succeeded");
   const saved = late.json?.draft;

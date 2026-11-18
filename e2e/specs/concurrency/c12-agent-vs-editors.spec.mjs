@@ -187,7 +187,7 @@ import { currentTarget, precondition, scenario } from "../../lib/test.mjs";
 import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { publish, readFixture } from "../../lib/seed.mjs";
-import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readObject, watchRtdb } from "../../lib/admin.mjs";
+import { readDraftObject, draftStoragePrefix, closeAdmin, listObjects, readDoc, readVersionObject, versionObjects, watchRtdb } from "../../lib/admin.mjs";
 import { grepLog, logFile, logMark } from "../../lib/logs.mjs";
 import { DATABASE_LOG, drainDatabaseLog } from "../../lib/debuglogs.mjs";
 import { rtdbRulesStatus } from "../../lib/rtdb.mjs";
@@ -592,16 +592,23 @@ async function draftObjects(docId, draft, versions) {
   rememberDraft(docId, draft);
   const prefixes = retiredDraftPrefixes.get(docId) ?? new Set();
   const lists = await Promise.all([...prefixes].map((prefix) => listObjects(target, `${prefix}/`)));
-  const referenced = versions.map((version) => `${version.storagePrefix ?? `docs/${docId}/${version.id}`}/`);
+  const referenced = versions.filter((version) => version.layout !== "blobs").map((version) => `${version.storagePrefix ?? `docs/${docId}/${version.id}`}/`);
   const bundles = await listObjects(target, `docs/${docId}/bundles/`);
   // A rejected save may have allocated its immutable snapshot without ever
   // returning metadata. Inventory those unreferenced objects as well.
   const unreferenced = bundles.filter((name) => !referenced.some((prefix) => name.startsWith(prefix)));
   return [...new Set([...lists.flat(), ...unreferenced])].sort();
 }
-async function versionPrefix(docId, versionId) {
+/** The objects a version names (its stored files, or its own prefix's), or none when it does not exist. */
+async function versionKeys(docId, versionId) {
   const meta = await readDoc(target, `docs/${docId}/versions/${versionId}`);
-  return meta ? (meta.storagePrefix ?? `docs/${docId}/${versionId}`) : null;
+  return meta ? (await versionObjects(target, docId, versionId, meta)).map((o) => o.key) : [];
+}
+
+/** A version's bytes at `entry`, or null when the version or the file does not exist. */
+async function versionEntry(docId, versionId, entry) {
+  const meta = await readDoc(target, `docs/${docId}/versions/${versionId}`);
+  return meta ? readVersionObject(target, docId, versionId, meta, entry) : null;
 }
 
 /** What an update leaves behind: the pointer, the draft record, the version records, the draft's objects, the log's size. */
@@ -672,16 +679,13 @@ const millis = (ts) => (ts && typeof ts.toMillis === "function" ? ts.toMillis() 
  */
 async function footprint(docId) {
   const from = Date.now();
-  const [d, versions, v2Prefix] = await Promise.all([
+  const [d, versions, v2] = await Promise.all([
     readDoc(target, `docs/${docId}`),
     readVersions(target, docId),
-    versionPrefix(docId, "v2"),
+    versionKeys(docId, "v2"),
   ]);
   rememberDraft(docId, d?.draft);
-  const [objects, v2] = await Promise.all([
-    d?.draft ? listObjects(target, `${draftStoragePrefix(docId, d.draft)}/`, { meta: true }) : [],
-    v2Prefix ? listObjects(target, `${v2Prefix}/`) : [],
-  ]);
+  const objects = d?.draft ? await listObjects(target, `${draftStoragePrefix(docId, d.draft)}/`, { meta: true }) : [];
   return {
     from,
     to: Date.now(),
@@ -977,14 +981,12 @@ function judgeAgentView(view, { label, mark, forbidden = [], noTokens = false, w
 
 /** Read through the immutable version's committed storage pointer. */
 async function publishedEntry(docId, versionId, entry) {
-  const version = await readDoc(target, `docs/${docId}/versions/${versionId}`);
-  return readObject(target, `${version?.storagePrefix ?? `docs/${docId}/${versionId}`}/${entry}`);
+  return versionEntry(docId, versionId, entry);
 }
 
 /** An editor's GET /draft serves `versionId`'s stored entry. */
 async function judgeDraftServed({ label, http, docId, entry, versionId, forbidden = [] }) {
-  const prefix = await versionPrefix(docId, versionId);
-  const stored = prefix ? await readObject(target, `${prefix}/${entry}`) : null;
+  const stored = await versionEntry(docId, versionId, entry);
   const got = await draftServed(http, docId, entry);
   const whose = stored && got.sha === sha(stored) ? `${versionId}'s entry` : forbidden.find((m) => got.text.includes(m)) ? `a replaced draft (${forbidden.find((m) => got.text.includes(m))})` : got.text.includes(`>${V1_HEADING}<`) ? "v1's content" : "something else";
   assert.ok(got.status === 200 && stored && got.sha === sha(stored), `${label} GET /draft: an editor's GET /draft serves the agent's version (${versionId}'s stored entry) — it answered ${got.status} with ${whose}`);
@@ -1167,8 +1169,7 @@ scenario("C12a agent update vs editors: while N editors type in the editor, the 
   });
   const mid = await serverState(docId);
   ctx.ev.json("after-refusal", mid);
-  const v2Prefix = await versionPrefix(docId, "v2");
-  const uploaded = v2Prefix ? await listObjects(target, `${v2Prefix}/`) : [];
+  const uploaded = await versionKeys(docId, "v2");
   await o.check(() => assert.ok(mid.currentVersion === "v1" && mid.versions.length === 1 && uploaded.length === 0, `C12a nothing minted (after the settle): a refused update mints and uploads nothing — current ${mid.currentVersion}, versions ${JSON.stringify(mid.versions)}, ${uploaded.length} object(s) under docs/{d}/v2/`));
   await o.check(() => assert.ok(mid.draft?.baseVersion === "v1" && mid.draftObjects.length > 0 && mid.yEntries > 0, `C12a left alone (after the settle): the draft and its log are still there (draft ${JSON.stringify(mid.draft)}, ${mid.draftObjects.length} draft object(s), ${mid.yEntries} log entries)`));
   verdict({ others: o });
@@ -1625,7 +1626,7 @@ scenario("C12d in-app commit: N editors type and settle, all but p1 press Done, 
   await o.check(() => assert.ok(state.currentVersion === "v2" && state.versions.includes("v2<v1:editor"), `C12d version: v2 is current, minted on v1 by the editor (${JSON.stringify(state.versions)}, current ${state.currentVersion})`));
   await o.check(() => judgeDraftDropped(state, { label: "C12d", versionId: "v2" }));
   const parser = await ctx.users.parser();
-  const v2html = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
+  const v2html = (await versionEntry(docId, "v2", entry))?.toString("utf8") ?? "";
   await o.check(async () => assertInvariant(checkI2({ peers: { v2: await segmentsOfHtml(parser, v2html, ids) }, typed: log.typed })));
   await parser.setContent(v2html);
   const baseline = await readI3(parser);
@@ -1751,7 +1752,7 @@ scenario("C12d co-editor typing through the commit (S8's other side, class Q, re
   await nobodyEditing(ctx, docId, `${p1.name} published and ${p2.name} pressed Done`);
   const yLeft = entriesOf(await readLog(docId));
 
-  const v2html = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
+  const v2html = (await versionEntry(docId, "v2", entry))?.toString("utf8") ?? "";
   const parser = await ctx.users.parser();
   await parser.setContent(v2html);
   const baseline = await readI3(parser);
@@ -1831,7 +1832,7 @@ scenario("C12d co-editor recovery: publishing retires the open editor's base wit
     assert.equal(loads.length, 0, "C12 recovery frame: publication does not automatically reload the peer's editor");
     assert.ok((await (await peer.frame()).evaluate(bodyText)).includes(late), "C12 recovery local text: a refused late edit remains in the peer's open editor");
     const entry = await v1Entry(docId);
-    const v2 = (await readObject(target, `${await versionPrefix(docId, "v2")}/${entry}`))?.toString("utf8") ?? "";
+    const v2 = (await versionEntry(docId, "v2", entry))?.toString("utf8") ?? "";
     assert.ok(!v2.includes(late), "C12 recovery immutable version: the held late edit is absent from v2");
     const beforeReload = await readDoc(target, `docs/${docId}`);
     assert.ok(!beforeReload.draft, "C12 recovery durability: the refused late save cannot silently become a draft of v2");

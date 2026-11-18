@@ -374,11 +374,24 @@ export async function hashModule(target = null) {
   return hashModules.get(file);
 }
 
-/** Recompute {contentHash, fileCount, bytes} over a zip's files. */
-export async function rehashZip(zip, { target = null } = {}) {
+/**
+ * Recompute {contentHash, fileCount, bytes, hashVersion} over a zip's files.
+ *
+ * `hashVersion` picks the framing (SPEC §9.1): 1 over the bytes, 2 over the
+ * file list. Left out, it is the newest the target's own hash module has,
+ * which is the one that tree mints, so a version the stack under test just
+ * made rehashes to its record's contentHash. A version minted before v2 (a
+ * legacy record, `hashVersion` absent) needs `hashVersion: 1`.
+ */
+export async function rehashZip(zip, { target = null, hashVersion = null } = {}) {
   const files = zipFiles(zip);
-  const { hashBundleFiles } = await hashModule(target);
-  return { ...hashBundleFiles(files), files: files.map((f) => ({ rel: f.rel, bytes: f.data.length })), entries: files };
+  const mod = await hashModule(target);
+  const hasV2 = typeof mod.hashBundleListing === "function" && typeof mod.listingOf === "function";
+  const version = hashVersion ?? (hasV2 ? 2 : 1);
+  if (version !== 1 && version !== 2) throw new TypeError(`rehashZip: hashVersion is 1 or 2, got ${JSON.stringify(version)}`);
+  if (version === 2 && !hasV2) throw new Error("rehashZip: this tree's hash module has no v2 (hashBundleListing)");
+  const summary = version === 2 ? mod.hashBundleListing(mod.listingOf(files)) : mod.hashBundleFiles(files);
+  return { ...summary, hashVersion: version, files: files.map((f) => ({ rel: f.rel, bytes: f.data.length })), entries: files };
 }
 
 /**
@@ -413,10 +426,10 @@ export async function downloadVersion({ http = null, target = null, origin = nul
   return { zip: res.buffer, files: zipFiles(res.buffer), headers: Object.fromEntries(res.headers) };
 }
 
-/** REHASH: download a version and recompute its hash with the target's own module. */
-export async function rehashVersion({ target, http = null, docId, versionId, headers = {}, k = null, sink = null }) {
+/** REHASH: download a version and recompute its hash with the target's own module (`hashVersion` as rehashZip). */
+export async function rehashVersion({ target, http = null, docId, versionId, headers = {}, k = null, sink = null, hashVersion = null }) {
   const { zip } = await downloadVersion({ target, http, docId, versionId, headers, k, sink });
-  return rehashZip(zip, { target: target ?? http?.target ?? null });
+  return rehashZip(zip, { target: target ?? http?.target ?? null, hashVersion });
 }
 
 /** The entry file's bytes (index.html unless told otherwise) from a downloaded version. */

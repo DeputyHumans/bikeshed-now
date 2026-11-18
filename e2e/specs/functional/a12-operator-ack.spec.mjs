@@ -9,7 +9,7 @@ import { cast } from "../../lib/accounts.mjs";
 import { openSession } from "../../lib/session.mjs";
 import { publish, updateUpload } from "../../lib/seed.mjs";
 import { setVisibility } from "../../lib/grant.mjs";
-import { closeAdmin, emailKey, listObjects, readDoc, readObject, rtdbGet } from "../../lib/admin.mjs";
+import { closeAdmin, emailKey, listObjects, readDoc, readVersionObject, rtdbGet, versionObjects } from "../../lib/admin.mjs";
 import { rtdbAs } from "../../lib/rtdb.mjs";
 import { gates, requireHeld } from "../../lib/gates.mjs";
 import { assertNativeAckProof } from "../../lib/native-ack.mjs";
@@ -19,7 +19,23 @@ const target = currentTarget();
 after(() => target ? closeAdmin(target) : undefined);
 const CASE = { tiers: ["local"], needs: ["admin-emulator", "operator-scripts", "rtdb-rules", "gates", "patch:amplify-native-ack-loss"], timeoutMs: 240_000, inconclusiveOnHttpStall: true, inconclusiveOnRequestStall: true };
 const record = docId => readDoc(target, `docs/${docId}`);
-const version = (docId, id) => readDoc(target, `docs/${docId}/versions/${id}`);
+const version = async (docId, id) => { const rec = await readDoc(target, `docs/${docId}/versions/${id}`); return rec && { ...rec, id }; };
+
+/** A version's entry bytes, in either layout (SPEC §4). */
+const entryBytes = (docId, rec) => readVersionObject(target, docId, rec.id, rec, rec.entry);
+
+/** The objects only `doomed` names, among `others`: what withdrawing it may delete. */
+async function onlyItsObjects(docId, doomed, others) {
+  const kept = new Set((await Promise.all(others.map((o) => versionObjects(target, docId, o.id, o)))).flat().map((o) => o.key));
+  const own = (await versionObjects(target, docId, doomed.id, doomed)).map((o) => o.key).filter((k) => !kept.has(k));
+  precondition(own.length > 0, `${doomed.id} names an object no other version names`);
+  return own;
+}
+
+/** Which of `keys` still exist. */
+async function present(keys) {
+  return (await Promise.all(keys.map(async (k) => ((await listObjects(target, k)).includes(k) ? k : null)))).filter(Boolean);
+}
 
 async function setup(mode) {
   const [account] = await cast(target, ["owner"]);
@@ -94,20 +110,21 @@ scenario("A12.10a an operator publish completes its exact retirement after nativ
   assert.equal(result.code, 0, "ACK operator publish: the real command exits successfully");
   assert.equal(result.stdout.includes("already published as"), false, "ACK operator publish: own committed upload is not reported as a duplicate");
   const v2 = await version(s.docId, "v2");
-  assert.deepEqual(await readObject(target, `${v2.storagePrefix}/${v2.entry}`), readFileSync(join(bundle, "index.html")), "ACK operator publish: committed immutable entry bytes remain exact");
+  assert.deepEqual(await entryBytes(s.docId, v2), readFileSync(join(bundle, "index.html")), "ACK operator publish: committed immutable entry bytes remain exact");
 });
 
 scenario("A12.10b an operator withdrawal completes its exact retirement and removes only the withdrawn version after native commit acknowledgement loss", CASE, async ctx => {
   const s = await setup("withdraw");
   const doomed = await version(s.docId, "v2"), retained = await version(s.docId, "v1");
-  const retainedBytes = await readObject(target, `${retained.storagePrefix}/${retained.entry}`);
+  const retainedBytes = await entryBytes(s.docId, retained);
+  const doomedObjects = await onlyItsObjects(s.docId, doomed, [retained]);
   const args = ["--doc", s.docId, "--version", "v2", "--repoint", "v1", "--drop-draft", "--yes", "--account", s.owner.account.email, "--project", target.projectId, "--bucket", target.bucket];
   const result = await loseOperatorAck(ctx, s, "operator-withdraw", "delete-version.mjs", args, "v1");
   assert.deepEqual(await retired(s, "v1"), expectedRetirement("v1"), "ACK operator withdrawal: completed repoint finishes its captured retirement");
   assert.equal(result.code, 0, "ACK operator withdrawal: the real command exits successfully");
   assert.equal(await version(s.docId, "v2"), null, "ACK operator withdrawal: the withdrawn version record is removed");
-  assert.deepEqual(await listObjects(target, `${doomed.storagePrefix}/`), [], "ACK operator withdrawal: exact withdrawn objects are removed");
-  assert.deepEqual(await readObject(target, `${retained.storagePrefix}/${retained.entry}`), retainedBytes, "ACK operator withdrawal: retained version bytes stay exact");
+  assert.deepEqual(await present(doomedObjects), [], "ACK operator withdrawal: exact withdrawn objects are removed");
+  assert.deepEqual(await entryBytes(s.docId, retained), retainedBytes, "ACK operator withdrawal: retained version bytes stay exact");
 });
 
 scenario("A12.10c an operator access grant ACK retry preserves a later real revocation and its mirrors", CASE, async ctx => {
@@ -140,18 +157,19 @@ scenario("A12.10c an operator access grant ACK retry preserves a later real revo
 
 scenario("A12.10d an operator withdrawal ACK retry finishes captured cleanup while preserving a later publication", CASE, async ctx => {
   const s = await setup("withdraw");
-  const doomed = await version(s.docId, "v2"), retained = await version(s.docId, "v1"), retainedBytes = await readObject(target, `${retained.storagePrefix}/${retained.entry}`);
+  const doomed = await version(s.docId, "v2"), retained = await version(s.docId, "v1"), retainedBytes = await entryBytes(s.docId, retained);
+  const doomedObjects = await onlyItsObjects(s.docId, doomed, [retained]);
   const args = ["--doc", s.docId, "--version", "v2", "--repoint", "v1", "--drop-draft", "--yes", "--account", s.owner.account.email, "--project", target.projectId, "--bucket", target.bucket];
   let later, laterBytes;
   const result = await loseOperatorAck(ctx, s, "operator-withdraw", "delete-version.mjs", args, "v1", async () => {
     const updated = await updateUpload(s.owner.http, s.docId, { baseVersion: "v1", filename: "index.html", body: "<!doctype html><p>Later publication stays current</p>", timeoutMs: 90_000 });
     precondition(updated.status === 200 && updated.json?.versionId === "v3", "operator withdrawal ACK later publication replaces the mutable epoch before retry");
-    later = await version(s.docId, "v3"); laterBytes = await readObject(target, `${later.storagePrefix}/${later.entry}`);
+    later = await version(s.docId, "v3"); laterBytes = await entryBytes(s.docId, later);
   });
   assert.deepEqual(await retired(s, "v3"), expectedRetirement("v3"), "ACK operator withdrawal later head: exact captured retirement completes without repointing the newer publication");
   assert.equal(result.code, 0, "ACK operator withdrawal later head: original command acknowledges its completed repoint");
   assert.equal(await version(s.docId, "v2"), null, "ACK operator withdrawal later head: withdrawn record is removed");
-  assert.deepEqual(await listObjects(target, `${doomed.storagePrefix}/`), [], "ACK operator withdrawal later head: exact withdrawn bytes are removed");
-  assert.deepEqual(await readObject(target, `${later.storagePrefix}/${later.entry}`), laterBytes, "ACK operator withdrawal later head: newer publication bytes stay exact");
-  assert.deepEqual(await readObject(target, `${retained.storagePrefix}/${retained.entry}`), retainedBytes, "ACK operator withdrawal later head: retained earlier bytes stay exact");
+  assert.deepEqual(await present(doomedObjects), [], "ACK operator withdrawal later head: exact withdrawn bytes are removed");
+  assert.deepEqual(await entryBytes(s.docId, later), laterBytes, "ACK operator withdrawal later head: newer publication bytes stay exact");
+  assert.deepEqual(await entryBytes(s.docId, retained), retainedBytes, "ACK operator withdrawal later head: retained earlier bytes stay exact");
 });

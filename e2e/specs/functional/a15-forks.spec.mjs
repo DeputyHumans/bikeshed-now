@@ -65,7 +65,7 @@ import { cast, rand4, runTag } from "../../lib/accounts.mjs";
 import { mintToken, openSession } from "../../lib/session.mjs";
 import { absentDocId, createFolder, fork, ledgerDoc, publish, updateUpload } from "../../lib/seed.mjs";
 import { closeWindows, setVisibility, share, shareFolder } from "../../lib/grant.mjs";
-import { closeAdmin, queryCollection, readCollection, readDoc, listObjects, trustAsOperator } from "../../lib/admin.mjs";
+import { closeAdmin, queryCollection, readCollection, readDoc, listObjects, trustAsOperator, versionObjects } from "../../lib/admin.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
 import { entryHtml, rehashZip } from "../../lib/bytes.mjs";
@@ -810,8 +810,11 @@ scenario("A15.4d Fork this version, on an old version in the viewer, forks that 
   const forkV1 = await versionRecord(forkId, "v1");
   assert.equal(forkV1.contentHash, srcV1.contentHash, "the fork's v1 hash is the source's v1 hash");
   assert.deepEqual((await readCollection(target, `docs/${forkId}/versions`)).map((v) => v.id), ["v1"], "forking an old version copies no other version records");
-  assert.ok(typeof forkV1.storagePrefix === "string" && forkV1.storagePrefix.startsWith(`docs/${forkId}/`), "the fork names its own immutable storage prefix");
-  assert.deepEqual(await listObjects(target, `docs/${forkId}/`), [`${forkV1.storagePrefix}/index.html`], "forking an old version copies only its selected bundle objects");
+  // A fork lists its files and holds its own copy of each (SPEC §4, §21): the
+  // claim on its id and the one stored file v1 names, nothing of v2's.
+  const forkFiles = await versionObjects(target, forkId, "v1", forkV1);
+  assert.ok(forkV1.layout === "blobs" && forkFiles.length === 1 && forkFiles.every((f) => f.key.startsWith(`docs/${forkId}/blobs/`)), "the fork's v1 names stored files in its own document");
+  assert.deepEqual(await listObjects(target, `docs/${forkId}/`), [`docs/${forkId}/blobs/${forkV1.hashes[0]}`, `docs/${forkId}/claim`].sort(), "forking an old version copies only its selected files");
 
   ctx.step("REHASH: the fork's downloaded bytes are v1's upload and hash to the recorded contentHash");
   const bytes = await stored(V.http, forkId, "v1");
