@@ -698,7 +698,7 @@ scenario(NAMES.f, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
     "the .zip went up as bytes to /publish?update= (SPEC §19)",
   );
 
-  ctx.step("the same kind of archive under a name that is not .zip, sniffed by its magic bytes; and --base on the bytes path, refused");
+  ctx.step("the same kind of archive under a name that is not .zip is a file like any other, laid over by its name with every byte intact; and --base on the bytes path, refused");
   const v3 = { "index.html": Buffer.from(page(title, ["Bundle v3, sniffed."])), "img.png": tinyPng({ rgb: [129, 255, 200] }) };
   put(o, "bundle.bin", await zipBundle(v3, target));
   const [files2, r3, stale] = await Promise.all([
@@ -708,11 +708,17 @@ scenario(NAMES.f, { tiers: BOTH, timeoutMs: 480_000, inconclusiveOnStackTimeout:
   ]);
   assert.deepEqual(Object.keys(files2).sort(), ["img.png", "index.html"]);
   for (const name of Object.keys(v2)) assert.equal(sha(files2[name]), sha(v2[name]), `v2's ${name} is byte for byte the bundle's`);
-  assert.equal(okJson(r3, "update <id> bundle.bin --json").versionId, "v3");
+  const j3 = okJson(r3, "update <id> bundle.bin --json");
+  assert.equal(j3.versionId, "v3");
+  // The name decides (SPEC §19): only a .zip replaces every file, so a
+  // .docx or a .pptx, which are zips too, can be laid over like a picture.
+  assert.deepEqual(j3.placed, [{ sent: "bundle.bin", at: "bundle.bin", added: true }], "bundle.bin was added beside v2's files, and the answer says so");
   refused(stale, "update bundle.zip --base v1 after v2", /the document is at v[23] now, not v1/);
   const [rec3, files3] = await Promise.all([readDoc(target, `docs/${up.docId}/versions/v3`), storedFiles(up.docId, "v3")]);
-  assert.equal(rec3.publishedVia, "cli", "an archive by its bytes takes the same path");
-  for (const name of Object.keys(v3)) assert.equal(sha(files3[name]), sha(v3[name]), `v3's ${name} is byte for byte the bundle's`);
+  assert.equal(rec3.publishedVia, "cli", "a loose file takes the same path");
+  assert.deepEqual(Object.keys(files3).sort(), ["bundle.bin", "img.png", "index.html"]);
+  assert.equal(sha(files3["bundle.bin"]), sha(readFileSync(join(o.home.home, "bundle.bin"))), "v3's bundle.bin is byte for byte the file sent");
+  for (const name of Object.keys(v2)) assert.equal(sha(files3[name]), sha(v2[name]), `v3 keeps v2's ${name}`);
   assert.deepEqual(await versionIds(up.docId), ["v1", "v2", "v3"]);
 });
 
