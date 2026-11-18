@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // A document's bytes: the content proxy, stored thumbnails and the bundle download (SPEC §2, §6).
 
-import { versionFiles, versionObjectKey, type ListingBucket } from "../lib/storage";
+import { storedFiles, versionFiles, versionObjectKey, type ListingBucket } from "../lib/storage";
+import { isStreamedMedia } from "../lib/files";
+import { mediaLink } from "../lib/medialink";
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as mime from "mime-types";
@@ -64,6 +66,10 @@ import { db, bucket, refusal, PLAIN, WARM } from "./runtime";
 // Content
 // ---------------------------------------------------------------------------
 
+/** A member's browser may keep these for an hour; nothing else (SPEC §17). */
+const CACHEABLE_FOR_MEMBERS = /^(image\/(?!svg)|text\/css$|font\/)/;
+const MEMBER_ASSET_SECONDS = 60 * 60;
+
 /** The type a file is served as: by its name, never sniffed. */
 export function contentTypeOf(relPath: string): string {
   return mime.lookup(relPath) || "application/octet-stream";
@@ -108,31 +114,80 @@ async function mayRunScript(
   return consent.exists;
 }
 
-/** Stream a Storage object, mapping a missing object to 404 rather than 500. */
-export function streamObject(
+/**
+ * Stream a Storage object, mapping a missing object to 404 rather than 500.
+ *
+ * Every refusal is `private, no-store`, whatever the caller set for the bytes:
+ * a 404 cached for five minutes at a public URL outlives the file that comes
+ * to be there. A HEAD answers only what a GET would, so it asks Storage
+ * whether the object exists unless its size is already known from the
+ * version's list (SPEC §4), in which case it costs no Storage call at all.
+ */
+export async function streamObject(
   res: import("express").Response,
   objectKey: string,
   relPath: string,
   isHead: boolean,
   jsonErrors = false,
-): void {
+  size?: number,
+): Promise<void> {
   const file = bucket().file(objectKey);
-  res.setHeader("Content-Type", contentTypeOf(relPath));
-  res.setHeader("X-Content-Type-Options", "nosniff");
+  const refuse = (status: number) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    if (jsonErrors) res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.status(status).end();
+  };
   if (isHead) {
+    let length = size;
+    if (length === undefined) {
+      try {
+        const [meta] = await file.getMetadata();
+        length = Number(meta.size);
+      } catch (err) {
+        refuse((err as { code?: number }).code === 404 ? 404 : 500);
+        return;
+      }
+    }
+    res.setHeader("Content-Type", contentTypeOf(relPath));
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    if (Number.isSafeInteger(length)) res.setHeader("Content-Length", String(length));
     res.status(200).end();
     return;
   }
+  res.setHeader("Content-Type", contentTypeOf(relPath));
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (size !== undefined) res.setHeader("Content-Length", String(size));
   const stream = file.createReadStream();
   stream.on("error", (err: NodeJS.ErrnoException & { code?: number }) => {
     if (res.headersSent) {
       res.destroy(err);
       return;
     }
-    if (jsonErrors) res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.status(err.code === 404 ? 404 : 500).end();
+    res.removeHeader("Content-Length");
+    refuse(err.code === 404 ? 404 : 500);
   });
   stream.pipe(res);
+}
+
+/**
+ * For video and audio, the answer is a `302` to a short-lived Storage link
+ * rather than the bytes (`lib/medialink.ts`, SPEC §24). True when it
+ * redirected; false when this runtime streams instead (the emulator).
+ */
+export async function redirectToMedia(
+  res: import("express").Response,
+  objectKey: string,
+  relPath: string,
+): Promise<boolean> {
+  if (!isStreamedMedia(relPath)) return false;
+  const url = await mediaLink({ objectKey, contentType: contentTypeOf(relPath), disposition: "inline" });
+  if (!url) return false;
+  // Set last, over whatever the bytes would have had: a cached redirect would
+  // outlive the link it points to.
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Location", url);
+  res.status(302).end();
+  return true;
 }
 
 /** What a byte path knows once it has decided the caller may read. */
@@ -190,9 +245,21 @@ function keyedRead(gate: ReadGate): boolean {
  * or a link grant's read is decided by who is asking, and a grant's URL
  * carries no key, so caching it would hand the bytes to anyone at that URL.
  */
-export function setContentCache(res: import("express").Response, gate: ReadGate): void {
+export function setContentCache(res: import("express").Response, gate: ReadGate, relPath?: string): void {
   if (gate.basis === "member" || gate.basis === "grant") {
-    res.setHeader("Cache-Control", "private, no-store");
+    // A picture, a stylesheet or a font is held in the reader's own browser
+    // for up to an hour, capped at expiry, so moving it out of the page does
+    // not make every view fetch it again. Never `immutable`, since a version's
+    // name is minted again after a withdrawal; never a script, an SVG or a
+    // page, whose bytes trust is given for (SPEC §17).
+    const cacheable = relPath !== undefined && CACHEABLE_FOR_MEMBERS.test(contentTypeOf(relPath));
+    if (cacheable) {
+      const at = cacheEnd(gate);
+      const left = at === null ? MEMBER_ASSET_SECONDS : Math.floor((at - Date.now()) / 1000);
+      res.setHeader("Cache-Control", `private, max-age=${Math.max(0, Math.min(MEMBER_ASSET_SECONDS, left))}`);
+    } else {
+      res.setHeader("Cache-Control", "private, no-store");
+    }
   } else {
     /**
      * The window is capped at the time left before expiry.
@@ -292,7 +359,7 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
       return;
     }
     setThumbCache(res, gate);
-    streamObject(res, thumbObjectKey(docId, versionId, relPath), relPath, req.method === "HEAD");
+    await streamObject(res, thumbObjectKey(docId, versionId, relPath), relPath, req.method === "HEAD");
     return;
   }
 
@@ -310,7 +377,8 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
 
   // The version's own object for this path, in whichever layout it was
   // stored (SPEC §4). A file the version does not list is a 404 here.
-  const objectKey = versionObjectKey(docId, versionId, versionSnap.data() ?? {}, relPath);
+  const record = versionSnap.data() ?? {};
+  const objectKey = versionObjectKey(docId, versionId, record, relPath);
   // Defence in depth: the resolved key must stay inside this document even if
   // a segment check above were ever loosened.
   if (!objectKey || !objectKey.startsWith(`docs/${docId}/`) || objectKey.includes("..")) {
@@ -318,7 +386,10 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
     return;
   }
 
-  setContentCache(res, gate);
+  // Video and audio: everything above decided, the bytes come from Storage.
+  if (await redirectToMedia(res, objectKey, relPath)) return;
+
+  setContentCache(res, gate, parts.run ? undefined : relPath);
   // Deliberately NO X-Frame-Options, and frame-ancestors only on the run
   // variant: the content must embed same-origin in the app's iframe, which is
   // what makes annotation possible.
@@ -331,7 +402,8 @@ export const contentProxy = onRequest(WARM, async (req, res) => {
   }
   setScriptLock(res, relPath, { asked: parts.run, granted });
 
-  streamObject(res, objectKey, relPath, req.method === "HEAD");
+  const size = storedFiles(docId, record).find((f) => f.rel === relPath)?.size;
+  await streamObject(res, objectKey, relPath, req.method === "HEAD", false, size);
 });
 
 /**

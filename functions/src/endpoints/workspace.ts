@@ -25,7 +25,7 @@ import {
   parseAnchor,
   parseNote,
 } from "../lib/suggestions";
-import { extractBundle, type ExtractedBundle } from "../lib/bundle";
+import { extractBundle, extractLoose, type BundleEntry, type ExtractedBundle } from "../lib/bundle";
 import type { Principal } from "../lib/auth";
 import {
   createFolderRecord,
@@ -274,15 +274,33 @@ export const createDoc = onRequest(PLAIN, async (req, res) => {
     return;
   }
   const filename = strParam(req, "filename");
+  const updating = strParam(req, "update");
+
+  // Loose files laid over the current version, each replacing the file of the
+  // same name or added, everything else kept (SPEC §2): what dropping a new
+  // screenshot on a document means. The body is a .zip of them.
+  if (strParam(req, "merge") === "1") {
+    if (!updating) {
+      badRequest(res, "merge lays files over a document's current version, so it needs update=<id>");
+      return;
+    }
+    const loose = extractLoose(buffer, MAX_BUNDLE_BYTES);
+    if ("error" in loose) {
+      badRequest(res, loose.error);
+      return;
+    }
+    await updateFromUpload(req, res, caller, updating, { overlay: { files: loose.files, byName: true } });
+    return;
+  }
+
   const extracted = extractBundle(buffer, filename, MAX_BUNDLE_BYTES);
   if ("error" in extracted) {
     badRequest(res, extracted.error);
     return;
   }
 
-  const updating = strParam(req, "update");
   if (updating) {
-    await updateFromUpload(req, res, caller, updating, extracted);
+    await updateFromUpload(req, res, caller, updating, { extracted });
     return;
   }
 
@@ -357,7 +375,7 @@ async function updateFromUpload(
   res: import("express").Response,
   caller: Principal,
   docId: string,
-  extracted: ExtractedBundle,
+  input: { extracted: ExtractedBundle } | { overlay: { files: BundleEntry[]; byName: boolean } },
 ): Promise<void> {
   if (strParam(req, "id") || strParam(req, "folderId") || strParam(req, "title")) {
     badRequest(res, "an update keeps the document's address, folder and title");
@@ -402,7 +420,7 @@ async function updateFromUpload(
     docRef,
     baseVersion: String(data.currentVersion ?? ""),
     title: String(data.title ?? docId),
-    extracted,
+    ...input,
     actor,
     authorEmail: caller.emailLower,
     editorsOnly: true,

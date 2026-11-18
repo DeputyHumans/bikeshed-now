@@ -145,6 +145,8 @@ async function withStorage(fn) {
       bucket: () => ({
         file: () => ({
           exists: async () => [true],
+          // A HEAD asks Storage whether the object is there before answering 200.
+          getMetadata: async () => [{ size: "0" }],
           createReadStream: () => { throw new Error("no bytes in this test"); },
         }),
       }),

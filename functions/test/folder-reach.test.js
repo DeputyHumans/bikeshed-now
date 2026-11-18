@@ -184,6 +184,8 @@ async function withStorage(fn) {
     value: () => ({
       bucket: () => ({
         file: () => ({
+          // A HEAD asks Storage whether the object is there before answering 200.
+          getMetadata: async () => [{ size: "0" }],
           createReadStream: () => { throw new Error("no bytes in this test"); },
           download: async () => [Buffer.from("<p>Cut over in two weekends.</p>")],
         }),

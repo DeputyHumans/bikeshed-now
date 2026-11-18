@@ -152,6 +152,8 @@ export function renderEmbed(template: string, page: EmbedPage): string {
     `id="embed-frame"`,
     `src="${escapeAttr(frameSrc(page))}"`,
     `sandbox="${EMBED_SANDBOX}"`,
+    // A video's own fullscreen button needs the frame's leave (SPEC §24).
+    `allow="fullscreen"`,
     `title="${escapeAttr(page.title)}"`,
     `data-doc="${escapeAttr(page.docId)}"`,
     `data-version="${escapeAttr(page.versionId)}"`,

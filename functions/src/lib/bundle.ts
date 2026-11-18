@@ -50,7 +50,21 @@ export function safeBundleRelPath(rel: string): string | null {
 
 const HTML_RE = /\.html?$/i;
 const MD_RE = /\.(md|markdown)$/i;
-const JUNK_RE = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$)/i;
+/**
+ * What a folder or a zip leaves out (SPEC §2): any file or folder whose name
+ * starts with a dot (`.DS_Store`, `.git/`, `.env`), `__MACOSX/`, `Thumbs.db`
+ * and `node_modules/`. The browser and the CLI apply the same rule to a folder
+ * before it is sent, and say what they left out; this is the same rule for a
+ * zip, so a folder and a zip of it publish the same thing. A credential in a
+ * dotfile is the reason it is not merely junk.
+ */
+export function isLeftOut(rel: string): boolean {
+  return rel.split("/").some((seg) =>
+    seg.startsWith(".") || seg === "__MACOSX" || seg === "node_modules" || seg.toLowerCase() === "thumbs.db");
+}
+
+/** The longest path a bundle file may have, in UTF-8 bytes: 2,000 of them fit one version record (SPEC §4). */
+export const MAX_PATH_BYTES = 256;
 const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]); // "PK\x03\x04"
 
 function looksLikeZip(buf: Buffer): boolean {
@@ -138,6 +152,37 @@ export function extractBundle(
     };
   }
 
+  const read = readArchive(buffer, maxBytes);
+  if ("error" in read) return read;
+  const { files } = read;
+  if (files.length === 0) return { error: "the .zip contained no files" };
+
+  const stripped = stripCommonPrefix(files);
+  const resolved = resolveEntry(stripped);
+  if (!resolved) {
+    return { error: "no index.html, index.md, or single source file found in the bundle" };
+  }
+  return { files: stripped, entry: resolved.entry, format: resolved.format, archive: true };
+}
+
+/**
+ * Files to lay over a document's current version, one by one (SPEC §2,
+ * `merge=1`): a `.zip` of them at the paths they are to have. Unlike a
+ * bundle, it has no page of its own and no shared folder is stripped, because
+ * each path says where its file goes.
+ */
+export function extractLoose(buffer: Buffer, maxBytes: number): { files: BundleEntry[] } | { error: string } {
+  if (buffer.length === 0) return { error: "uploaded file is empty" };
+  if (buffer.length > maxBytes) return { error: "uploaded file is too large" };
+  if (!looksLikeZip(buffer)) return { error: "files laid over a version arrive as a .zip of them" };
+  const read = readArchive(buffer, maxBytes);
+  if ("error" in read) return read;
+  if (read.files.length === 0) return { error: "the .zip contained no files" };
+  return read;
+}
+
+/** Every file of a `.zip`, checked one by one before any is kept. */
+function readArchive(buffer: Buffer, maxBytes: number): { files: BundleEntry[] } | { error: string } {
   // The entries are read inside the guard too: adm-zip parses the central
   // directory lazily, so a damaged one throws from here, not the constructor.
   let entries: AdmZip.IZipEntry[];
@@ -151,9 +196,13 @@ export function extractBundle(
   let total = 0;
   for (const e of entries) {
     if (e.isDirectory) continue;
-    if (JUNK_RE.test(e.entryName)) continue;
+    // Unsafe is refused before anything is left out, so `../x` is an error, not a silent skip.
     const safe = safeBundleRelPath(e.entryName);
     if (safe == null) return { error: `unsafe path in archive: ${e.entryName}` };
+    if (isLeftOut(safe)) continue;
+    if (Buffer.byteLength(safe, "utf8") > MAX_PATH_BYTES) {
+      return { error: `a path in the archive is longer than ${MAX_PATH_BYTES} bytes: ${safe.slice(0, 80)}…` };
+    }
 
     // Zip-bomb guard, on the DECLARED uncompressed size from the central
     // directory, BEFORE decompressing. adm-zip allocates a Buffer of that size
@@ -189,15 +238,7 @@ export function extractBundle(
     if (total > maxBytes) return { error: "bundle is too large" };
     files.push({ rel: safe, data });
   }
-
-  if (files.length === 0) return { error: "the .zip contained no files" };
-
-  const stripped = stripCommonPrefix(files);
-  const resolved = resolveEntry(stripped);
-  if (!resolved) {
-    return { error: "no index.html, index.md, or single source file found in the bundle" };
-  }
-  return { files: stripped, entry: resolved.entry, format: resolved.format, archive: true };
+  return { files };
 }
 
 /** Assemble bundle files into a .zip buffer, for download. */

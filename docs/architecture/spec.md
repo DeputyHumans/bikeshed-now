@@ -598,7 +598,7 @@ functions/src/
   config.ts                bucket, region, limits, secrets
   generated/policy.ts      GENERATED
   lib/{auth,acl,access,management,trash,expire,purge,purgecode,audience,events,changefeed,folders,hash,bundle,presence,actor,publicdoc,linkgrant,reach,teams,tokens}.ts
-  lib/{head,html,htmltext,http,health,marking,thumbs,shell,embed,sitemap,scriptlock,transaction-receipts,mcp-transport}.ts
+  lib/{head,html,htmltext,http,health,marking,thumbs,shell,embed,sitemap,scriptlock,transaction-receipts,mcp-transport,files,medialink}.ts
   lib/{versions,latest,publish,draft,causal,storage,blobs,writeAuthority,review,fork,rename,suggestions,accept,apply,quote,threads}.ts
 
   lib/accountmove.ts

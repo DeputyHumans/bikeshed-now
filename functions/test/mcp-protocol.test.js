@@ -36,8 +36,7 @@ const REQUIRED = {
     "id"
   ],
   "update_document": [
-    "id",
-    "content"
+    "id"
   ],
   "commit_draft": [
     "id"

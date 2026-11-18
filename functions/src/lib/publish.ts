@@ -45,6 +45,7 @@ import {
   type StoreBucket,
 } from "./blobs";
 import { safeBundleRelPath, type BundleEntry, type ExtractedBundle } from "./bundle";
+import { resolveLoose } from "./files";
 import { HEAD_SCAN_BYTES, titleFromHtml } from "./head";
 import { renderMarkdown, titleFromMarkdown } from "./markdown/render";
 import {
@@ -65,6 +66,13 @@ import {
 
 /** Access or expiry changed while bytes were uploading. */
 export type AuthorityRefusal = { status: 403 | 409; error: string; expired?: boolean };
+
+/** Loose files whose name two of the document's files share: which one is meant is not guessed. */
+export interface SharedNameRefusal {
+  status: 409;
+  error: string;
+  matches: string[];
+}
 
 /** Another version became current while this one was uploading. */
 export interface StaleRefusal {
@@ -146,6 +154,8 @@ export interface BaseBundle {
   entry: string;
   sourceEntry?: string;
   format: "html" | "markdown";
+  /** For Markdown, the renderer its page was made with, kept when the page is not what changed. */
+  rendererVersion?: string;
 }
 
 const FORMAT_NAME = { html: "HTML", markdown: "Markdown" } as const;
@@ -180,15 +190,49 @@ export function compileRevision(
   }
   if (extracted.archive) return withinCap(compileBundle(extracted, fallbackTitle), maxBytes);
 
-  const at = base.sourceEntry ?? (base.format === "markdown" ? "index.md" : base.entry);
   const sent = extracted.files.find((f) => f.rel === extracted.entry);
-  const compiled = compileBundle(
-    { files: [{ rel: at, data: sent?.data ?? Buffer.alloc(0) }], entry: at, format: extracted.format },
-    fallbackTitle,
-  );
+  return compileOverlay(base, [{ rel: pagePath(base), data: sent?.data ?? Buffer.alloc(0) }], fallbackTitle, maxBytes);
+}
+
+/** Where a document's page is: its Markdown source, or its HTML entry. */
+export function pagePath(base: Pick<BaseBundle, "entry" | "sourceEntry" | "format">): string {
+  return base.sourceEntry ?? (base.format === "markdown" ? "index.md" : base.entry);
+}
+
+/**
+ * Lay files over a version: each replaces the file at its path or is added,
+ * and every other file is carried as it is (SPEC §2, §19). The one rule behind
+ * a page sent alone, an agent's `files` and loose files dropped on a document.
+ *
+ * The page, when it is among them, is compiled as a page: a Markdown source
+ * is rendered again. A Markdown document's HTML is never laid over, because it
+ * is made from the Markdown.
+ */
+export function compileOverlay(
+  base: BaseBundle,
+  overlay: readonly BundleFile[],
+  fallbackTitle: string,
+  maxBytes: number,
+): CompiledBundle | { error: string } {
+  const at = pagePath(base);
+  if (base.format === "markdown" && overlay.some((f) => f.rel === base.entry)) {
+    return { error: `${base.entry} is made from the Markdown; send the Markdown instead` };
+  }
+  const page = overlay.find((f) => f.rel === at);
+  const compiled: CompiledBundle = page
+    ? compileBundle({ files: [{ rel: at, data: page.data }], entry: at, format: base.format }, fallbackTitle)
+    : {
+        files: [],
+        entry: base.entry,
+        format: base.format,
+        ...(base.sourceEntry ? { sourceEntry: base.sourceEntry } : {}),
+        ...(base.rendererVersion ? { rendererVersion: base.rendererVersion } : {}),
+        title: fallbackTitle,
+      };
   const byRel = new Map<string, NextFile>();
   for (const f of base.files) byRel.set(f.rel, f);
   for (const f of compiled.files) byRel.set(f.rel, f);
+  for (const f of overlay) if (f.rel !== at) byRel.set(f.rel, f);
   return withinCap({ ...compiled, files: [...byRel.values()] }, maxBytes);
 }
 
@@ -222,13 +266,20 @@ export async function reviseDocument(args: {
   docRef: admin.firestore.DocumentReference;
   baseVersion: string;
   title: string;
-  extracted: ExtractedBundle;
+  /** A whole bundle, or the page alone. */
+  extracted?: ExtractedBundle;
+  /**
+   * Files laid over the current version instead (SPEC §2, §19): at exact
+   * paths, or, `byName`, matched by name as loose files are (`resolveLoose`).
+   */
+  overlay?: { files: BundleEntry[]; byName?: boolean };
   actor: Actor;
   authorEmail: string;
   k?: string | null;
   editorsOnly?: boolean;
-}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal | { error: string }> {
-  const { docRef, baseVersion, extracted } = args;
+}): Promise<UpdateResult | PendingRefusal | AcceptedRefusal | StaleRefusal | EditingRefusal | AuthorityRefusal | SharedNameRefusal | { error: string }> {
+  const { docRef, baseVersion, extracted, overlay } = args;
+  if (!extracted === !overlay) throw new Error("reviseDocument takes a bundle or an overlay");
   const snap = baseVersion ? await docRef.collection("versions").doc(baseVersion).get() : null;
   const v = snap?.exists ? snap.data() ?? {} : null;
   const entry = typeof v?.entry === "string" ? safeBundleRelPath(v.entry) : null;
@@ -239,13 +290,27 @@ export async function reviseDocument(args: {
     entry,
     format: v.format === "markdown" ? "markdown" : "html",
     ...(sourceEntry ? { sourceEntry } : {}),
+    ...(typeof v.rendererVersion === "string" ? { rendererVersion: v.rendererVersion } : {}),
     // An archive replaces everything, so the base's files are not needed for it.
     // Otherwise they are carried: named, for a stored version, and read once
     // for a version from before files were stored once (SPEC §4).
-    files: extracted.archive ? [] : await baseFilesOf(docRef.id, baseVersion, v),
+    files: extracted?.archive ? [] : await baseFilesOf(docRef.id, baseVersion, v),
   };
 
-  const compiled = compileRevision(base, extracted, args.title, MAX_BUNDLE_BYTES);
+  let compiled: CompiledBundle | { error: string };
+  if (overlay) {
+    let files = overlay.files;
+    if (overlay.byName) {
+      const resolved = resolveLoose(base.files.map((f) => f.rel), files, base);
+      if ("matches" in resolved) {
+        return resolved.matches.length > 0 ? { status: 409, error: resolved.error, matches: resolved.matches } : { error: resolved.error };
+      }
+      files = resolved.files;
+    }
+    compiled = compileOverlay(base, files, args.title, MAX_BUNDLE_BYTES);
+  } else {
+    compiled = compileRevision(base, extracted as ExtractedBundle, args.title, MAX_BUNDLE_BYTES);
+  }
   if ("error" in compiled) return compiled;
   return commitNewVersion({
     db: args.db,

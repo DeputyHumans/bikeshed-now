@@ -10,6 +10,7 @@ import { actedThrough, isAutomated, type Actor } from "../../lib/actor";
 import {
   canEdit,
   canSuggest,
+  isDocEditor,
   expiryMs,
   isFrozen,
   isTrashed,
@@ -18,10 +19,11 @@ import {
   type DocAclData,
 } from "../../lib/acl";
 import { filedIn } from "../../lib/audience";
-import { extractBundle } from "../../lib/bundle";
+import { extractBundle, type BundleEntry, type ExtractedBundle } from "../../lib/bundle";
+import { decodeAgentFiles } from "../../lib/files";
 import { BAD_DOC_ID, isValidDocId, resolveFolderTarget, slugify } from "../../lib/folders";
 import { forkDocument, lineageFor } from "../../lib/fork";
-import { compileBundle, publishNewDocument, reviseDocument } from "../../lib/publish";
+import { compileBundle, pagePath, publishNewDocument, reviseDocument } from "../../lib/publish";
 import {
   composeReading,
   contentAddress,
@@ -52,6 +54,24 @@ import {
   lineageForAgent,
 } from "./shared";
 import type { ToolDefinition } from "./shared";
+
+const FILES_SCHEMA = {
+  type: "array",
+  description:
+    "Files beside the page, at the relative paths it references them by: a stylesheet, a script, an SVG, a small picture. " +
+    "Text files (css, js, mjs, json, svg, vtt, txt, csv, md, html, xml) go as text, as you would write them inline. " +
+    "Binary files (png, jpg, gif, webp, avif, ico, woff2, pdf, audio, video) go as base64, without a data: prefix. " +
+    "Up to 10 MB in all; anything larger is a folder for bikeshed publish.",
+  items: {
+    type: "object",
+    required: ["path", "content"],
+    properties: {
+      path: { type: "string", description: "Relative path, e.g. style.css or img/chart.png." },
+      content: { type: "string" },
+      encoding: { type: "string", enum: ["utf8", "base64"], description: "Default utf8." },
+    },
+  },
+} as const;
 
 export const DOCUMENT_TOOLS: ToolDefinition[] = [
   {
@@ -357,14 +377,16 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
     name: "publish_document",
     description:
       "Create a new document from content you supply. Markdown is rendered server-side; HTML is stored as authored. " +
+      "Put stylesheets, scripts and pictures in `files` beside the page and reference them by relative path, rather than inlining them. " +
       "The result says where it is filed and who can read it there (`filedIn`, `access`): tell the person both, with the `url`.",
     inputSchema: {
       type: "object",
       required: ["title", "content"],
       properties: {
         title: { type: "string" },
-        content: { type: "string", description: "The document source." },
+        content: { type: "string", description: "The document source: the page." },
         format: { type: "string", enum: ["markdown", "html"], description: "Default markdown." },
+        files: FILES_SCHEMA,
         folder: { type: "string", description: "Destination folder id. Optional." },
         id: {
           type: "string",
@@ -384,8 +406,13 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
       const format = args.format === "html" ? "html" : "markdown";
       const filename = format === "html" ? "index.html" : "index.md";
 
-      const extracted = extractBundle(Buffer.from(content, "utf8"), filename, MAX_BUNDLE_BYTES);
-      if ("error" in extracted) throw new Error(extracted.error);
+      const page = extractBundle(Buffer.from(content, "utf8"), filename, MAX_BUNDLE_BYTES);
+      if ("error" in page) throw new Error(page.error);
+      // The page and the files beside it make the bundle (SPEC §19).
+      const sent = decodeAgentFiles(args.files, { entry: "index.html", format, ...(format === "markdown" ? { sourceEntry: "index.md" } : {}) });
+      if ("error" in sent) throw new Error(sent.error);
+      const extracted = { ...page, files: [...page.files, ...sent.files] };
+      if (extracted.files.reduce((n, f) => n + f.data.length, 0) > MAX_BUNDLE_BYTES) throw new Error("bundle is too large");
 
       const target = await resolveFolderTarget(ctx.db, args.folder, ctx.caller);
       if (!target.ok) throw new Error(target.error);
@@ -500,16 +527,18 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
     name: "update_document",
     description:
       "Publish a new version of an existing document. Identical content is a no-op, so this is safe to retry. " +
+      "Send `content` to replace the page, `files` to replace or add files beside it at their paths, or both; every other file is kept, so send only what changed. " +
       "Pass the `baseVersion` you read and revised: if somebody has published since, the update is refused and names the current version, " +
       "instead of replacing their work. `threadsLeftBehind` counts the open threads that stay on the version this replaces. " +
       'An HTML document takes HTML: revise what get_document returns with as: "source", never its Markdown reading. ' +
       "Refused while somebody has the document open in the editor.",
     inputSchema: {
       type: "object",
-      required: ["id", "content"],
+      required: ["id"],
       properties: {
         id: { type: "string" },
-        content: { type: "string" },
+        content: { type: "string", description: "The page's new source. Optional when files are sent." },
+        files: FILES_SCHEMA,
         baseVersion: {
           type: "string",
           description: "The version your content was revised from, e.g. v3, as get_document reported it. Recommended.",
@@ -530,8 +559,15 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
         );
       }
       refuseIfFrozen(data);
-      const content = String(args.content ?? "");
-      if (!content.trim()) throw new Error("content is empty");
+      const content = args.content === undefined ? null : String(args.content);
+      const sendsFiles = Array.isArray(args.files) && args.files.length > 0;
+      if (content === null && !sendsFiles) throw new Error("send content, files, or both");
+      if (content !== null && !content.trim()) throw new Error("content is empty");
+      // Changing what a document is made of is its editors' own (SPEC §19), as
+      // a bundle upload is: open editing exists for correcting text in place.
+      if (sendsFiles && !isDocEditor(data, ctx.caller.uid, ctx.caller.emailLower)) {
+        throw new Error("only the document's editors can change its files; you can change its text by sending content alone");
+      }
 
       const baseVersion = String(data.currentVersion ?? "");
       // Optional, so an older client keeps working; absent, the update replaces
@@ -549,27 +585,44 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
       // The reading get_document hands out by default is Markdown. Sent back
       // here it would be published AS index.html, the document's whole page
       // replaced by its own summary, so text without a tag is refused.
-      if (format === "html" && !LOOKS_LIKE_HTML.test(content)) {
+      if (content !== null && format === "html" && !LOOKS_LIKE_HTML.test(content)) {
         throw new Error(
           "this is an HTML document and that content has no HTML in it, so it looks like the Markdown reading get_document returns, which is not the source. " +
             'Read the source with get_document and as: "source" (or bikeshed get --source), revise that, and send it back',
         );
       }
 
-      const extracted = extractBundle(Buffer.from(content, "utf8"), filename, MAX_BUNDLE_BYTES);
-      if ("error" in extracted) throw new Error(extracted.error);
-
-      // The sent file replaces the entry; the files beside it are carried
-      // forward, exactly as an in-app commit does (SPEC §19).
+      const v = vSnap.data() ?? {};
+      const slots = {
+        entry: String(v.entry ?? "index.html"),
+        format,
+        ...(typeof v.sourceEntry === "string" ? { sourceEntry: v.sourceEntry } : format === "markdown" ? { sourceEntry: "index.md" } : {}),
+      } as const;
+      const sent = decodeAgentFiles(args.files, slots);
+      if ("error" in sent) throw new Error(sent.error);
+      let input: { extracted: ExtractedBundle } | { overlay: { files: BundleEntry[] } };
+      if (sendsFiles) {
+        // The page, when sent, and the files, each at its path; every other
+        // file is carried as it is (SPEC §19).
+        const pageFile = content === null ? [] : [{ rel: pagePath(slots), data: Buffer.from(content, "utf8") }];
+        input = { overlay: { files: [...pageFile, ...sent.files] } };
+      } else {
+        const extracted = extractBundle(Buffer.from(content ?? "", "utf8"), filename, MAX_BUNDLE_BYTES);
+        if ("error" in extracted) throw new Error(extracted.error);
+        // The sent file replaces the entry; the files beside it are carried
+        // forward, exactly as an in-app commit does (SPEC §19).
+        input = { extracted };
+      }
       const committed = await reviseDocument({
         db: ctx.db,
         docRef: ref,
         baseVersion,
         title: String(data.title ?? ref.id),
-        extracted,
+        ...input,
         actor: ctx.actor,
         authorEmail: ctx.caller.emailLower,
         k: proof.k,
+        ...(sendsFiles ? { editorsOnly: true } : {}),
       });
       if ("error" in committed) throw new Error(committed.error);
       // A comment thread stays on the version it was opened on, and this path

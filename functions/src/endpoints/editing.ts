@@ -31,7 +31,7 @@ import {
   strParam,
 } from "../lib/http";
 import { db, bucket, refusal, PLAIN } from "./runtime";
-import { setScriptLock, streamObject } from "./content";
+import { redirectToMedia, setScriptLock, streamObject } from "./content";
 
 // ---------------------------------------------------------------------------
 // Inline editing: draft, draft read-back, commit
@@ -269,11 +269,14 @@ export const getDraft = onRequest(PLAIN, async (req, res) => {
     }
   }
 
+  // A video or a recording the version holds plays in the editor as it does
+  // for readers, from a short-lived Storage link (SPEC §24).
+  if (await redirectToMedia(res, objectKey, relPath)) return;
   res.setHeader("Cache-Control", "private, no-store");
   // A draft's script never runs, for anyone: any editor may have written it,
   // and it is nobody's published word yet (ADR 0021).
   setScriptLock(res, relPath, { asked: false, granted: false });
-  streamObject(res, objectKey, relPath, req.method === "HEAD", true);
+  await streamObject(res, objectKey, relPath, req.method === "HEAD", true);
 });
 
 /**
