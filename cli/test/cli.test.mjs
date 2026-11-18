@@ -1278,6 +1278,22 @@ test("comments prints a suggestion's change and whether it is decided", async ()
   });
 });
 
+test("comments prints the link that opens the document on each thread, when the server gives one", async () => {
+  const answer = {
+    id: "plan",
+    version: "v3",
+    threads: [
+      { threadId: "t1", url: "https://bikeshed.example/d/plan/v3#comment=t1", quote: "a single weekend", section: "", resolved: false, comments: [] },
+      { threadId: "t2", quote: "very", section: "", resolved: false, comments: [] },
+    ],
+  };
+  await withServer(rpcOk(answer), async (origin) => {
+    const { stdout } = await runAsync(["comments", "plan"], { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" });
+    assert.match(stdout, /── t1\n   https:\/\/bikeshed\.example\/d\/plan\/v3#comment=t1\n   “a single weekend”/);
+    assert.match(stdout, /── t2\n   “very”/, "a thread with no link prints none");
+  });
+});
+
 test("revise and withdraw send the thread, the change, and the link's key", async () => {
   await withServer(rpcOk({ threadId: "s1", version: "v1", state: "pending" }), async (origin, seen) => {
     const env = { BIKESHED_ORIGIN: origin, BIKESHED_TOKEN: "bsk_a.b" };

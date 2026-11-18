@@ -644,6 +644,8 @@ async function comments(flags, [ref]) {
       // The QUOTE first, because it is what makes a comment actionable: it says
       // which passage to change without opening the document.
       console.log(`\n── ${thread.threadId}${thread.section ? `  (${thread.section})` : ""}`);
+      // Where a person opens the document on this thread, to hand back with it.
+      if (thread.url) console.log(`   ${thread.url}`);
       if (thread.quote) console.log(`   “${thread.quote}”`);
       // A suggested edit says what the passage would become, whether it is
       // still open, and what its author proposed before changing it (SPEC §22).
