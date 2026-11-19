@@ -6,7 +6,7 @@ import { safeBundleRelPath } from "./bundle";
 import { safeRelPath, safeSegment } from "./http";
 
 /**
- * Two layouts, read for ever (SPEC §4, ADR 0036).
+ * Two layouts, read for ever (SPEC §4, ADR 0037).
  *
  *   - **Prefix.** Versions minted before stored files each own a prefix,
  *     `docs/{id}/{versionId}`, `docs/{id}/v1` or `docs/{id}/bundles/{uuid}`,

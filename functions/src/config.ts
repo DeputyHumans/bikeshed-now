@@ -16,7 +16,7 @@ export const SESSION_COOKIE_NAME = "__session";
 export const MAX_BUNDLE_BYTES = 25 * 1024 * 1024;
 
 /**
- * The most one picture, film or recording may be (SPEC §24, ADR 0037). It is
+ * The most one picture, film or recording may be (SPEC §24, ADR 0038). It is
  * sent straight to Storage through an upload session, never in a request
  * body, which Cloud Run caps at 32 MiB and Hosting cuts at 60 s.
  */

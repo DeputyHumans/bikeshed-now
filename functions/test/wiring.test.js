@@ -45,7 +45,7 @@ test("SPEC §2's table lists every rewrite and trigger, in order", async () => {
 
 /**
  * A version's files are in its own prefix (older versions) or the document's
- * stored files (SPEC §4, ADR 0036). Every reader asks `versionObjectKey` or
+ * stored files (SPEC §4, ADR 0037). Every reader asks `versionObjectKey` or
  * `versionFiles`, so none of them can read a stored version as if it had a
  * prefix. Only a draft, which still owns one, may be addressed by prefix, and
  * only `storage.ts` and the base reader in `blobs.ts` turn a version into one.

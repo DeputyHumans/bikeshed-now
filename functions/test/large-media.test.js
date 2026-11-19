@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Large media go straight to Storage through a session, are checked before a version names them, and download by a link (SPEC §2, §24, ADR 0037).
+// Large media go straight to Storage through a session, are checked before a version names them, and download by a link (SPEC §2, §24, ADR 0038).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");

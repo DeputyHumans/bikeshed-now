@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Video and audio reach a reader by a short-lived Storage link, once the proxy has decided they may (SPEC §2, §24, ADR 0036).
+// Video and audio reach a reader by a short-lived Storage link, once the proxy has decided they may (SPEC §2, §24, ADR 0037).
 
 /**
  * Why a link, and not the proxy's own stream
@@ -15,7 +15,7 @@
  * The link lives ten minutes, names the type the file is served as (so what
  * the object's own metadata says never matters) and asks to be shown inline.
  * It is never logged. The redirect is `private, no-store`, because a cached
- * redirect would outlive its link. What a link costs is stated in ADR 0036: a
+ * redirect would outlive its link. What a link costs is stated in ADR 0037: a
  * reader whose access is withdrawn can still finish fetching a link they
  * already hold, for at most those ten minutes.
  *

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Large media go straight to Storage through a server-issued session, and are checked before a version names them (SPEC §2, §24, ADR 0037).
+// Large media go straight to Storage through a server-issued session, and are checked before a version names them (SPEC §2, §24, ADR 0038).
 
 /**
  * Why sessions, and what keeps them honest

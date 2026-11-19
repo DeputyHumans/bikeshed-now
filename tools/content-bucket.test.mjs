@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The content bucket deletes staged uploads and built downloads after a day, and keeps every rule it had (SPEC §24, ADR 0037).
+// The content bucket deletes staged uploads and built downloads after a day, and keeps every rule it had (SPEC §24, ADR 0038).
 
 import test from "node:test";
 import assert from "node:assert/strict";

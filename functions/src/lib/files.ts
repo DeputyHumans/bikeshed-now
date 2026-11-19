@@ -3,7 +3,7 @@
 
 /**
  * A document is a page and the files it uses: stylesheets, scripts, fonts,
- * pictures, video, audio, captions (SPEC §24, ADR 0036). Three ways bring
+ * pictures, video, audio, captions (SPEC §24, ADR 0037). Three ways bring
  * files into a version without a whole new bundle, and this module is the
  * rule each follows:
  *

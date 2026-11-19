@@ -1,10 +1,10 @@
-# 0035 — A version lists its files, and each file is stored once per document
+# 0036 — A version lists its files, and each file is stored once per document
 
 **Status** Accepted · **Spec** §2, §4, §8, §9, §9.1, §19, §21 · **Amends** [0033](0033-a-reading-is-kept-once-made.md) (what a kept reading is named by)
 
 ## Context
 
-Every version owned a prefix holding a full copy of every file. Changing one picture in a deck meant reading every file back into memory, uploading every one of them again, and keeping a second copy of each, so two versions of a 20 MB deck cost 40 MB. Every minting path worked this way: an update through a token, the in-app commit, an agent's commit and a fork. That was tolerable under a 25 MB cap. It stops being tolerable when a document carries its own video (ADR 0037), when stylesheets, scripts and pictures move out of the page into files beside it (ADR 0036), and when an agent revises a document dozens of times a day.
+Every version owned a prefix holding a full copy of every file. Changing one picture in a deck meant reading every file back into memory, uploading every one of them again, and keeping a second copy of each, so two versions of a 20 MB deck cost 40 MB. Every minting path worked this way: an update through a token, the in-app commit, an agent's commit and a fork. That was tolerable under a 25 MB cap. It stops being tolerable when a document carries its own video (ADR 0038), when stylesheets, scripts and pictures move out of the page into files beside it (ADR 0037), and when an agent revises a document dozens of times a day.
 
 The content hash had the same shape. SPEC §9.1 hashed every byte of every file, so even a version that copied nothing would have read all of its files to be minted.
 

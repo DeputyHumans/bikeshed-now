@@ -1,6 +1,6 @@
-# 0036 — A page's files sit beside it; video and audio go by a short-lived Storage link
+# 0037 — A page's files sit beside it; video and audio go by a short-lived Storage link
 
-**Status** Accepted · **Spec** §0, §2, §17, §19, §24 · **Builds on** [0035](0035-a-version-lists-its-files-each-stored-once.md) (each file stored once)
+**Status** Accepted · **Spec** §0, §2, §17, §19, §24 · **Builds on** [0036](0036-a-version-lists-its-files-each-stored-once.md) (each file stored once)
 
 ## Context
 
@@ -8,7 +8,7 @@ A document could already hold files beside its page, but almost nothing put them
 
 Video was worse. `/content` streamed every file whole and answered no `Range` request, so a browser could not seek, and Safari will not play a video served that way at all. Hosting also cuts any function response at 60 s, which a film on a slow connection outlasts.
 
-ADR 0035 made a file beside the page cheap: it is stored once, and a version that changes one file writes one object. This ADR decides how files get there and how they reach a reader.
+ADR 0036 made a file beside the page cheap: it is stored once, and a version that changes one file writes one object. This ADR decides how files get there and how they reach a reader.
 
 ## Decision
 

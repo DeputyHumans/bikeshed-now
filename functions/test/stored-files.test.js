@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// A version lists its files, and each file's bytes are stored once per document (SPEC §4, §9.1, ADR 0036).
+// A version lists its files, and each file's bytes are stored once per document (SPEC §4, §9.1, ADR 0037).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");

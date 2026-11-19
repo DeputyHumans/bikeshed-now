@@ -326,7 +326,7 @@ async function serverSnapshot(docId) {
     : null;
   // Only an older version and the draft select a prefix under bundles/; a
   // version that lists its files names stored files under blobs/ instead,
-  // which are never deleted for a refused attempt (ADR 0035), so they are not
+  // which are never deleted for a refused attempt (ADR 0036), so they are not
   // what this inventory is about.
   const selected = versions.filter((v) => v.layout !== "blobs").map((v) => `${v.storagePrefix ?? `docs/${docId}/${v.id}`}/`);
   if (d?.draft) selected.push(`${draftStoragePrefix(docId, d.draft)}/`);

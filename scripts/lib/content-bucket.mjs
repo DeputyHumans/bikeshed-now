@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The content bucket's lifecycle rule: staged uploads and built downloads go after a day (SPEC §4, §24, ADR 0037).
+// The content bucket's lifecycle rule: staged uploads and built downloads go after a day (SPEC §4, §24, ADR 0038).
 
 /**
  * Two prefixes in the content bucket hold what nothing names for long:

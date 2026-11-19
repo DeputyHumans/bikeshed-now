@@ -162,7 +162,7 @@ An agent reads `get_changes` as its owner. The log could otherwise hand a reader
 
 ### A media link outlives the access that minted it
 
-**Attack.** Video and audio reach a reader through a V4 signed Storage link rather than the proxy's stream (SPEC §24, [ADR 0036](adr/0036-a-pages-files-sit-beside-it.md)), and so does a download over 25 MB ([ADR 0037](adr/0037-large-media-go-straight-to-storage.md)). A link is a bearer credential: whoever holds it reads that object, whoever they are, until it expires. A cached or logged redirect would hand it on.
+**Attack.** Video and audio reach a reader through a V4 signed Storage link rather than the proxy's stream (SPEC §24, [ADR 0037](adr/0037-a-pages-files-sit-beside-it.md)), and so does a download over 25 MB ([ADR 0038](adr/0038-large-media-go-straight-to-storage.md)). A link is a bearer credential: whoever holds it reads that object, whoever they are, until it expires. A cached or logged redirect would hand it on.
 
 **Mitigation.** A link is minted only after every check the proxy makes for any other file — the caller, the ACL, expiry, the link key — and names exactly one object, the type it is served as and inline display. It lives ten minutes. It is never logged. The redirect that carries it is `private, no-store`, set after everything else, so no shared cache keeps it. Signing is the runtime's own identity through IAM signBlob, which it already held for session cookies, so the change granted nothing.
 
@@ -178,7 +178,7 @@ An agent reads `get_changes` as its owner. The log could otherwise hand a reader
 
 ### A version names bytes it should not
 
-**Attack.** Each file is stored once per document and versions name what they hold (SPEC §4, ADR 0035), so a version's record is a pointer. If a record could name another document's files, a reader of one document could be served another's bytes. If withdrawing a version deleted a file a newer version still names, a reader would get a hole where a picture was.
+**Attack.** Each file is stored once per document and versions name what they hold (SPEC §4, ADR 0036), so a version's record is a pointer. If a record could name another document's files, a reader of one document could be served another's bytes. If withdrawing a version deleted a file a newer version still names, a reader would get a hole where a picture was.
 
 **Mitigation.** Only the Admin SDK writes version records, and the key of a stored file is always built from the document the record sits under, never from the record: `blobKey(docId, sha256)` takes the document's id from the path, and the hash must be 64 hex characters. A record whose arrays disagree in length, repeat a path, carry an unsafe path or a malformed digest names no file at all. Files are scoped to their document, so no account can learn whether some bytes exist in a document it cannot read. Withdrawal reads every version in the transaction that repoints the head, deletes only the files no other version names, and marks them first so that a publish racing it cannot start naming one.
 
@@ -186,7 +186,7 @@ An agent reads `get_changes` as its owner. The log could otherwise hand a reader
 
 ### A large upload is used to name, swap or pile up bytes
 
-**Attack.** A picture, film or recording over 25 MB goes straight to Storage through a resumable session, and the publish names it afterwards (SPEC §2 `POST /media`, §24, [ADR 0037](adr/0037-large-media-go-straight-to-storage.md)). So the object a version will hold is written by a client, not a function. A caller could name somebody else's staged upload, or one made for another document; send more than they declared; swap the bytes at the staged name between the check and the copy; name a hash the document does not store to borrow another document's bytes; or open session after session to fill the bucket. The session URL is a bearer credential while it lives.
+**Attack.** A picture, film or recording over 25 MB goes straight to Storage through a resumable session, and the publish names it afterwards (SPEC §2 `POST /media`, §24, [ADR 0038](adr/0038-large-media-go-straight-to-storage.md)). So the object a version will hold is written by a client, not a function. A caller could name somebody else's staged upload, or one made for another document; send more than they declared; swap the bytes at the staged name between the check and the copy; name a hash the document does not store to borrow another document's bytes; or open session after session to fill the bucket. The session URL is a bearer credential while it lives.
 
 **Mitigation.**
 - **Only your own, only what you declared.** A session is opened only for a signed-in caller, on `staging/{uid}/{uuid}` under their own uid, and for an existing document only by one of its editors on an unfrozen document. The publish looks a staging id up under the caller's uid alone, so another account's uploads cannot be named. The session declares the type and the length, and Storage refuses a byte past it; it is create-only, so a second object cannot replace the first.

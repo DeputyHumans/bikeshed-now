@@ -206,7 +206,7 @@ function main() {
   );
 
   // Staged uploads and built downloads are removed by the bucket a day after
-  // they are made (SPEC §24, ADR 0037).
+  // they are made (SPEC §24, ADR 0038).
   ensureContentLifecycle({ project: projectId, bucket, account: ACCOUNT, dryRun: DRY });
 
   if (mediaBucket) {

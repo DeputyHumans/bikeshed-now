@@ -307,7 +307,7 @@ Make a folder `talk/` holding `index.html` with `<link rel="stylesheet" href="st
 4. Drop the same picture again: *No changes — it’s identical to v2.*
 5. Delete `img/chart.png` from the folder and drop the folder on the open document. Before anything is sent, the dialog warns that the folder becomes the whole next version and removes `img/chart.png`. Publish: the message counts 3 unchanged and 1 removed.
 
-Large media are not proven here. A film over 25 MB goes up through a Storage session, and its link, its download and the bucket's lifecycle rule are Storage's and IAM's; the emulator is not evidence for any of them ([ADR 0037](../architecture/adr/0037-large-media-go-straight-to-storage.md)). Unit tests stand in for Storage (`functions/test/large-media.test.js`, `cli/test/media.test.mjs`), and the checks after a deploy are in `docs/operations/overview.md`, "Upgrading".
+Large media are not proven here. A film over 25 MB goes up through a Storage session, and its link, its download and the bucket's lifecycle rule are Storage's and IAM's; the emulator is not evidence for any of them ([ADR 0038](../architecture/adr/0038-large-media-go-straight-to-storage.md)). Unit tests stand in for Storage (`functions/test/large-media.test.js`, `cli/test/media.test.mjs`), and the checks after a deploy are in `docs/operations/overview.md`, "Upgrading".
 
 ## Automated: `npm run test:e2e`
 

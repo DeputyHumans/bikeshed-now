@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// A version's files stored once per document, for the operator scripts (SPEC §4, ADR 0036).
+// A version's files stored once per document, for the operator scripts (SPEC §4, ADR 0037).
 
 /**
  * The ESM side of `functions/src/lib/storage.ts`: what a stored-layout record

@@ -529,7 +529,7 @@ async function readHaves(docId: string, haves: readonly string[]): Promise<{ fil
 
 /**
  * POST /media — a session to send one large picture, film or recording
- * straight to Storage (SPEC §2, §24, ADR 0037). `{docId?, k?, path, size,
+ * straight to Storage (SPEC §2, §24, ADR 0038). `{docId?, k?, path, size,
  * sha256?}`. With `docId`, only an editor of that document may open one, and
  * a `sha256` the document already stores answers `{have: true}`: nothing
  * needs sending. Without it, the session is for a document not made yet.
@@ -586,7 +586,7 @@ async function openMediaSession(req: Request, res: import("express").Response, c
   });
   // The Storage emulator finishes a resumable upload at its first PUT, so
   // there the file goes in one; chunks and resuming are proven only on a
-  // real bucket (ADR 0037).
+  // real bucket (ADR 0038).
   res.status(200).json({ ...session, chunkBytes: isEmulated() ? MAX_MEDIA_FILE_BYTES : UPLOAD_CHUNK_BYTES });
 }
 

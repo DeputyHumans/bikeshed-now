@@ -39,11 +39,11 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0030](0030-agents-read-a-markdown-reading.md) | Agents read an HTML document as a Markdown reading made on read | Accepted |
 | [0031](0031-a-document-can-be-embedded-in-another-site.md) | A document can be embedded in another site | Accepted |
 | [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) | A reading separates text that touches, and a quote may carry the space | Accepted |
-| [0033](0033-a-reading-is-kept-once-made.md) | A version's reading is kept once made, named by its bytes | Amended by 0035 |
+| [0033](0033-a-reading-is-kept-once-made.md) | A version's reading is kept once made, named by its bytes | Amended by 0036 |
 | [0034](0034-a-reading-is-made-within-a-budget.md) | A reading is made in a worker, within a time and memory budget | Accepted |
-| [0035](0035-a-version-lists-its-files-each-stored-once.md) | A version lists its files, and each file is stored once per document | Accepted |
-| [0036](0036-a-pages-files-sit-beside-it.md) | A page's files sit beside it; video and audio go by a short-lived Storage link | Accepted |
-| [0037](0037-large-media-go-straight-to-storage.md) | Large media go straight to Storage through a server-issued session | Accepted |
+| [0036](0036-a-version-lists-its-files-each-stored-once.md) | A version lists its files, and each file is stored once per document | Accepted |
+| [0037](0037-a-pages-files-sit-beside-it.md) | A page's files sit beside it; video and audio go by a short-lived Storage link | Accepted |
+| [0038](0038-large-media-go-straight-to-storage.md) | Large media go straight to Storage through a server-issued session | Accepted |
 
 ## Format
 

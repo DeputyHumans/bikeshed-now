@@ -74,7 +74,7 @@ test('withdrawal advances the epoch in both views and captures only the retired 
   assert.equal(store.get('public/d').fileCount, 1);
 });
 
-// A version that lists its files owns no prefix (SPEC §4, ADR 0035).
+// A version that lists its files owns no prefix (SPEC §4, ADR 0036).
 const hex = (c) => c.repeat(64);
 const listed = (files, attempt) => ({ entry: 'index.html', format: 'html', layout: 'blobs', attempt,
   files: files.map(([rel]) => rel), hashes: files.map(([, h]) => h), sizes: files.map(() => 1), publishedAt: null });

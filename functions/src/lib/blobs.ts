@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// A version's file list, and each file's bytes stored once per document (SPEC §4, §9.1, ADR 0036).
+// A version's file list, and each file's bytes stored once per document (SPEC §4, §9.1, ADR 0037).
 
 /**
  * Why a version is a list
