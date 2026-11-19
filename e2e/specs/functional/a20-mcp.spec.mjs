@@ -991,6 +991,7 @@ scenario("A20.2.get_comments returns each unresolved thread with its quote and c
   const d = await publishDoc(o, "comments");
   await shareAs(o, d.id, v, "viewer");
   const first = await ok(v, "add_comment", { id: d.id, exact: "quick brown fox", body: "First thread." });
+  assert.equal(first.threadUrl, `${url(d.id)}/v1#comment=${first.threadId}`, "add_comment says where the thread opens");
   const r1 = await ok(o, "get_comments", { id: d.id });
   assert.deepEqual(
     { ...r1, threads: r1.threads.map((t) => ({ ...t, comments: t.comments.map((c) => ({ ...c, id: typeof c.id, at: typeof c.at })) })) },
@@ -1002,7 +1003,8 @@ scenario("A20.2.get_comments returns each unresolved thread with its quote and c
       canComment: true,
       url: url(d.id),
       truncated: false,
-      threads: [{ threadId: first.threadId, quote: "quick brown fox", section: "", resolved: false, awaitingReply: false, comments: [{ id: "string", at: "string", author: v.email, channel: "mcp", via: `personal token “e2e a20 ${v.acct.role}”`, body: "First thread." }] }],
+      // Each thread's address opens the document on it, on the version it belongs to (SPEC §6e).
+      threads: [{ threadId: first.threadId, url: `${url(d.id)}/v1#comment=${first.threadId}`, quote: "quick brown fox", section: "", resolved: false, awaitingReply: false, comments: [{ id: "string", at: "string", author: v.email, channel: "mcp", via: `personal token “e2e a20 ${v.acct.role}”`, body: "First thread." }] }],
     },
     "get_comments with one agent's thread (an agent's comment awaits no reply)",
   );

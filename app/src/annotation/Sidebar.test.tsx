@@ -2,7 +2,7 @@
 // A reply posts once, and a suggestion offers only what its reader may do (SPEC §6, §22).
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import type { Annotation } from "../types";
 
@@ -400,4 +400,58 @@ it("an archive keeps feedback visible while removing every mutation, including a
   }
   expect(screen.queryByPlaceholderText("Reply")).toBeNull();
   expect(addComment).not.toHaveBeenCalled();
+});
+
+describe("a link to a thread", () => {
+  const RESOLVED = { ...THREAD, annId: "done", resolved: true, anchor: { exact: "a settled passage" } } as Annotation;
+  const base = {
+    docId: "d1", versionId: "v1", orphaned: [], canComment: true, signedIn: true, peers: [], uid: "u1",
+    emailLower: "me@example.com", onSelect: () => {}, onComposing: () => {}, onSignIn: () => {}, onClose: () => {},
+  };
+
+  it("is copied from the thread, which it does not select", () => {
+    const onCopyLink = vi.fn();
+    const onSelect = vi.fn();
+    render(<ToastProvider><Sidebar {...base} annotations={[THREAD]} selectedId={null} onCopyLink={onCopyLink} onSelect={onSelect} /></ToastProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Copy link to this comment" }));
+    expect(onCopyLink).toHaveBeenCalledWith("a1");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("is still offered where nobody may reply: an archived version", () => {
+    const onCopyLink = vi.fn();
+    render(<ToastProvider><Sidebar {...base} readOnly annotations={[THREAD]} selectedId={null} onCopyLink={onCopyLink} /></ToastProvider>);
+    expect(screen.queryByPlaceholderText("Reply")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Copy link to this comment" }));
+    expect(onCopyLink).toHaveBeenCalledWith("a1");
+  });
+
+  it("shows a resolved thread a link opened, though resolved threads are hidden until asked for", () => {
+    // A selected thread scrolls itself into view, which jsdom does not implement.
+    const proto = HTMLElement.prototype as { scrollIntoView?: unknown };
+    const had = proto.scrollIntoView;
+    proto.scrollIntoView = vi.fn();
+    onTestFinished(() => {
+      if (had) proto.scrollIntoView = had;
+      else delete proto.scrollIntoView;
+    });
+    const view = render(<ToastProvider><Sidebar {...base} annotations={[THREAD, RESOLVED]} selectedId={null} /></ToastProvider>);
+    expect(screen.queryByText("a settled passage")).toBeNull();
+    view.rerender(<ToastProvider><Sidebar {...base} annotations={[THREAD, RESOLVED]} selectedId="done" reveal="done" /></ToastProvider>);
+    expect(screen.getByText("a settled passage")).toBeTruthy();
+  });
+
+  it("still hides a thread resolved while it is selected, as Resolve always has", () => {
+    const proto = HTMLElement.prototype as { scrollIntoView?: unknown };
+    const had = proto.scrollIntoView;
+    proto.scrollIntoView = vi.fn();
+    onTestFinished(() => {
+      if (had) proto.scrollIntoView = had;
+      else delete proto.scrollIntoView;
+    });
+    const view = render(<ToastProvider><Sidebar {...base} annotations={[THREAD]} selectedId="a1" /></ToastProvider>);
+    expect(screen.getByText("the passage")).toBeTruthy();
+    view.rerender(<ToastProvider><Sidebar {...base} annotations={[{ ...THREAD, resolved: true }]} selectedId="a1" /></ToastProvider>);
+    expect(screen.queryByText("the passage")).toBeNull();
+  });
 });

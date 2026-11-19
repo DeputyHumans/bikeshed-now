@@ -1,8 +1,8 @@
 --- a/app/src/presence.ts
 +++ b/app/src/presence.ts
-@@ -189,7 +189,7 @@
+@@ -241,7 +241,7 @@
        pushFocus.cancel();
-       pushViewport.cancel();
+       pushView.cancel();
        unsubConn();
 -      void remove(meRef).catch(() => {});
 +      // Negative control: retain the session after its page leaves.

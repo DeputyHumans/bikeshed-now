@@ -104,6 +104,8 @@
   gap: var(--s-1);
   margin-top: var(--s-2);
 }
+/* The link to a thread sits at the end of its row, apart from what changes it. */
+.thread-link { margin-left: auto; }
 
 /* "Ana is replying…" — driven by the peer's `composing` field, so a thread
    shows that somebody is already answering before they finish typing. */

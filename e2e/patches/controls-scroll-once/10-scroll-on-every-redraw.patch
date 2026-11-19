@@ -1,11 +1,11 @@
---- a/app/src/viewer/useAnnotationLayer.ts
-+++ b/app/src/viewer/useAnnotationLayer.ts
-@@ -133,7 +133,7 @@
-     }
-     // Not while the frame is hidden. Its box measures zero, so every passage looks
+--- a/app/src/viewer/useTarget.ts
++++ b/app/src/viewer/useTarget.ts
+@@ -114,7 +114,7 @@
      // in view and the jump would be used up; this waits for the frame to come back.
--    if (!enabled || !doc || !frameShown || scrolledTo.current === selectedId) return;
-+    if (!enabled || !doc || !frameShown) return;
-     const wrapper = Array.from(doc.querySelectorAll(HL_SELECTOR)).find(
-       (el) => el.getAttribute(ANN_ATTR) === selectedId,
-     );
+     // Nor before the deck has measured this document, or a passage on a slide
+     // would be scrolled to as if the document had no pages.
+-    if (!enabled || !doc || !frameShown || measuredEpoch !== epoch || revealed.current === selectedId) return;
++    if (!enabled || !doc || !frameShown || measuredEpoch !== epoch) return;
+     const node = passageOf(doc, annotations, selectedId);
+     if (!node) return;
+     revealed.current = selectedId;

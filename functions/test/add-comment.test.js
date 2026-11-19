@@ -272,3 +272,63 @@ test("publication between transaction read and commit retries comment admission 
   assert.equal(w.anns().length, 0);
   assert.equal(w.comments().length, 0);
 });
+
+test("every thread, new or answered, says where a person opens the document on it", async () => {
+  // A thread belongs to its version, so its address always names it (SPEC §6e).
+  const previous = process.env.BIKESHED_PUBLIC_ORIGIN;
+  process.env.BIKESHED_PUBLIC_ORIGIN = "https://example.test";
+  try {
+    const w = world();
+    const added = await withBucket(() =>
+      tool("add_comment").run(w.ctx(VIEWER), { id: "d1", exact: "Payments moves last.", body: "Why last?" }),
+    );
+    const at = `https://example.test/d/d1/v1#comment=${added.threadId}`;
+    assert.equal(added.threadUrl, at);
+    assert.equal(added.url, "https://example.test/d/d1", "url still says where the document is");
+
+    const { threads } = await tool("get_comments").run(w.ctx(OWNER), { id: "d1" });
+    assert.equal(threads[0].url, at);
+
+    const replied = await tool("reply_to_comment").run(w.ctx(OWNER), { id: "d1", threadId: added.threadId, body: "Because." });
+    assert.equal(replied.threadUrl, at);
+  } finally {
+    if (previous === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
+    else process.env.BIKESHED_PUBLIC_ORIGIN = previous;
+  }
+});
+
+test("a thread reached by a document's link carries its key, and an unconfigured deployment gives no address", async () => {
+  const LINK = "tok_0123456789abcdefghijk";
+  const previous = process.env.BIKESHED_PUBLIC_ORIGIN;
+  process.env.BIKESHED_PUBLIC_ORIGIN = "https://example.test";
+  try {
+    const w = world();
+    const added = await withBucket(() =>
+      tool("add_comment").run(w.ctx(VIEWER), { id: "d1", exact: "Payments moves last.", body: "Why?" }),
+    );
+    const { threads } = await tool("get_comments").run(w.ctx(OWNER), { id: "d1", k: LINK });
+    assert.equal(threads[0].url, `https://example.test/d/d1/v1?k=${LINK}#comment=${added.threadId}`);
+  } finally {
+    if (previous === undefined) delete process.env.BIKESHED_PUBLIC_ORIGIN;
+    else process.env.BIKESHED_PUBLIC_ORIGIN = previous;
+  }
+
+  const saved = { origin: process.env.BIKESHED_PUBLIC_ORIGIN, gcloud: process.env.GCLOUD_PROJECT, google: process.env.GOOGLE_CLOUD_PROJECT };
+  delete process.env.BIKESHED_PUBLIC_ORIGIN;
+  delete process.env.GCLOUD_PROJECT;
+  delete process.env.GOOGLE_CLOUD_PROJECT;
+  try {
+    const w = world();
+    const added = await withBucket(() =>
+      tool("add_comment").run(w.ctx(VIEWER), { id: "d1", exact: "Payments moves last.", body: "Why?" }),
+    );
+    assert.ok(!("threadUrl" in added));
+    const { threads } = await tool("get_comments").run(w.ctx(OWNER), { id: "d1" });
+    assert.ok(!("url" in threads[0]));
+  } finally {
+    for (const [key, value] of [["BIKESHED_PUBLIC_ORIGIN", saved.origin], ["GCLOUD_PROJECT", saved.gcloud], ["GOOGLE_CLOUD_PROJECT", saved.google]]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

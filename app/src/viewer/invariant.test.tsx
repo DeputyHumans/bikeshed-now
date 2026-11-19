@@ -87,7 +87,8 @@ vi.mock("../presence", async () => {
     joinPresence: () => ({
       setMode: () => {},
       setFocus: () => {},
-      setViewport: () => {},
+      setView: () => {},
+      setSlide: () => {},
       setComposing: () => {},
       leave: () => {},
     }),

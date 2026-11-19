@@ -38,6 +38,26 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 - **A file that is not there is a 404 that nobody caches.** A HEAD answered 200 for any path, and a missing file at a public document's address answered 404 with `public, max-age` already set, so a shared cache could keep the 404 for five minutes. A HEAD now asks whether the file exists, at no cost when the version's list knows it, and every refusal is `private, no-store`.
 - **Sizes read as megabytes.** The dropzone showed a 200 MB file as "204800 KB".
 
+## 0.39.1 — 2026-11-18
+
+### Fixed
+
+- **Pressing a person's name takes you to where they are, even before they have moved.** A reader's place was shared only once they scrolled or changed slide, so following someone who had just opened the document, or who had stayed at its top, did nothing. It is now shared the moment the document opens, and again, with the slide, whenever their presence record is made anew, such as after somebody publishes (SPEC §16).
+
+## 0.39.0 — 2026-11-18
+
+### Added
+
+- **A link can open a document on a comment, a slide or a section.** The place goes after `#` on the document's address, where the server never sees it: `#<id>` for a section or slide its author gave an id, `#slide=5` for a slide without one, and `#comment=<thread>` on the path of the version the thread is on, so the link still works after the next version. Opening one lands there once: the slide shown, the section at the top, or the thread selected with its comments open and its passage on screen, a resolved one included. A comment that is not on that version, or that the reader cannot see, opens the document with a notice saying so, and signing in comes back to the same comment. On a deck the address follows the slide you are on, replaced rather than added to your history, so copying the address bar shares the slide and Back still leaves the document, and a frame that reloads returns to that slide. **Copy link** is on every comment, beside Comment and Suggest edit when you select a passage, for any reader, and as **Copy link to this slide** in a deck's menu. A copy keeps your own path and link key, and adds nothing else (SPEC §6e, ADR 0035).
+
+- **Comment emails and agents link to the comment itself.** "Reply in context" in a comment or suggestion email now opens the document on that thread. Over MCP, every thread in `get_comments` has a `url`, and `add_comment`, `reply_to_comment` and `suggest_edit` return the thread's `threadUrl`, pinned to the thread's version and carrying the link key when the agent came in by it; `bikeshed comments` prints it under each thread (in `bikeshed-now` 0.23.0). The agent guide and the comment skill say to hand it back (SPEC §14, §19).
+
+### Fixed
+
+- **Following someone keeps you where they are, in a deck and on a screen of another size.** Following shared one number, how far down the page the person was, and replayed it. A deck that runs its own script stacks its slides and moves without scrolling, so the number never changed and the follower stayed on the first slide; and on a phone following a laptop the same fraction of a taller page is other words. The person followed now also shares which slide they are on, and where in the text the top of their screen is, between the elements with ids above and below it, and a follower goes to that slide, else to that place, else to the fraction as before. A follower who moves through the slide rail, the overview or the arrow keys now lets go, where before the next update of anybody's presence pulled them back. The presence rules accept the two new fields and bound them like the rest (SPEC §16).
+- **A deck that fades between its slides is no longer moved past the slide it was sent to.** The viewer moves such a deck by pressing its arrow keys, counted from the slide it is showing, and while it fades the slide it is leaving is still showing. So a second move inside the fade, from the slide rail, a link opened right after another, or following someone through several slides, counted from the old slide and overshot. A move now counts from the slide the deck was last sent to until the deck stops moving (SPEC §6d).
+- **Selecting a comment on a slide shows that slide.** A deck that runs its own script usually stacks its slides in one place and shows one at a time, and there a passage on a hidden slide still sits inside the viewport, so the viewer judged it already in view and did nothing; scrolling could not have shown it anyway. A thread whose passage is on another slide now moves the deck there the way the slide rail does, through the deck's own arrow keys, and only a passage on the slide being shown, or in a document without pages, is scrolled to. A resolved thread, whose passage is not drawn, is taken to as well, still without drawing it (SPEC §6, §6d).
+
 ## 0.38.1 — 2026-11-18
 
 ### Changed

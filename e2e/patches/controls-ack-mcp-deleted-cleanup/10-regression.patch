@@ -10,8 +10,8 @@
 -} from "../../lib/transaction-receipts";
 +import { freshReceiptId, readReceipt, recordReceipt } from "../../lib/transaction-receipts";
  import * as admin from "firebase-admin";
-@@ -387,3 +382,3 @@
+@@ -393,3 +388,3 @@
        }, { maxAttempts: 10 });
 -      await clearReceipt(ref, receipt);
 +      void receipt;
-       return withReaderAddress({ threadId: annRef.id, version: versionId, quote: anchor.exact }, ref.id);
+       return withThreadAddress(

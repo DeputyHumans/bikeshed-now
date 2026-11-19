@@ -1,7 +1,7 @@
 --- a/app/src/presence.ts
 +++ b/app/src/presence.ts
-@@ -226,7 +226,7 @@
-           viewport: typeof v.viewport === "number" ? v.viewport : undefined,
+@@ -294,7 +294,7 @@
+           slide: typeof v.slide === "number" && Number.isInteger(v.slide) && v.slide >= 0 ? v.slide : undefined,
            composing: v.composing,
            lastChanged: typeof v.lastChanged === "number" ? v.lastChanged : 0,
 -          color: peerColor(v.email),

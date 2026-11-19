@@ -19,6 +19,7 @@ import {
   changeOwnSuggestion,
   refuseIfFrozen,
   withReaderAddress,
+  withThreadAddress,
 } from "./shared";
 import type { ToolDefinition } from "./shared";
 
@@ -80,7 +81,13 @@ export const SUGGESTION_TOOLS: ToolDefinition[] = [
         color: SUGGESTION_COLOR,
       });
       if ("status" in created) throw new Error(created.error);
-      return withReaderAddress({ threadId: created.annId, version: versionId, quote: anchor.exact }, ref.id);
+      return withThreadAddress(
+        withReaderAddress({ threadId: created.annId, version: versionId, quote: anchor.exact }, ref.id),
+        ref.id,
+        versionId,
+        created.annId,
+        str(args, "k") || undefined,
+      );
     },
   },
 

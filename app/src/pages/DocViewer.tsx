@@ -2,7 +2,7 @@
 // The document viewer: composition only (SPEC §6, §6a, §6c, §16, §17).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth";
 import { signingInLabel } from "../components/AddressNotice";
@@ -31,6 +31,8 @@ import { useDocTrust } from "../viewer/useDocTrust";
 import { usePresenting } from "../viewer/usePresenting";
 import { useCommentsOpen } from "../viewer/useCommentsOpen";
 import { useDeck } from "../viewer/useDeck";
+import { useTarget, type TargetNotice, type ThreadsState } from "../viewer/useTarget";
+import { copyText, slideTarget, targetForNode, targetUrl, type Target } from "../viewer/target";
 import { useFrameFit } from "../viewer/useFrameFit";
 import { useThumbCapture } from "../viewer/useThumbCapture";
 import { captureNeeds, storedSlideImages } from "../thumbs";
@@ -120,6 +122,11 @@ import { canSuggestDoc, isApprover, isDocEditor as isDocEditorOf, offersSuggest,
  *
  * Nor is `useChromeAutoHide`, which reads the document's scroll, size and selection
  * and sets an attribute on the parent's `.viewer`.
+ *
+ * Nor is `useTarget`, which takes the reader to a place — a thread's passage, on
+ * whichever slide holds it — by scrolling the frame and paging the deck. It is
+ * declared after `useDeck` because it pages the deck, and writes nothing to the
+ * document.
  */
 
 type Dialog =
@@ -137,6 +144,8 @@ export function DocViewer() {
   const { docId = "", versionId } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  // Only for the part after `#`, which names a place in the document (SPEC §6e).
+  const { hash: routeHash } = useLocation();
   const toast = useToast();
   const { user, emailLower, gate, movingTo } = useAuth();
   const singleColumn = useIsSingleColumn();
@@ -153,6 +162,8 @@ export function DocViewer() {
   });
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [annotationsUnreadable, setAnnotationsUnreadable] = useState(false);
+  // Which version's threads have answered, so a link to a thread waits for them.
+  const [threadsLanded, setThreadsLanded] = useState<string | null>(null);
   const [teams, setTeams] = useState<TeamMeta[]>([]);
   // Only for the breadcrumb. An anonymous reader of a public document has no
   // folders and gets a trail of one, which is correct: "Everything" is still
@@ -324,8 +335,6 @@ export function DocViewer() {
     epoch: frame.epoch,
     annotations,
     selectedId,
-    // In one column the comments pane hides the frame, which measures nothing.
-    frameShown: !(singleColumn && pane === "comments"),
     onSelect: (id: string) => {
       setSelectedId(id);
       setCommentsOpen(true);
@@ -428,12 +437,83 @@ export function DocViewer() {
     onPeerSavedDraft: frame.reload,
   });
 
+  // A link to a thread (SPEC §6e): whether this reader's threads can be looked
+  // in yet, and if they never can, why. A folder's link shows no comments.
+  const threads: ThreadsState = throughFolder
+    ? { ready: true, refused: "comment-folder-link" }
+    : gate === "loading" || !doc.currentVersion || threadsLanded !== doc.currentVersion
+      ? { ready: false }
+      : annotationsUnreadable
+        ? { ready: true, refused: signedIn ? "comment-unreadable" : "comment-sign-in" }
+        : { ready: true };
+  // A resolved thread a link opened, which the panel shows though resolved
+  // threads are hidden until asked for.
+  const [linkedResolved, setLinkedResolved] = useState<string | null>(null);
+  const openThread = useCallback(
+    (threadId: string) => {
+      setLinkedResolved(annotations.find((a) => a.annId === threadId)?.resolved ? threadId : null);
+      setSelectedId(threadId);
+      setCommentsOpen(true);
+      setPane("comments");
+    },
+    [annotations, setCommentsOpen],
+  );
+  const sayNotice = useCallback(
+    (notice: TargetNotice) => {
+      if (notice === "comment-missing") toast.show("That comment isn't on this version of the document.");
+      else if (notice === "comment-folder-link") toast.show("Comments aren't shown to readers of a folder's link.");
+      else if (notice === "comment-unreadable") toast.show("The comments on this document aren't shared with you.");
+      else {
+        toast.show("Sign in to see this comment.", {
+          label: "Sign in",
+          onSelect: () => {
+            // Back to this exact place, the comment included.
+            const { pathname, search, hash } = window.location;
+            navigate(`/signup?next=${encodeURIComponent(`${pathname}${search}${hash}`)}`);
+          },
+        });
+      }
+    },
+    [toast, navigate],
+  );
+  /** Copy a link to a place, built on the address the reader is on (SPEC §6e). */
+  const copyLinkTo = useCallback(
+    async (target: Target) => {
+      const url = targetUrl(window.location, target, target.kind === "comment" ? { docId, versionId: doc.currentVersion } : undefined);
+      if (await copyText(url)) toast.show("Link copied");
+      else toast.error(`Couldn't copy the link. Here it is: ${url}`);
+    },
+    [docId, doc.currentVersion, toast],
+  );
+
   const deck = useDeck({
     doc: frame.doc,
     epoch: frame.epoch,
     // A dialog or the editor owns the keyboard while it is up: paging the deck
     // underneath the share dialog is somebody losing their place.
     keysEnabled: dialog === null && mode.kind === "reading",
+    // A move of the reader's own lets go of a follow, or the next update of
+    // the person they follow would pull them back (SPEC §16).
+    onReaderMove: presence.release,
+  });
+
+  // After the deck, which it pages: a thread's passage, or the person being
+  // followed, may be on another slide.
+  useTarget({
+    mode,
+    doc: frame.doc,
+    epoch: frame.epoch,
+    deck,
+    annotations,
+    selectedId,
+    // In one column the comments pane hides the frame, which measures nothing.
+    frameShown: !(singleColumn && pane === "comments"),
+    follow: presence.followed,
+    shareSlide: presence.setSlide,
+    hash: routeHash,
+    threads,
+    onThread: openThread,
+    onNotice: sayNotice,
   });
 
   // A deck that scales itself by script renders at full size in the
@@ -510,12 +590,14 @@ export function DocViewer() {
         setAnnotationsUnreadable(false);
         setAnnotations(anns);
         settleComments(anns);
+        setThreadsLanded(doc.currentVersion);
       },
       // Unreadable is not "none": the panel stays undecided, which reads as
       // closed, and the reader can still open it.
       () => {
         setAnnotationsUnreadable(true);
         setAnnotations([]);
+        setThreadsLanded(doc.currentVersion);
       },
     );
   }, [docId, doc.currentVersion, settleComments, doc.resolvedFor, throughFolder]);
@@ -935,6 +1017,17 @@ export function DocViewer() {
     );
 
     entries.push({ id: "h-doc", label: "This document", heading: true });
+    // The address follows the slide too; this is the same link, in one step (SPEC §6e).
+    if (isDeck) {
+      entries.push({
+        id: "copy-slide-link",
+        label: "Copy link to this slide",
+        onSelect: () => {
+          const slide = deck.slides[deck.locate()];
+          if (slide) void copyLinkTo(slideTarget(slide));
+        },
+      });
+    }
     // For every reader: how long it is and when it was updated is anyone's to
     // know; who did it and every version is a member's (DetailsPanel).
     entries.push({ id: "details", label: "Details…", onSelect: () => setDialog("details") });
@@ -986,7 +1079,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, condensed, printCurrent, trashed, trashThis, restoreTrashed]);
+  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, condensed, printCurrent, trashed, trashThis, restoreTrashed, isDeck, deck.slides, deck.locate, copyLinkTo]);
 
   const showComments = commentsOpen && Boolean(doc.currentVersion) && !throughFolder;
 
@@ -1267,9 +1360,14 @@ export function DocViewer() {
             <SelectionFab
               doc={frame.doc}
               epoch={frame.epoch}
-              enabled={canWrite && mode.kind === "reading" && !commenting && !suggesting}
+              enabled={mode.kind === "reading" && !commenting && !suggesting}
               label={user ? "Comment" : "Sign in to comment"}
-              onComment={() => void startComment()}
+              // A link is anyone's to copy; a comment only where they may write.
+              onComment={canWrite ? () => void startComment() : undefined}
+              link={{
+                targetOf: (range) => targetForNode(range.startContainer, deck.slides, deck.paged),
+                onCopy: (target) => void copyLinkTo(target),
+              }}
               suggest={
                 canSuggest
                   ? { onSuggest: startSuggest, onRefused: (reason) => toast.show(reason) }
@@ -1334,6 +1432,8 @@ export function DocViewer() {
             uid={user?.uid ?? null}
             emailLower={emailLower}
             onSelect={setSelectedId}
+            onCopyLink={(threadId) => void copyLinkTo({ kind: "comment", id: threadId })}
+            reveal={linkedResolved}
             onComposing={presence.setComposing}
             onSignIn={signInToComment}
             selectionKept={pendingComment !== null}

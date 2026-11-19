@@ -70,6 +70,26 @@ function shownSlide(view: Window, slides: Slide[]): number {
 }
 
 /**
+ * Whether a stacked deck is still moving between slides: more than one of
+ * them shown, or a slide in the middle of a transition or animation of its
+ * own. A deck that fades starts the incoming slide at opacity 0 and keeps the
+ * one it is leaving until the fade ends, so for that moment the only slide
+ * shown is the old one, and a second move counted from it presses the wrong
+ * number of keys. Reading the styles first makes the browser start the
+ * transitions it is about to report.
+ */
+function moving(view: Window, slides: Slide[]): boolean {
+  let shown = 0;
+  for (const slide of slides) if (isShown(readComputed(view, slide.el)) && ++shown > 1) return true;
+  return slides.some((slide) =>
+    typeof slide.el.getAnimations === "function" && slide.el.getAnimations().some((a) => a.playState === "running"),
+  );
+}
+
+/** How long a move this hook made is trusted over a deck that is still moving. */
+const AIM_MS = 1500;
+
+/**
  * Somewhere the reader is composing, so the keys are theirs, not ours.
  *
  * Duck-typed rather than `instanceof Element`, because the target usually comes
@@ -91,30 +111,55 @@ export interface DeckControls {
   slides: Slide[];
   /** Index into `slides` of whatever is nearest the top of the frame. */
   current: number;
+  /**
+   * Where the deck is NOW, read from the frame rather than from `current`,
+   * which follows the deck's own moves a moment late (an observer, a scroll).
+   */
+  locate: () => number;
   /** True when slides are about one viewport tall, so paging makes sense. */
   paged: boolean;
   /** What a preview is laid out at: one size for every slide in the deck. */
   stage: StageSize;
   overviewOpen: boolean;
   setOverviewOpen: (open: boolean) => void;
-  goTo: (index: number) => void;
+  /**
+   * Show a slide. Every move counts as the reader's own, and lets go of a
+   * follow (`onReaderMove`), except one made `{ follow: true }`, which is the
+   * follow itself.
+   */
+  goTo: (index: number, how?: { follow?: boolean }) => void;
   next: () => void;
   prev: () => void;
   /** Re-read the document after a structural edit. */
   rescan: () => void;
+  /**
+   * The frame epoch the slide list and the latch above were measured for.
+   * Until it equals the frame's epoch, `slides` and `paged` may still describe
+   * the document before it, so anything that acts on a new document waits.
+   */
+  measuredEpoch: number;
 }
 
 export function useDeck({
   doc,
   epoch,
   keysEnabled,
+  onReaderMove,
 }: {
   doc: Document | null;
   epoch: number;
   /** False while a dialog owns the keyboard, or while editing. */
   keysEnabled: boolean;
+  /** Told of every move but a follow's: the rail, the overview, the keys, a thread. */
+  onReaderMove?: () => void;
 }): DeckControls {
+  // Read through a ref, so a caller's inline callback does not rebuild goTo.
+  const onReaderMoveRef = useRef(onReaderMove);
+  onReaderMoveRef.current = onReaderMove;
   const [scan, setScan] = useState<SlideScan>({ kind: "none" });
+  // Which epoch `scan` was read from, and which one the latch has measured.
+  const [scannedEpoch, setScannedEpoch] = useState(-1);
+  const [measuredEpoch, setMeasuredEpoch] = useState(-1);
   // Bumped after a structural edit. Adding or reordering a slide is DOM
   // surgery that fires no load and no scroll, so nothing else would tell us
   // the list changed.
@@ -140,6 +185,7 @@ export function useDeck({
   // onLoad, and that is the only moment the document is known to be the new one.
   useEffect(() => {
     setScan(scanSlides(doc));
+    setScannedEpoch(epoch);
   }, [doc, epoch, nonce]);
 
   // Position and the overview belong to the DOCUMENT, not to its slide list:
@@ -169,15 +215,31 @@ export function useDeck({
    * own keys, clicks and wheel inside the frame. Observation only: nothing
    * here changes the document.
    */
+  /**
+   * The slide this hook last drove a stacked deck to, while the deck is still
+   * on its way there: for that moment the frame cannot say where it is going.
+   * Let go once the deck has stopped moving, or after `AIM_MS`.
+   */
+  const aim = useRef<{ index: number; until: number } | null>(null);
+
+  const locate = useCallback((): number => {
+    const view = doc?.defaultView;
+    if (!view || slides.length === 0) return 0;
+    const heading = aim.current;
+    if (stacked && heading && Date.now() < heading.until && moving(view, slides)) return heading.index;
+    return stacked
+      ? shownSlide(view, slides)
+      : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top));
+  }, [doc, slides, stacked]);
+
   useEffect(() => {
     const view = doc?.defaultView;
     if (!view || slides.length === 0) return;
     const measure = () => {
-      setCurrent(
-        stacked
-          ? shownSlide(view, slides)
-          : activeIndex(slides.map((slide) => slide.outer.getBoundingClientRect().top)),
-      );
+      // Arrived, or never coming: the frame says where the deck is again.
+      const heading = aim.current;
+      if (heading && (Date.now() >= heading.until || !(stacked && moving(view, slides)))) aim.current = null;
+      setCurrent(locate());
     };
     measure();
     // Watched: an engine that delivers a sandboxed deck no events would
@@ -200,7 +262,7 @@ export function useDeck({
       if (stacked) for (const event of motionEvents) doc.removeEventListener(event, measure, true);
       observer?.disconnect();
     };
-  }, [doc, epoch, slides, stacked]);
+  }, [doc, epoch, slides, stacked, locate]);
 
   /**
    * `paged`, `stacked` and `stage` are LATCHED: decided once per document,
@@ -217,11 +279,15 @@ export function useDeck({
    * property of the document, not of whether somebody opened a panel.
    */
   useEffect(() => {
+    // The first pass after a load still holds the last document's slides, whose
+    // nodes are detached and measure nothing. Wait for this document's list.
+    if (scannedEpoch !== epoch) return;
     const view = doc?.defaultView;
     if (!view || slides.length === 0) {
       setPaged(false);
       setStacked(false);
       setStage(FALLBACK_STAGE);
+      setMeasuredEpoch(epoch);
       return;
     }
     const rects = slides.map((slide) => slide.outer.getBoundingClientRect());
@@ -230,19 +296,22 @@ export function useDeck({
     setStage(
       stageSize({ width: view.innerWidth, height: view.innerHeight }, rects),
     );
-  }, [doc, epoch, slides]);
+    setMeasuredEpoch(epoch);
+  }, [doc, epoch, slides, scannedEpoch]);
 
   const goTo = useCallback(
-    (index: number) => {
+    (index: number, how?: { follow?: boolean }) => {
       const slide = slides[Math.max(0, Math.min(slides.length - 1, index))];
       if (!slide) return;
+      if (!how?.follow) onReaderMoveRef.current?.();
       const view = doc?.defaultView;
       if (stacked && view && doc.body) {
         // From where the deck IS, read live — the reader may have moved it
         // with its own controls since the last thing this hook did.
         driving.current = true;
         try {
-          if (pressArrows(doc, view, shownSlide(view, slides), slide.index)) {
+          if (pressArrows(doc, view, locate(), slide.index)) {
+            aim.current = { index: slide.index, until: Date.now() + AIM_MS };
             setCurrent(slide.index);
             return;
           }
@@ -259,7 +328,7 @@ export function useDeck({
       });
       setCurrent(slide.index);
     },
-    [doc, slides, stacked, reduceMotion],
+    [doc, slides, stacked, reduceMotion, locate],
   );
 
   const next = useCallback(() => goTo(current + 1), [goTo, current]);
@@ -349,6 +418,7 @@ export function useDeck({
       scan,
       slides,
       current,
+      locate,
       paged,
       stage,
       overviewOpen,
@@ -357,7 +427,8 @@ export function useDeck({
       next,
       prev,
       rescan,
+      measuredEpoch,
     }),
-    [scan, slides, current, paged, stage, overviewOpen, goTo, next, prev, rescan],
+    [scan, slides, current, locate, paged, stage, overviewOpen, goTo, next, prev, rescan, measuredEpoch],
   );
 }

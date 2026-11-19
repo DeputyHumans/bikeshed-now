@@ -128,7 +128,7 @@ Stop when the person says so, after an hour with nothing new from anyone else, o
    - From a shell, `bikeshed update <id> <file> --base <version>` does the same, for a `.zip`, a folder or the changed files alone too.
    - The result's `threadsLeftBehind` counts the open threads that stay on the version you replaced. Mention them; they cannot be answered any more.
 7. **Tell the person:**
-   - which threads you answered;
+   - which threads you answered, each with its link (`url` in `get_comments`, `threadUrl` from a reply);
    - what you decided, and why;
    - what changed, with the link and the new version;
    - any refusal you met.

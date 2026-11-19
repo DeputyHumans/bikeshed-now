@@ -223,6 +223,17 @@ export function scanSlides(doc: Document | null): SlideScan {
 }
 
 /**
+ * Which slide holds a node: the index of the slide whose `outer` contains it,
+ * or -1 when it is on none. `outer`, because it contains `el` and, for a slide
+ * in foreign content, the box the reader sees.
+ */
+export function slideOf(slides: readonly Slide[], node: Node | null): number {
+  if (!node) return -1;
+  for (const slide of slides) if (slide.outer.contains(node)) return slide.index;
+  return -1;
+}
+
+/**
  * Which slide the reader is looking at, from each slide's offset from the top
  * of the frame's own viewport.
  *

@@ -6,8 +6,8 @@ import { describeFocusFromSelection } from "../annotation/anchor";
 import { refusesListeners, watchResize, watchScroll, watchSelection } from "./frameWatch";
 import {
   createPeerOverlay,
+  readingPlace,
   scrollFraction,
-  scrollToFraction,
   type PeerOverlay,
 } from "../annotation/peers";
 import {
@@ -36,10 +36,24 @@ export function usePeerPresence(options: {
   const [following, setFollowing] = useState<string | null>(null);
   const handle = useRef<PresenceHandle | null>(null);
   const overlay = useRef<PeerOverlay | null>(null);
+  /**
+   * Where this reader is, kept here so a record made again — a new live
+   * session after somebody publishes, or presence turning on after the frame
+   * loaded — starts with it rather than empty until the reader next moves.
+   */
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  const slideRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!enabled || !uid) return;
-    handle.current = joinPresence(docId, uid, emailLower, displayName, mode, liveEpoch);
+    const joined = joinPresence(docId, uid, emailLower, displayName, mode, liveEpoch);
+    handle.current = joined;
+    // A follower goes to where this record says the reader is, so it says so
+    // from the start (SPEC §16).
+    joined.setSlide(slideRef.current);
+    const at = docRef.current;
+    if (at) joined.setView(() => ({ viewport: scrollFraction(at), place: readingPlace(at) }));
     return () => {
       handle.current?.leave();
       handle.current = null;
@@ -92,7 +106,9 @@ export function usePeerPresence(options: {
       handle.current?.setFocus(anchor);
     };
     const onScroll = () => {
-      handle.current?.setViewport(scrollFraction(doc));
+      // Read when the throttle sends it, not on every scroll: a place measures
+      // every element with an id.
+      handle.current?.setView(() => ({ viewport: scrollFraction(doc), place: readingPlace(doc) }));
       // Rectangles are in page coordinates, so scrolling does not move them —
       // but a scroll can reveal content whose layout has not been measured yet.
       overlay.current?.reflow();
@@ -104,23 +120,26 @@ export function usePeerPresence(options: {
       watchScroll(doc, onScroll),
       watchResize(doc, onResize),
     ];
+    // Where the reader is the moment the document opens, before any scroll:
+    // a reader who never scrolls is at the top, and following them must take
+    // a follower there (SPEC §16).
+    onScroll();
     return () => {
       for (const stop of stops) stop();
     };
   }, [enabled, doc, epoch]);
 
   /**
-   * Follow mode: bind this reader's scroll to a peer's.
+   * Follow mode: this reader goes where a peer is.
    *
-   * About thirty lines on data already being broadcast, and it is what makes a
-   * live walkthrough work at all. Any manual scroll releases it, because a
-   * follow you cannot escape by scrolling is a trap.
+   * Who is followed, and what lets go, live here; MOVING the reader is
+   * `useTarget`'s, after the deck, because a peer on a deck is followed by
+   * slide and only the deck can show one. Any move of the reader's own
+   * releases it, because a follow you cannot escape is a trap: a wheel, a key
+   * or a pointer in the frame here, and a move through the deck's own controls
+   * by `release`, which `useDeck` calls.
    */
-  useEffect(() => {
-    if (!following || !doc) return;
-    const peer = peers.find((p) => p.uid === following);
-    if (peer?.viewport != null) scrollToFraction(doc, peer.viewport);
-  }, [following, peers, doc]);
+  const release = useCallback(() => setFollowing(null), []);
 
   useEffect(() => {
     if (!following || !doc) return;
@@ -147,9 +166,19 @@ export function usePeerPresence(options: {
     handle.current?.setComposing(threadId);
   }, []);
 
+  /** Which slide this reader is on, for whoever follows them; null when not paged. */
+  const setSlide = useCallback((slide: number | null) => {
+    slideRef.current = slide;
+    handle.current?.setSlide(slide);
+  }, []);
+
   return {
     peers,
     following,
+    /** The person being followed, as their latest record, or null. */
+    followed: following ? peers.find((p) => p.uid === following) ?? null : null,
+    release,
+    setSlide,
     toggleFollow: (uid: string) => setFollowing((cur) => (cur === uid ? null : uid)),
     setComposing,
   };

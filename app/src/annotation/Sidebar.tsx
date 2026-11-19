@@ -128,6 +128,7 @@ function Thread({
   onSelect,
   onComposing,
   onReview,
+  onCopyLink,
 }: {
   docId: string;
   versionId: string;
@@ -146,6 +147,8 @@ function Thread({
   onComposing: (threadId: string | null) => void;
   /** Open the review pass on this suggestion, where Accept lives. */
   onReview?: () => void;
+  /** Copy the link to this thread (SPEC §6e). */
+  onCopyLink?: () => void;
 }) {
   const toast = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -220,6 +223,21 @@ function Thread({
       setBusy(false);
     }
   };
+
+  const copyLinkButton = onCopyLink ? (
+    <button
+      type="button"
+      className="btn btn-sm btn-quiet thread-link"
+      aria-label="Copy link to this comment"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCopyLink();
+      }}
+    >
+      <Icon name="link" size={14} />
+      Copy link
+    </button>
+  ) : null;
 
   return (
     <li
@@ -431,8 +449,15 @@ function Thread({
                 {annotation.resolved ? "Reopen" : "Resolve"}
               </button>
             )}
+            {copyLinkButton}
           </div>
         </>
+      ) : onCopyLink ? (
+        // Where this reader cannot reply — an archived version, a document they
+        // only read — the link is still theirs to copy.
+        <div className="thread-actions">
+          {copyLinkButton}
+        </div>
       ) : null}
     </li>
   );
@@ -459,6 +484,8 @@ export function Sidebar({
   selectionKept = false,
   onClose,
   onReview,
+  onCopyLink,
+  reveal = null,
 }: {
   docId: string;
   versionId: string;
@@ -483,12 +510,18 @@ export function Sidebar({
   onClose: () => void;
   /** Open the approver's review pass, on one suggestion or from the first. */
   onReview?: (annId?: string) => void;
+  /** Copy the link to a thread (SPEC §6e). */
+  onCopyLink?: (annId: string) => void;
+  /** A resolved thread a link opened, shown though resolved threads are hidden (SPEC §6e). */
+  reveal?: string | null;
 }) {
   const [showResolved, setShowResolved] = useState(false);
   const orphanSet = useMemo(() => new Set(orphaned), [orphaned]);
   const staleSet = useMemo(() => new Set(stale), [stale]);
 
-  const visible = annotations.filter((a) => showResolved || !a.resolved);
+  // A resolved thread is hidden until asked for, except one a link opened: the
+  // link must show the thread it names. Resolving a thread hides it as before.
+  const visible = annotations.filter((a) => showResolved || !a.resolved || a.annId === reveal);
   const openCount = annotations.filter((a) => !a.resolved).length;
   const pendingCount = annotations.filter((a) => a.suggestion?.state === "pending").length;
 
@@ -551,6 +584,7 @@ export function Sidebar({
               onSelect={() => onSelect(annotation.annId)}
               onComposing={onComposing}
               onReview={onReview ? () => onReview(annotation.annId) : undefined}
+              onCopyLink={onCopyLink ? () => onCopyLink(annotation.annId) : undefined}
             />
           ))}
         </ul>

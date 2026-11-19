@@ -15,7 +15,7 @@
  *   A23.2  a comment notice: the owner and the thread's participants, less
  *          the author, less anyone with no account record or opted out, never
  *          another thread's author; `<b>x</b>` literal in the text part and
- *          escaped in the HTML part; the link is /d/{doc}/{version}; an
+ *          escaped in the HTML part; the link is /d/{doc}/{version}#comment={thread}; an
  *          agent's names the token it came through ("via personal token “…”")
  *   A23.2b a participant whose access was REMOVED is told nothing of later
  *          comments (the notice carries the passage and the comment): the
@@ -418,24 +418,25 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
 
   ctx.step(`P2 opens a thread on D's v2 (web) on "${QUOTE}"; P3 opens one on D3; the agent opens one on D2 through MCP with ${JSON.stringify(agentBody)}; the owner gets each notice`);
   const mcp = await agentOf(ctx, K, "replier");
-  await Promise.all([
+  const [, , added] = await Promise.all([
     webThread(fs2, P2, { docId, versionId: "v2", elementId: "e2e-4", exact: QUOTE, body: opening, annId: annA, commentId: id(1) }),
     webThread(fs3, P3, { docId: doc3, versionId: "v1", elementId: "e2e-4", exact: QUOTE3, body: `A23.2 opening D3 ${t}`, annId: annB, commentId: id(1) }),
     mcp.ok("add_comment", { id: doc2, exact: "Russet orchard harbor glacier", body: agentBody }),
   ]);
+  precondition(typeof added?.threadId === "string", `add_comment: ${JSON.stringify(added)}`);
   const [m1, , m2] = await Promise.all([
     arrived(ctx, box, me, commentedSubject(P2.email, title)),
     arrived(ctx, box, me, commentedSubject(P3.email, title3)),
     arrived(ctx, box, me, commentedSubject(K.account.email, title2)),
   ]);
 
-  ctx.step("a web comment's notice: no via marker, the quote, the comment, and a link to /d/<doc>/<version>");
+  ctx.step("a web comment's notice: no via marker, the quote, the comment, and a link to its thread, /d/<doc>/<version>#comment=<thread>");
   const l1 = linesOf(m1);
   assert.equal(l1[0], `${P2.email} commented on "${title}".`, "a web comment's notice carries no via marker");
   assert.ok(l1.includes(`On: "${QUOTE}"`), `the notice quotes the passage: ${JSON.stringify(l1)}`);
   assert.ok(l1.includes(opening), `the notice carries the comment: ${JSON.stringify(l1)}`);
-  assert.ok(l1.includes(`Reply in context: ${target.origin}/d/${docId}/v2`), `the link is /d/<doc>/<version>: ${JSON.stringify(l1)}`);
-  assert.ok(htmlOf(m1).includes(`href="${target.origin}/d/${docId}/v2"`), "the HTML button links to /d/<doc>/<version>");
+  assert.ok(l1.includes(`Reply in context: ${target.origin}/d/${docId}/v2#comment=${annA}`), `the link is the thread's, on its version: ${JSON.stringify(l1)}`);
+  assert.ok(htmlOf(m1).includes(`href="${target.origin}/d/${docId}/v2#comment=${annA}"`), "the HTML button links to the thread");
   assert.ok(!/Posted via/.test(htmlOf(m1)), "a web comment's HTML carries no via line");
   htmlContains(m1, QUOTE, "the quoted passage");
   htmlContains(m1, opening, "the comment body");
@@ -449,7 +450,9 @@ scenario("A23.2 a comment notice reaches the owner and the thread's participants
   assert.ok(!htmlOf(m2).includes("<b>x</b>"), "the HTML part carries <b>x</b> as markup: a comment body was rendered as HTML");
   assert.ok(htmlOf(m2).includes("&lt;b&gt;x&lt;/b&gt;"), "the HTML part shows <b>x</b> escaped, as text");
   htmlContains(m2, agentBody, "the complete escaped agent body");
-  assert.ok(l2.includes(`Reply in context: ${target.origin}/d/${doc2}/v1`), `the agent's notice links to /d/<doc>/<version>: ${JSON.stringify(l2)}`);
+  const thread2 = `${target.origin}/d/${doc2}/v1#comment=${added.threadId}`;
+  assert.ok(l2.includes(`Reply in context: ${thread2}`), `the agent's notice links to its thread: ${JSON.stringify(l2)}`);
+  assert.equal(added.threadUrl, thread2, "and add_comment handed the agent the same link");
 
   ctx.step("Q opens another thread on D; W, then K reply in P2's thread on D and in P3's on D3");
   await webThread(fsQ, Q.account, { docId, versionId: "v2", elementId: "e2e-5", exact: "Quill orchard russet yarrow", body: `A23.2 elsewhere ${t}`, annId: `a232q${rand4()}${rand4()}`, commentId: id(0) });
@@ -562,13 +565,13 @@ scenario("A23.3 a suggestion notice reaches the owner and every approver, less i
   const DEL = "Basil walnut quarry jasper";
   ctx.step(`the suggester suggests "${QUOTE}" → "${replacement}" with a note (POST /suggestion, web); on a second document an approver suggests deleting "${DEL}" through MCP, with no note`);
   const mcp = await agentOf(ctx, AP1, "approver1");
-  const [, made] = await Promise.all([
+  const [s1, made] = await Promise.all([
     webSuggest(S, { docId, elementId: "e2e-9", exact: QUOTE, replacement, note }),
     mcp.ok("suggest_edit", { id: doc2, exact: DEL, replacement: "" }),
   ]);
   precondition(typeof made?.threadId === "string", `suggest_edit: ${JSON.stringify(made)}`);
 
-  ctx.step("the owner and both approvers are told of the suggester's: the quote, the replacement, the note and a link to /d/<doc>/v1");
+  ctx.step("the owner and both approvers are told of the suggester's: the quote, the replacement, the note and a link to its thread on v1");
   const subject = suggestedSubject(S.account.email, title);
   const subject2 = suggestedSubject(AP1.account.email, t2);
   const [got, got2] = await Promise.all([
@@ -581,12 +584,12 @@ scenario("A23.3 a suggestion notice reaches the owner and every approver, less i
     assert.ok(l.includes(`On: "${QUOTE}"`), `the quote: ${JSON.stringify(l)}`);
     assert.ok(l.includes(`Suggested replacement: ${replacement}`), `the replacement: ${JSON.stringify(l)}`);
     assert.ok(l.includes(note), `the author's note: ${JSON.stringify(l)}`);
-    assert.ok(l.includes(`Review it in context: ${target.origin}/d/${docId}/v1`), `the link: ${JSON.stringify(l)}`);
+    assert.ok(l.includes(`Review it in context: ${target.origin}/d/${docId}/v1#comment=${s1}`), `the link: ${JSON.stringify(l)}`);
     assert.ok(htmlOf(m).includes("You received this because you can accept or reject edits to this document."), "the suggestion branch's footnote");
     htmlContains(m, QUOTE, "the suggestion quote");
     htmlContains(m, `Suggested replacement: ${replacement}`, "the suggested replacement");
     htmlContains(m, note, "the suggestion author's note");
-    assert.ok(htmlOf(m).includes(`href="${target.origin}/d/${docId}/v1"`), "the HTML suggestion links to its version");
+    assert.ok(htmlOf(m).includes(`href="${target.origin}/d/${docId}/v1#comment=${s1}"`), "the HTML suggestion links to its thread");
   }
 
   ctx.step("the approver's deletion: the owner and the other approver are told, naming the token, with no generated restatement as its body");
@@ -766,7 +769,7 @@ scenario("A23.5 a decision is mailed as a comment: a rejection reaches the sugge
   assert.equal(lr[0], `${me} commented on "${title}".`, "a rejection is a comment notice, from the decider, with no via marker");
   htmlContains(mr, `Rejected: ${reason}`, "the rejection and reason");
   assert.ok(lr.includes(`Rejected: ${reason}`), `the decision note and its reason: ${JSON.stringify(lr)}`);
-  assert.ok(lr.includes(`Reply in context: ${target.origin}/d/${docId}/v1`), `the comment branch's link: ${JSON.stringify(lr)}`);
+  assert.ok(lr.includes(`Reply in context: ${target.origin}/d/${docId}/v1#comment=${a1}`), `the comment branch's link: ${JSON.stringify(lr)}`);
   assert.ok(!lr.some((l) => l.startsWith("Suggested")), `no suggestion line in a decision: ${JSON.stringify(lr)}`);
   assert.ok(htmlOf(mr).includes("You received this because you own this document or replied in this thread."), "the comment branch's footnote");
   const la = linesOf(ma);
@@ -774,7 +777,7 @@ scenario("A23.5 a decision is mailed as a comment: a rejection reaches the sugge
   assert.match(la[0], / \(via personal token “e2e a23 [^”]+”\)\.$/, "an agent's acceptance is a comment notice naming the token");
   htmlContains(ma, "Accepted.", "the acceptance");
   assert.ok(la.includes("Accepted."), `the decision note: ${JSON.stringify(la)}`);
-  assert.ok(la.includes(`Reply in context: ${target.origin}/d/${doc2}/v1`), `the link: ${JSON.stringify(la)}`);
+  assert.ok(la.includes(`Reply in context: ${target.origin}/d/${doc2}/v1#comment=${a3}`), `the link: ${JSON.stringify(la)}`);
 
   ctx.step("the suggester suggests again on the first document and withdraws it: the owner (their suggestion notice still cooling down) gets the withdrawal as a comment notice");
   const a2 = await webSuggest(S, { docId, elementId: "e2e-13", exact: "Zephyr saffron marble meadow", replacement: "Zephyr saffron granite meadow" });
@@ -784,7 +787,7 @@ scenario("A23.5 a decision is mailed as a comment: a rejection reaches the sugge
   const lw = linesOf(mw);
   htmlContains(mw, "Withdrawn.", "the withdrawal");
   assert.ok(lw.includes("Withdrawn."), `the withdrawal note: ${JSON.stringify(lw)}`);
-  assert.ok(lw.includes(`Reply in context: ${target.origin}/d/${docId}/v1`), `the link: ${JSON.stringify(lw)}`);
+  assert.ok(lw.includes(`Reply in context: ${target.origin}/d/${docId}/v1#comment=${a2}`), `the link: ${JSON.stringify(lw)}`);
 
   ctx.step("held 10 s: the suggester's mail is two invitations and two decisions; the owner's two suggestion notices and the withdrawal; no decision as a suggestion notice, none to its decider");
   await settleAll(box, {
