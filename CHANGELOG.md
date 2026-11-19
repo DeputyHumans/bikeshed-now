@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Pressing a person's name takes you to where they are, even before they have moved.** A reader's place was shared only once they scrolled or changed slide, so following someone who had just opened the document, or who had stayed at its top, did nothing. It is now shared the moment the document opens, and again, with the slide, whenever their presence record is made anew, such as after somebody publishes (SPEC §16).
+
 ## 0.39.0 — 2026-11-18
 
 ### Added

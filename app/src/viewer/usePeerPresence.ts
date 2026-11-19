@@ -36,10 +36,24 @@ export function usePeerPresence(options: {
   const [following, setFollowing] = useState<string | null>(null);
   const handle = useRef<PresenceHandle | null>(null);
   const overlay = useRef<PeerOverlay | null>(null);
+  /**
+   * Where this reader is, kept here so a record made again — a new live
+   * session after somebody publishes, or presence turning on after the frame
+   * loaded — starts with it rather than empty until the reader next moves.
+   */
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  const slideRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!enabled || !uid) return;
-    handle.current = joinPresence(docId, uid, emailLower, displayName, mode, liveEpoch);
+    const joined = joinPresence(docId, uid, emailLower, displayName, mode, liveEpoch);
+    handle.current = joined;
+    // A follower goes to where this record says the reader is, so it says so
+    // from the start (SPEC §16).
+    joined.setSlide(slideRef.current);
+    const at = docRef.current;
+    if (at) joined.setView(() => ({ viewport: scrollFraction(at), place: readingPlace(at) }));
     return () => {
       handle.current?.leave();
       handle.current = null;
@@ -106,6 +120,10 @@ export function usePeerPresence(options: {
       watchScroll(doc, onScroll),
       watchResize(doc, onResize),
     ];
+    // Where the reader is the moment the document opens, before any scroll:
+    // a reader who never scrolls is at the top, and following them must take
+    // a follower there (SPEC §16).
+    onScroll();
     return () => {
       for (const stop of stops) stop();
     };
@@ -150,6 +168,7 @@ export function usePeerPresence(options: {
 
   /** Which slide this reader is on, for whoever follows them; null when not paged. */
   const setSlide = useCallback((slide: number | null) => {
+    slideRef.current = slide;
     handle.current?.setSlide(slide);
   }, []);
 
