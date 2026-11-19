@@ -44,6 +44,9 @@ export function usePeerPresence(options: {
   const docRef = useRef(doc);
   docRef.current = doc;
   const slideRef = useRef<number | null>(null);
+  /** Whom this reader follows, re-sent with every record made anew, so the person followed still sees it. */
+  const followingRef = useRef<string | null>(null);
+  followingRef.current = following;
 
   useEffect(() => {
     if (!enabled || !uid) return;
@@ -52,6 +55,7 @@ export function usePeerPresence(options: {
     // A follower goes to where this record says the reader is, so it says so
     // from the start (SPEC §16).
     joined.setSlide(slideRef.current);
+    joined.setFollowing(followingRef.current);
     const at = docRef.current;
     if (at) joined.setView(() => ({ viewport: scrollFraction(at), place: readingPlace(at) }));
     return () => {
@@ -63,6 +67,12 @@ export function usePeerPresence(options: {
   useEffect(() => {
     handle.current?.setMode(mode);
   }, [mode]);
+
+  // Following is not a secret from the person followed: their bar marks the
+  // follower's chip (SPEC §16).
+  useEffect(() => {
+    handle.current?.setFollowing(following);
+  }, [following]);
 
   useEffect(() => {
     if (!enabled || !uid) return;

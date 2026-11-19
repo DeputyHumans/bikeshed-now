@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **You can see who is following you.** Following someone was invisible to them. Now the follower's presence record says whom they follow, and the person followed sees that follower's chip marked with an eye, read aloud as "Following you", and a light wash of the follower's colour. People following you come first among the names, so a narrow bar folds them away last, and one folded anyway is named so in the "+N" list. Only the person followed is shown it. The follower's own chip says the person can see it, and letting go clears the mark at once. The presence rules accept the new field as a uid that is not the writer's own. A tab still running an older app shows no mark and sends none (SPEC §16).
+
 ## 0.39.1 — 2026-11-18
 
 ### Fixed

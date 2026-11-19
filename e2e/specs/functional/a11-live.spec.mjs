@@ -739,7 +739,7 @@ scenario("A11.4 follow keeps the reader within 0.02 of the leader's scroll fract
     if (c?.pressed !== "true") throw new Error(JSON.stringify(c));
     return c;
   }, { timeout: 5_000, message: "the chip is pressed" });
-  assert.match(following.title, /^Following .+\. Scroll to stop\.$/, "the chip says the follower is following");
+  assert.match(following.title, /^Following .+, who can see that you are\. Scroll to stop\.$/, "the chip says the follower is following, and that the leader can see it");
   const max = (await scrollFrac(f)).max;
   precondition(max > 400, `the document scrolls in the follower's frame (max ${max} px)`);
 

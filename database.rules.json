@@ -103,6 +103,10 @@
             // stacks its slides scrolls nothing, so the fraction cannot say it.
             "slide": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999 && newData.val() % 1 == 0" },
 
+            // Whom this tab follows, so the person followed can see it: a
+            // uid, never the writer's own.
+            "following": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128 && newData.val() != auth.uid" },
+
             "composing": { ".validate": "newData.isString() && newData.val().length <= 200" },
 
             "$other": { ".validate": false }

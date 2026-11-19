@@ -32,9 +32,14 @@ import type { Peer } from "../presence";
  * that do not change with the fold, and the "+N" button's slot is always
  * there for the same reason. The bar's size therefore never depends on what it
  * folded, and it cannot oscillate.
+ *
+ * Whoever follows this reader is marked on their chip, with an eye and a wash
+ * of their colour, and comes first, so a fold hides them last. Only the person
+ * followed sees it; the follower's own chip tells them it is seen. The eye is
+ * the signal colour cannot be, and it is read aloud as "Following you".
  */
 export function PresenceBar({
-  peers,
+  peers: given,
   following,
   onToggleFollow,
 }: {
@@ -42,11 +47,13 @@ export function PresenceBar({
   following: string | null;
   onToggleFollow: (uid: string) => void;
 }) {
+  const peers = followersFirst(given);
   const barRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(peers.length);
-  // What a chip's width depends on: who, under what name, in which mode.
-  // Not the whole peer, whose scroll position changes several times a second.
-  const layoutKey = peers.map((peer) => `${peer.uid}\u0000${peer.name}\u0000${peer.mode}`).join("\u0001");
+  // What a chip's width depends on: who, under what name, in which mode, and
+  // whether they follow this reader. Not the whole peer, whose scroll position
+  // changes several times a second.
+  const layoutKey = peers.map((peer) => `${peer.uid}\u0000${peer.name}\u0000${peer.mode}\u0000${peer.followsYou ? 1 : 0}`).join("\u0001");
 
   useLayoutEffect(() => {
     const bar = barRef.current;
@@ -89,13 +96,10 @@ export function PresenceBar({
           type="button"
           className="presence-chip"
           data-folded={index >= shown ? "" : undefined}
+          data-follows-you={peer.followsYou ? "" : undefined}
           style={{ color: peer.color }}
           aria-pressed={following === peer.uid}
-          title={
-            following === peer.uid
-              ? `Following ${peer.name}. Scroll to stop.`
-              : `Follow ${peer.name}'s scrolling`
-          }
+          title={chipTitle(peer, following === peer.uid)}
           onClick={() => onToggleFollow(peer.uid)}
         >
           <span className="presence-dot" data-mode={peer.mode} />
@@ -103,13 +107,14 @@ export function PresenceBar({
           {peer.mode === "edit" ? (
             <Icon name="edit" size={12} title="Editing" />
           ) : null}
+          {peer.followsYou ? <Icon name="eye" size={12} title="Following you" /> : null}
         </button>
       ))}
       <Menu
         label="More people here"
         entries={folded.map((peer) => ({
           id: peer.uid,
-          label: `${following === peer.uid ? "Stop following" : "Follow"} ${peer.name}${peer.mode === "edit" ? " (editing)" : ""}`,
+          label: `${following === peer.uid ? "Stop following" : "Follow"} ${peer.name}${aside(peer)}`,
           icon: <span className="presence-dot" data-mode={peer.mode} style={{ color: peer.color }} />,
           onSelect: () => onToggleFollow(peer.uid),
         }))}
@@ -133,4 +138,23 @@ export function PresenceBar({
       />
     </div>
   );
+}
+
+/** Those following this reader first, everyone else after, each in the order given. */
+function followersFirst(peers: Peer[]): Peer[] {
+  if (!peers.some((peer) => peer.followsYou)) return peers;
+  return [...peers.filter((peer) => peer.followsYou), ...peers.filter((peer) => !peer.followsYou)];
+}
+
+function chipTitle(peer: Peer, followed: boolean): string {
+  const action = followed
+    ? `Following ${peer.name}, who can see that you are. Scroll to stop.`
+    : `Follow ${peer.name}'s scrolling`;
+  return peer.followsYou ? `${peer.name} is following you. ${action}` : action;
+}
+
+/** What a folded person's entry adds after their name: " (editing, following you)" and its parts. */
+function aside(peer: Peer): string {
+  const notes = [peer.mode === "edit" ? "editing" : "", peer.followsYou ? "following you" : ""].filter(Boolean);
+  return notes.length ? ` (${notes.join(", ")})` : "";
 }

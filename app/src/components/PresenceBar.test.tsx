@@ -121,4 +121,61 @@ describe("PresenceBar", () => {
     const { container } = render(<PresenceBar peers={PEERS.slice(0, 2)} following={null} onToggleFollow={() => {}} />);
     expect(container.querySelector(".presence-more")?.getAttribute("aria-label")).toBe("1 more person here");
   });
+
+  test("someone following this reader: an eye read aloud as Following you, a wash of their colour, a title that says so, and nobody else is marked", () => {
+    const peers = [peer("a", "Ana Lima"), { ...peer("b", "Bo Chen"), followsYou: true as const }];
+    render(<PresenceBar peers={peers} following={null} onToggleFollow={() => {}} />);
+    const bo = screen.getByRole("button", { name: "Bo Chen Following you" });
+    expect(bo.hasAttribute("data-follows-you")).toBe(true);
+    expect(bo.title).toBe("Bo Chen is following you. Follow Bo Chen's scrolling");
+    const ana = screen.getByRole("button", { name: "Ana Lima" });
+    expect(ana.hasAttribute("data-follows-you")).toBe(false);
+    expect(ana.querySelector('[aria-label="Following you"]')).toBeNull();
+    expect(ana.title).toBe("Follow Ana Lima's scrolling");
+  });
+
+  test("followers come first, so a fold hides them last, and everyone else keeps their order", () => {
+    const peers = [peer("a", "Ana"), peer("b", "Bo"), { ...peer("c", "Cy"), followsYou: true as const }, peer("d", "Di"), { ...peer("e", "Ed"), followsYou: true as const }];
+    layOut(300);
+    const { container } = render(<PresenceBar peers={peers} following={null} onToggleFollow={() => {}} />);
+    const chips = Array.from(container.querySelectorAll(".presence-chip"));
+    expect(chips.map((chip) => chip.querySelector(".presence-name")?.textContent)).toEqual(["Cy", "Ed", "Ana", "Bo", "Di"]);
+    expect(chips.map((chip) => chip.hasAttribute("data-folded"))).toEqual([false, false, true, true, true]);
+  });
+
+  test("the follower's own chip tells them the person they follow can see it", () => {
+    render(<PresenceBar peers={[peer("a", "Ana Lima")]} following="a" onToggleFollow={() => {}} />);
+    expect(screen.getByRole("button", { name: "Ana Lima" }).title).toBe("Following Ana Lima, who can see that you are. Scroll to stop.");
+  });
+
+  test("a follower folded anyway is named so in the +N list, beside editing", () => {
+    // Three followers of 120 in 300: +N and two fit, the third folds.
+    const peers = [
+      { ...peer("a", "Ana"), followsYou: true as const },
+      { ...peer("b", "Bo"), followsYou: true as const },
+      { ...peer("c", "Cy", "edit"), followsYou: true as const },
+      peer("d", "Di"),
+    ];
+    layOut(300);
+    render(<PresenceBar peers={peers} following={null} onToggleFollow={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "2 more people here" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Follow Cy (editing, following you)", "Follow Di"]);
+  });
+
+  test("a chip that gains the eye is measured again, so the bar folds rather than overflowing", () => {
+    // The eye widens a chip by 18; nothing else about Bo changes, not even his place.
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("presence-chip")) return this.hasAttribute("data-follows-you") ? 138 : 120;
+      if (this.classList.contains("presence-more")) return 44;
+      return 0;
+    });
+    vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+      return this.classList.contains("presence-bar") ? 250 : 0;
+    });
+    const { container, rerender } = render(<PresenceBar peers={[peer("b", "Bo"), peer("a", "Ana")]} following={null} onToggleFollow={() => {}} />);
+    const folded = () => Array.from(container.querySelectorAll(".presence-chip")).map((chip) => chip.hasAttribute("data-folded"));
+    expect(folded()).toEqual([false, false]);
+    rerender(<PresenceBar peers={[{ ...peer("b", "Bo"), followsYou: true }, peer("a", "Ana")]} following={null} onToggleFollow={() => {}} />);
+    expect(folded()).toEqual([false, true]);
+  });
 });

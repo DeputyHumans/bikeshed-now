@@ -60,6 +60,8 @@ export interface ViewReading {
 export const PLACE_ID_MAX = 200;
 /** The highest slide index the rules allow. */
 export const SLIDE_MAX = 9999;
+/** The longest uid the rules allow in `following`: Firebase's own limit. */
+export const UID_MAX = 128;
 
 export interface Peer {
   uid: string;
@@ -76,6 +78,8 @@ export interface Peer {
   slide?: number;
   /** Thread id they are typing into, or "new". */
   composing?: string;
+  /** They are following the reader of this list, in any of their tabs. */
+  followsYou?: true;
   lastChanged: number;
   /** Derived from the address, so it is the same person's colour every time. */
   color: string;
@@ -88,6 +92,8 @@ export interface PresenceHandle {
   setView: (read: () => ViewReading) => void;
   /** Sent at once when it changes; null when this reader's document is not paged. */
   setSlide: (slide: number | null) => void;
+  /** Sent at once when it changes: whom this tab follows, so that person can see it. */
+  setFollowing: (uid: string | null) => void;
   setComposing: (threadId: string | null) => void;
   leave: () => void;
 }
@@ -97,6 +103,7 @@ const INERT: PresenceHandle = {
   setFocus: () => {},
   setView: () => {},
   setSlide: () => {},
+  setFollowing: () => {},
   setComposing: () => {},
   leave: () => {},
 };
@@ -160,6 +167,7 @@ export function joinPresence(
   let viewport: number | null = null;
   let place: ReadingPlace | null = null;
   let slide: number | null = null;
+  let following: string | null = null;
   let composing: string | null = null;
   let connected = false;
   let left = false;
@@ -190,6 +198,7 @@ export function joinPresence(
     const shared = sharedPlace(place);
     if (shared) payload.place = shared;
     if (slide != null) payload.slide = slide;
+    if (following) payload.following = following;
     if (composing) payload.composing = composing.slice(0, 200);
     void set(meRef, payload).catch(() => {
       /* presence is best-effort; a rejected write must not surface */
@@ -227,6 +236,14 @@ export function joinPresence(
       const next = value != null && Number.isInteger(value) && value >= 0 && value <= SLIDE_MAX ? value : null;
       if (left || next === slide) return;
       slide = next;
+      write();
+    },
+    setFollowing(value) {
+      // The rules refuse one's own uid and anything longer than a uid, and a
+      // refused write would drop the whole record, so neither is sent.
+      const next = typeof value === "string" && value.length > 0 && value.length <= UID_MAX && value !== uid ? value : null;
+      if (left || next === following) return;
+      following = next;
       write();
     },
     setComposing(threadId) {
@@ -280,11 +297,15 @@ export function watchPeers(
     (snap) => {
       const val = (snap.val() as Record<string, Partial<Peer>> | null) ?? {};
       const people = new Map<string, Peer>();
+      // Following is an OR across a person's tabs, like editing: the tab that
+      // follows need not be the newest one.
+      const followers = new Set<string>();
       for (const [session, v] of Object.entries(val)) {
         // Old clients used uid as the key. Read those during the transition;
         // new session records carry an authenticated, immutable uid instead.
         const uid = v?.uid ?? session;
         if (uid === selfUid || typeof v?.email !== "string") continue;
+        if ((v as { following?: unknown }).following === selfUid) followers.add(uid);
         const candidate: Peer = {
           uid, email: v.email, name: v.name || v.email,
           mode: v.mode === "edit" ? "edit" : "view",
@@ -304,7 +325,7 @@ export function watchPeers(
           people.set(uid, candidate);
         }
       }
-      cb([...people.values()]);
+      cb([...people.values()].map((peer) => (followers.has(peer.uid) ? { ...peer, followsYou: true as const } : peer)));
     },
     () => cb([]),
   );

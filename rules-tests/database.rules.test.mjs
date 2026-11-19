@@ -274,6 +274,19 @@ describe("realtime database rules", () => {
     }
   });
 
+  it("a record may name whom its reader follows, as a uid that is not their own, so that person can see it", async () => {
+    // The person followed reads it to mark the follower's chip (SPEC §16).
+    const db = verified(env, MEMBER).database();
+    const node = ref(db, `status/doc1/peers/${MEMBER.uid}`);
+    const record = (extra) => ({ email: MEMBER.email, mode: "view", lastChanged: serverTimestamp(), ...extra });
+    for (const ok of [{ following: OTHER.uid }, { following: "u".repeat(128) }, { following: OTHER.uid, slide: 2, viewport: 0.5 }]) {
+      await assertSucceeds(set(node, record(ok)));
+    }
+    for (const refused of [{ following: 7 }, { following: "" }, { following: "u".repeat(129) }, { following: MEMBER.uid }, { following: { uid: OTHER.uid } }]) {
+      await assertFails(set(node, record(refused)));
+    }
+  });
+
   it("an editor may append to the shared document", async () => {
     const db = verified(env, MEMBER).database();
     await assertSucceeds(set(ref(db, "status/doc1/y/initial/e1"), "AQIDBA=="));
