@@ -440,7 +440,8 @@ scenario("A7.1 Suggest edit is offered to the suggester and the owner, not the v
     offers[u.name] = await fabLabels(u);
   }
   ctx.ev.json("offers", offers);
-  assert.deepEqual(offers, { viewer: ["Comment"], owner: ["Comment", "Suggest edit"], suggester: ["Comment", "Suggest edit"] }, "who is offered Suggest edit (SPEC §22)");
+  // Every reader may also copy a link to the passage (ADR 0035), so Copy link ends each list.
+  assert.deepEqual(offers, { viewer: ["Comment", "Copy link"], owner: ["Comment", "Suggest edit", "Copy link"], suggester: ["Comment", "Suggest edit", "Copy link"] }, "who is offered Suggest edit (SPEC §22)");
 
   const before = await texts(await s.frame(), "#sg-1");
   ctx.step(
@@ -518,7 +519,7 @@ scenario("A7.2 a selection across two paragraphs, holding a line break, list or 
     ctx.step(`refused: ${c.what}`);
     const sel = await s.selectBetween(c.from, c.to);
     const labels = await fabLabels(s);
-    assert.deepEqual(labels, ["Comment", "Suggest edit"], `${c.what}: the action is offered, not hidden`);
+    assert.deepEqual(labels, ["Comment", "Suggest edit", "Copy link"], `${c.what}: the action is offered, not hidden`);
     const mark = s.toastMark();
     // Pressed whatever the button says (refused: null), so a selection taken by mistake is this assertion failing, not the press throwing.
     const press = await s.pressSuggest();
@@ -930,7 +931,7 @@ scenario("A7.7 a suggestion on a version that is no longer current is 409 with c
   await openDoc(s, docId);
   await s.selectText("#sg-2", "harbour lights");
   const onHead = await fabLabels(s);
-  assert.deepEqual({ onOld, onHead }, { onOld: [], onHead: ["Comment", "Suggest edit"] });
+  assert.deepEqual({ onOld, onHead }, { onOld: [], onHead: ["Comment", "Suggest edit", "Copy link"] });
   noPageErrors([o, s]);
 });
 
