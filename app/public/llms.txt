@@ -177,7 +177,7 @@ export BIKESHED_ORIGIN=https://<deployment>
 export BIKESHED_TOKEN=bsk_...
 ```
 
-Every command takes `--json`. `login` signs in through the browser and waits for a person to approve, so run it with a long timeout. The two variables work instead of `login` where no browser will ever open, such as CI. `bikeshed --version` prints which version is installed; folders, loose files and large media need 0.23.0 or later.
+Every command takes `--json`. `login` signs in through the browser and waits for a person to approve, so run it with a long timeout. The two variables work instead of `login` where no browser will ever open, such as CI. `bikeshed --version` prints which version is installed; folders, loose files and large media need 0.24.0 or later.
 
 `bikeshed get <id>` prints an HTML document as its Markdown reading, every page of it, and `bikeshed get <id> --source > index.html` writes the whole source, however long it is. `get_document` returns 200,000 characters at a time and sets `truncated` when there is more. Never send a cut source back as an update: the new version would be missing everything after the cut.
 
