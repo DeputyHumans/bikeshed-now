@@ -20,6 +20,7 @@ Two facts about the viewer shaped where it can go. `ViewerRoute` remounts `DocVi
 ## Consequences
 
 - Switching documents from the explorer keeps its place, its open folders and its filter, and costs no new subscription.
+- Each opening starts from the open document: only the folders above it are open, not Recent and not what was open the last time. The filter is what an opening keeps. Both are settled while the shell renders, because the panel scrolls the open document into view from its own effect, which runs before the shell's.
 - One more `users/{uid}` field the client may write, added to the create allowlist. A write happens only when the toggle is pressed above 1100 px.
 - On a cold load with the explorer remembered open, the column appears when the account record arrives, which can be after the document has started to draw.
 - The workspace and the explorer each subscribe to the same two queries. The SDK shares one listener per identical query, so a reader who goes back to the workspace pays nothing extra.

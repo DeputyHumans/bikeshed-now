@@ -4,7 +4,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { DocMeta, FolderMeta, UserRecord } from "../types";
 
 const state = vi.hoisted(() => ({
@@ -110,6 +110,24 @@ function mount({ editing = false, at = "/d/here" }: { editing?: boolean; at?: st
 
 const toggle = () => screen.getByRole("button", { name: "Your documents" });
 const panel = () => document.getElementById(EXPLORER_ID);
+
+/** The open document is in Launch, inside Projects; Archive and Elsewhere's folder are beside them. */
+const FOLDERS = [
+  folder("f-outer", "Projects"),
+  folder("f-inner", "Launch", "f-outer"),
+  folder("f-other", "Archive"),
+  folder("f-away", "Away"),
+];
+const DOCS = [
+  docMeta({ docId: "here", title: "Launch plan", folderId: "f-inner" }),
+  docMeta({ docId: "aside", title: "Notes", folderId: "f-other" }),
+  docMeta({ docId: "other", title: "Elsewhere doc", folderId: "f-away" }),
+];
+
+/** The names of every section and folder drawn open, alphabetically. */
+function expandedIn(nav: HTMLElement) {
+  return [...nav.querySelectorAll('button[aria-expanded="true"]')].map((b) => b.textContent ?? "").sort();
+}
 
 beforeEach(() => {
   state.auth = { user: { uid: "u-me" }, emailLower: "me@example.com", gate: "ready" };
@@ -221,13 +239,19 @@ describe("while the reader edits", () => {
         </Routes>
       </MemoryRouter>
     );
+    act(() => {
+      state.folders!(FOLDERS);
+      state.docs!(DOCS);
+    });
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Archive" }));
     rerender(tree(true));
     expect(screen.getByText("No toggle")).toBeTruthy();
     expect(panel()).toBeNull();
     rerender(tree(false));
     expect(panel()).not.toBeNull();
-    // Coming back is not somebody opening it: no focus taken.
+    // Coming back is not somebody opening it: no focus taken, and what was open still is.
     expect(document.activeElement).toBe(document.body);
+    expect(expandedIn(panel()!)).toEqual(["Archive", "Launch", "Projects"]);
   });
 });
 
@@ -258,8 +282,10 @@ describe("what it lists", () => {
     expect(within(nav).getByRole("link", { name: "Budget" }).getAttribute("aria-current")).toBeNull();
     expect(within(nav).getByRole("button", { name: "Projects" }).getAttribute("aria-expanded")).toBe("true");
     expect(within(nav).getByRole("button", { name: "Launch" }).getAttribute("aria-expanded")).toBe("true");
-    // A folder the open document is not in stays shut until asked.
+    // A folder the open document is not in stays shut until asked, and so do Recent and Shared with me.
     expect(within(nav).getByRole("button", { name: "Archive" }).getAttribute("aria-expanded")).toBe("false");
+    expect(within(nav).getByRole("button", { name: "Recent" }).getAttribute("aria-expanded")).toBe("false");
+    expect(within(nav).getByRole("button", { name: "Shared with me" }).getAttribute("aria-expanded")).toBe("false");
     expect(within(nav).queryByRole("link", { name: "Notes" })).toBeNull();
     fireEvent.click(within(nav).getByRole("button", { name: "Archive" }));
     expect(within(nav).getByRole("link", { name: "Notes" })).toBeTruthy();
@@ -291,6 +317,7 @@ describe("what it lists", () => {
       docMeta({ docId: "never", title: "Never read" }),
     ]);
     await act(async () => {});
+    fireEvent.click(within(nav).getByRole("button", { name: "Recent" }));
     const recent = within(nav).getByRole("button", { name: "Recent" }).closest("li")!;
     expect(within(recent).getAllByRole("link").map((a) => a.textContent)).toEqual(["Read last", "Read first"]);
     expect(state.reading).toHaveBeenCalledWith("u-me", 100);
@@ -313,5 +340,110 @@ describe("what it lists", () => {
     open([docMeta({ docId: "here", title: "Here" }), docMeta({ docId: "other", title: "Other" })]);
     fireEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
     expect(state.subscriptions).toBe(1);
+  });
+});
+
+describe("each opening starts from the open document", () => {
+  const land = () =>
+    act(() => {
+      state.folders!(FOLDERS);
+      state.docs!(DOCS);
+    });
+
+  it("as a column: Recent and folders opened by hand are shut again, the way down to it is open", () => {
+    mount();
+    act(() => state.record!({}));
+    fireEvent.click(toggle());
+    land();
+    expect(expandedIn(panel()!)).toEqual(["Launch", "Projects"]);
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Recent" }));
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Archive" }));
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Launch" }));
+    expect(expandedIn(panel()!)).toEqual(["Archive", "Projects", "Recent"]);
+    fireEvent.click(toggle());
+    fireEvent.click(toggle());
+    expect(expandedIn(panel()!)).toEqual(["Launch", "Projects"]);
+    // Shut from another device and opened again there: the same.
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Recent" }));
+    act(() => state.record!({ explorerOpen: false }));
+    act(() => state.record!({ explorerOpen: true }));
+    expect(expandedIn(panel()!)).toEqual(["Launch", "Projects"]);
+  });
+
+  it("as a drawer: the same every time it opens", () => {
+    state.compact = true;
+    mount();
+    fireEvent.click(toggle());
+    land();
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Recent" }));
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Archive" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Close the document list" })[0]);
+    fireEvent.click(toggle());
+    expect(expandedIn(panel()!)).toEqual(["Launch", "Projects"]);
+  });
+
+  it("switching documents while it stays open keeps what was opened and opens the way to the new one", () => {
+    mount();
+    act(() => state.record!({ explorerOpen: true }));
+    land();
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
+    expect(expandedIn(panel()!)).toEqual(["Archive", "Away", "Launch", "Projects"]);
+    expect(within(panel()!).getByRole("link", { name: "Elsewhere doc" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("keeps a filter typed before it was shut", () => {
+    mount();
+    act(() => state.record!({ explorerOpen: true }));
+    land();
+    const filter = () => screen.getByRole("searchbox", { name: "Filter your documents by title" }) as HTMLInputElement;
+    fireEvent.change(filter(), { target: { value: "notes" } });
+    act(() => state.record!({ explorerOpen: false }));
+    act(() => state.record!({ explorerOpen: true }));
+    expect(filter().value).toBe("notes");
+    expect(within(panel()!).getAllByRole("link").map((a) => a.textContent)).toEqual(["Notes"]);
+    fireEvent.change(filter(), { target: { value: "" } });
+    expect(expandedIn(panel()!)).toEqual(["Launch", "Projects"]);
+  });
+
+  /** jsdom has no scrollIntoView: record what would have been brought into view. */
+  function watchScrolls() {
+    const scrolled: Element[] = [];
+    const had = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    onTestFinished(() => {
+      if (had) Object.defineProperty(Element.prototype, "scrollIntoView", had);
+      else delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    });
+    return scrolled;
+  }
+
+  it("brings a document two folders down into view the first time the lists land", () => {
+    const scrolled = watchScrolls();
+    mount();
+    act(() => state.record!({ explorerOpen: true }));
+    land();
+    expect(scrolled.map((el) => el.textContent)).toEqual(["Launch plan"]);
+  });
+
+  it("brings the open document into view where it is in the tree, not at the top of Recent", async () => {
+    const scrolled = watchScrolls();
+    const now = Date.now();
+    state.reading.mockImplementation(async () => new Map([["here", now - 2_000], ["other", now - 1_000]]));
+    mount();
+    act(() => state.record!({ explorerOpen: true }));
+    land();
+    await act(async () => {});
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Recent" }));
+    scrolled.length = 0;
+    fireEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
+    await act(async () => {});
+    // Recent lists it first, above the tree.
+    expect(within(panel()!).getAllByRole("link", { name: "Elsewhere doc" })).toHaveLength(2);
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0].closest(".explorer-tree")).not.toBeNull();
+    expect(scrolled[0].textContent).toBe("Elsewhere doc");
   });
 });

@@ -90,7 +90,7 @@ export function ExplorerPanel({
   reads: ReadonlyMap<string, number> | null;
   me: string;
   currentDocId: string;
-  /** Open sections and folders, kept above the panel so a drawer closing does not forget them. */
+  /** Open sections and folders, kept above the panel so switching documents keeps them; each opening starts again from the open document's folder. */
   expanded: ReadonlySet<string>;
   onToggle: (key: string) => void;
   query: string;
@@ -129,10 +129,13 @@ export function ExplorerPanel({
   }, [focusWanted, onFocused]);
 
   // Where you are, in view, once the lists have landed; not again while you scroll them.
+  // In the tree, where its folders are: Recent lists it too, at the top.
   const landed = !loading;
   useEffect(() => {
     if (!landed) return;
-    const here = nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    const here =
+      nav.current?.querySelector<HTMLElement>('.explorer-tree [aria-current="page"]') ??
+      nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
     here?.scrollIntoView?.({ block: "nearest" });
   }, [landed, currentDocId]);
 
@@ -220,7 +223,7 @@ export function ExplorerPanel({
               ) : null}
             </li>
           </ul>
-          <ul className="folder-tree">
+          <ul className="folder-tree explorer-tree">
             {folderRows(tree)}
             {docRows(loose, 0)}
           </ul>

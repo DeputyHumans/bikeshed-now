@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **The explorer opens on the folders above the document you are reading, and nothing else.** It opened with Recent expanded every time, plus whatever had been expanded before, so it showed what you read lately rather than where you are. Now every opening expands only the folders above the open document, whether it is the toggle, a page load with the explorer left open, or the drawer on a narrow screen. Recent, Shared with me and anything expanded earlier start closed. Opening another document while it stays open still keeps what you expanded and opens the way to the new one, and a filter you typed is still there when you reopen it. The open document is now scrolled into view in the tree rather than at the top of Recent. Before, a document inside a folder was never scrolled to on the first opening, because the scroll ran before its folders opened (SPEC §13, ADR 0039).
+
 ## 0.41.0 — 2026-11-19
 
 ### Added

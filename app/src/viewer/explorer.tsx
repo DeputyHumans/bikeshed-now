@@ -8,7 +8,7 @@ import { listMyDocs, listMyFolders, listMyReading, saveUserProfile, watchUser } 
 import { useIsCompactToolbar } from "../hooks/useMediaQuery";
 import { pathToFolder } from "../workspace/tree";
 import { RECENT_READS_LIMIT } from "../workspace/recent";
-import { ExplorerPanel, RECENT_SECTION } from "../components/ExplorerPanel";
+import { ExplorerPanel } from "../components/ExplorerPanel";
 import type { DocMeta, FolderMeta } from "../types";
 
 /** What the toggle in the document's toolbar needs. */
@@ -156,7 +156,10 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
     };
   }, [open, uid, docId]);
 
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set([RECENT_SECTION]));
+  // Each opening starts from where the reader is: the folders above the open
+  // document and nothing else, not Recent and not what was opened last time.
+  // Switching documents while it stays open only adds the new one's folders.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [query, setQuery] = useState("");
   const onToggle = useCallback((key: string) => {
     setExpanded((prev) => {
@@ -166,13 +169,24 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
-  // The open document's folder, opened down to it.
+  // Both are settled while rendering, not in an effect: the panel brings the
+  // open document into view from its own effect, which runs before this one's
+  // would, and an old set must never be painted.
   const folderOfCurrent = docs.find((d) => d.docId === docId)?.folderId ?? null;
-  useEffect(() => {
+  // Opening is the reader's wish, not the panel coming back after editing.
+  const wantsOpen = drawer ? drawerOpen : remembered;
+  const [wasOpen, setWasOpen] = useState(wantsOpen);
+  if (wantsOpen !== wasOpen) {
+    setWasOpen(wantsOpen);
+    if (wantsOpen) setExpanded(new Set(pathToFolder(folderOfCurrent, folders)));
+  }
+  // The open document's folder, opened down to it, when it is first known.
+  const [pathFor, setPathFor] = useState({ folderOfCurrent, folders });
+  if (pathFor.folderOfCurrent !== folderOfCurrent || pathFor.folders !== folders) {
+    setPathFor({ folderOfCurrent, folders });
     const path = pathToFolder(folderOfCurrent, folders);
-    if (path.length === 0) return;
-    setExpanded((prev) => (path.every((id) => prev.has(id)) ? prev : new Set([...prev, ...path])));
-  }, [folderOfCurrent, folders]);
+    if (path.length > 0) setExpanded((prev) => (path.every((id) => prev.has(id)) ? prev : new Set([...prev, ...path])));
+  }
 
   const value = useMemo<Explorer>(
     () => ({ available, open, drawer, toggle, setSuppressed }),
