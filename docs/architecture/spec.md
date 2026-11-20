@@ -1028,12 +1028,12 @@ Three reasons this is not merely tidier:
 Realtime Database, under `status/{docId}`:
 
 ```
-status/{docId}/peers/{sessionId} { uid, email, name, mode, focus?, viewport?, place?, slide?, composing?, lastChanged }
+status/{docId}/peers/{sessionId} { uid, email, name, mode, focus?, viewport?, place?, slide?, following?, composing?, lastChanged }
 status/{docId}/y/{entry}        base64 shared-document update
 presenceAccess/{docId}/{emailKey}   server-maintained mirror, client-unreadable
 ```
 
-Each tab owns a random session key and an authenticated, immutable `uid` in its record. A second tab cannot replace or remove the first tab's record. Readers aggregate sessions by uid: any editing tab keeps the person in edit mode; focus, viewport, place and slide come from the newest editing session, or the newest reading session when none edits. Legacy uid-keyed records remain readable and may be removed by their own uid during the transition. The withdrawn `lock` and `requests` nodes remain rejected.
+Each tab owns a random session key and an authenticated, immutable `uid` in its record. A second tab cannot replace or remove the first tab's record. Readers aggregate sessions by uid: any editing tab keeps the person in edit mode, and any tab following the reader marks them as following; focus, viewport, place and slide come from the newest editing session, or the newest reading session when none edits. Legacy uid-keyed records remain readable and may be removed by their own uid during the transition. The withdrawn `lock` and `requests` nodes remain rejected.
 
 Leaving cancels queued presence updates and suppresses late connection callbacks. An authenticated session owner may delete only their own existing record even after revocation or expiry; writes still require current membership and identity checks. Announcing `mode: edit` additionally requires current editor access. The server's editing veto counts distinct currently authorized editor uids, so stale records from a completed downgrade or revocation cannot block a write. A failed mirror read refuses the write. This assumes successful mirror delivery; the existing delivery limitation below still applies.
 
@@ -1043,6 +1043,7 @@ Leaving cancels queued presence updates and suppresses late connection callbacks
 | `viewport` — fractional scroll position | scroll | 500 ms |
 | `place` — `{ a?, b?, at }`, where in the text the top of the screen is | scroll, in the same write as `viewport`, read when it is sent | 500 ms |
 | `slide` — the slide shown, 0-based, while the deck is paged | the slide changing | edge-triggered |
+| `following` — the uid of the person this tab follows | following starting or ending | edge-triggered |
 | `composing` — `{ threadId \| "new" }` | comment input focus/blur | edge-triggered |
 | `mode` — view / edit | transition | edge-triggered |
 
@@ -1057,6 +1058,7 @@ Choosing a person's chip follows them: this reader goes wherever they are, until
 - **Pressing a name goes to where that person is at once.** Every reader's place is shared from the moment their document opens, not from their first scroll, and again, with their slide, whenever their record is made anew (a new live session after somebody publishes, presence turning on after the document loaded). A reader who has not moved is at the top, and following them takes a follower there.
 - **The follower moves only when where the leader is changes,** not on every presence update, so another person's cursor moving does not pull back a follower who has just let go, and not before the deck has measured the document that loaded.
 - **Any move of the follower's own lets go:** a trusted wheel, key or pointer in the frame, and every move through the deck's own controls — the rail, the overview, the parent's keys, a thread taken to its slide — which `useDeck` reports, except the follow's own. Where the frame delivers no events (§6), a selection the follower makes lets go, as before.
+- **The person followed can see who follows them.** The follower's record carries `following`, the uid followed, sent the moment following starts or ends and again whenever the record is made anew. In the bar of the person it names, and nobody else's, that chip carries an eye, which is read aloud as "Following you" and survives forced colours, and a wash of the follower's colour. People following the reader come first among the chips, so a fold hides them last, and one folded anyway is named "(following you)" in the "+N" list. The follower's own chip says the person followed can see it. The rules take a non-empty string of at most 128 characters that is not the writer's own uid. A tab on an app without `following` sends none, so its follow shows no mark.
 - **Not followed:** a document that scrolls an inner element rather than the page reports no scroll (§7), so neither its fraction nor its place moves, and it cannot be followed. A leader whose tab still runs an app without `slide` is followed by fraction until that tab reloads.
 
 ### The presence mirror

@@ -89,6 +89,7 @@ vi.mock("../presence", async () => {
       setFocus: () => {},
       setView: () => {},
       setSlide: () => {},
+      setFollowing: () => {},
       setComposing: () => {},
       leave: () => {},
     }),

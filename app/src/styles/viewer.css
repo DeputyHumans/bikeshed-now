@@ -259,6 +259,11 @@
   border-color: currentColor;
   box-shadow: inset 0 0 0 1px currentColor;
 }
+/* This person follows the reader: a wash of their colour, beside the eye the
+   chip carries, which is the signal that survives forced colours. */
+.presence-chip[data-follows-you] {
+  background: color-mix(in srgb, currentColor 12%, var(--color-bg));
+}
 /* Mode is encoded by DOT SHAPE, not by colour: colour already carries identity,
    and one signal cannot carry two meanings. */
 .presence-dot {

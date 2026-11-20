@@ -39,6 +39,12 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 - **A file that is not there is a 404 that nobody caches.** A HEAD answered 200 for any path, and a missing file at a public document's address answered 404 with `public, max-age` already set, so a shared cache could keep the 404 for five minutes. A HEAD now asks whether the file exists, at no cost when the version's list knows it, and every refusal is `private, no-store`.
 - **Sizes read as megabytes.** The dropzone showed a 200 MB file as "204800 KB".
 
+## 0.39.2 — 2026-11-19
+
+### Added
+
+- **You can see who is following you.** Following someone was invisible to them. Now the follower's presence record says whom they follow, and the person followed sees that follower's chip marked with an eye, read aloud as "Following you", and a light wash of the follower's colour. People following you come first among the names, so a narrow bar folds them away last, and one folded anyway is named so in the "+N" list. Only the person followed is shown it. The follower's own chip says the person can see it, and letting go clears the mark at once. The presence rules accept the new field as a uid that is not the writer's own. A tab still running an older app shows no mark and sends none (SPEC §16).
+
 ## 0.39.1 — 2026-11-18
 
 ### Fixed

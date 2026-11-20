@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewReading } from "../presence";
 import { usePeerPresence } from "./usePeerPresence";
 
-type Handle = Record<"setMode" | "setFocus" | "setView" | "setSlide" | "setComposing" | "leave", ReturnType<typeof vi.fn>>;
+type Handle = Record<"setMode" | "setFocus" | "setView" | "setSlide" | "setFollowing" | "setComposing" | "leave", ReturnType<typeof vi.fn>>;
 const handles = vi.hoisted(() => [] as Handle[]);
 
 vi.mock("../presence", async () => {
@@ -14,7 +14,7 @@ vi.mock("../presence", async () => {
   return {
     ...actual,
     joinPresence: vi.fn(() => {
-      const h: Handle = { setMode: vi.fn(), setFocus: vi.fn(), setView: vi.fn(), setSlide: vi.fn(), setComposing: vi.fn(), leave: vi.fn() };
+      const h: Handle = { setMode: vi.fn(), setFocus: vi.fn(), setView: vi.fn(), setSlide: vi.fn(), setFollowing: vi.fn(), setComposing: vi.fn(), leave: vi.fn() };
       handles.push(h);
       return h;
     }),
@@ -93,5 +93,27 @@ describe("where a reader is, for whoever follows them", () => {
     mount(null);
     expect(handles).toHaveLength(1);
     expect(handles[0].setView).not.toHaveBeenCalled();
+  });
+});
+
+describe("whom a reader follows, for the person followed", () => {
+  it("is sent when they press a name and cleared when they let go", () => {
+    const { result } = mount(frameDoc());
+    act(() => result.current.toggleFollow("leader"));
+    expect(handles[0].setFollowing).toHaveBeenLastCalledWith("leader");
+    act(() => result.current.release());
+    expect(handles[0].setFollowing).toHaveBeenLastCalledWith(null);
+    act(() => result.current.toggleFollow("leader"));
+    act(() => result.current.toggleFollow("leader"));
+    expect(handles[0].setFollowing).toHaveBeenLastCalledWith(null);
+  });
+
+  it("is sent again when the record is made again for a new live session", () => {
+    const doc = frameDoc();
+    const { result, rerender } = mount(doc, "a");
+    act(() => result.current.toggleFollow("leader"));
+    rerender({ doc, liveEpoch: "b" });
+    expect(handles).toHaveLength(2);
+    expect(handles[1].setFollowing).toHaveBeenCalledWith("leader");
   });
 });

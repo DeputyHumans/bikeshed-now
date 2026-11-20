@@ -172,3 +172,42 @@ it("gives each person the slide and place of the session it reads them from, and
   expect(odd.slide).toBeUndefined();
   expect(odd.place).toBeUndefined();
 });
+
+it("sends whom this tab follows at once, never twice for the same person, drops it on letting go, and never sends what the rules refuse", async () => {
+  const peer = joinPresence("d", "u", "a@example.test", "A", "view");
+  await connect(); const before = calls.set.mock.calls.length;
+  peer.setFollowing("leader");
+  expect(calls.set.mock.calls.at(-1)?.[1]).toHaveProperty("following", "leader");
+  peer.setFollowing("leader");
+  expect(calls.set).toHaveBeenCalledTimes(before + 1);
+  // Every later write carries it, because each write is the whole record.
+  peer.setSlide(2);
+  expect(calls.set.mock.calls.at(-1)?.[1]).toMatchObject({ following: "leader", slide: 2 });
+  peer.setFollowing(null);
+  expect(calls.set.mock.calls.at(-1)?.[1]).not.toHaveProperty("following");
+  const sent = calls.set.mock.calls.length;
+  // One's own uid and an over-long one would cost the whole record; neither is sent.
+  peer.setFollowing("u"); peer.setFollowing("x".repeat(129)); peer.setFollowing("");
+  expect(calls.set).toHaveBeenCalledTimes(sent);
+  peer.leave();
+});
+
+it("marks a person as following this reader when any of their tabs does, and not when they follow somebody else", () => {
+  const seen = vi.fn();
+  watchPeers("d", "self", seen);
+  calls.value.mock.calls[0][1]({
+    val: () => ({
+      // The tab that follows is the OLDER one: the newest session gives the
+      // person's place, but following is an OR across their tabs.
+      following: { uid: "u", email: "a@example.test", mode: "view", following: "self", lastChanged: 10 },
+      idle: { uid: "u", email: "a@example.test", mode: "view", lastChanged: 20 },
+      elsewhere: { uid: "v", email: "b@example.test", mode: "view", following: "u", lastChanged: 5 },
+      plain: { uid: "w", email: "c@example.test", mode: "view", lastChanged: 5 },
+    }),
+  });
+  const [peers] = seen.mock.calls[0];
+  const of = (uid: string) => peers.find((p: { uid: string }) => p.uid === uid);
+  expect(of("u").followsYou).toBe(true);
+  expect(of("v").followsYou).toBeUndefined();
+  expect(of("w").followsYou).toBeUndefined();
+});
