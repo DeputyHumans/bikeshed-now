@@ -125,7 +125,7 @@ Stop when the person says so, after an hour with nothing new from anyone else, o
 5. **Reply in every thread first.** Lead with the answer, one point per reply, no filler.
 6. **Then publish once.** Never once per thread.
    - Over MCP, pass `update_document` the `baseVersion` you revised from. If a person published since, the update is refused and names the version that is current: read that, and start again from step 2. Nothing is overwritten.
-   - From a shell, `bikeshed update <id> <file> --base <version>` does the same, for a `.zip`, a folder or the changed files alone too.
+   - From a shell, `bikeshed update <id> <file> --base <version>` does the same, for a `.zip` too, and from `bikeshed-now` 0.24.0 for a folder or the changed files alone.
    - The result's `threadsLeftBehind` counts the open threads that stay on the version you replaced. Mention them; they cannot be answered any more.
 7. **Tell the person:**
    - which threads you answered, each with its link (`url` in `get_comments`, `threadUrl` from a reply);

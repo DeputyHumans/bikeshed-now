@@ -177,7 +177,7 @@ export BIKESHED_ORIGIN=https://<deployment>
 export BIKESHED_TOKEN=bsk_...
 ```
 
-Every command takes `--json`. `login` signs in through the browser and waits for a person to approve, so run it with a long timeout. The two variables work instead of `login` where no browser will ever open, such as CI. `bikeshed --version` prints which version is installed; folders, loose files and large media need 0.24.0 or later.
+Every command takes `--json`. `login` signs in through the browser and waits for a person to approve, so run it with a long timeout. The two variables work instead of `login` where no browser will ever open, such as CI. `bikeshed --version` prints which version is installed. Folders, loose files and large media need 0.24.0 or later: an older one stops on a folder, but sends any other file except a `.zip` as the page, so a stylesheet or an SVG would replace the page and a picture is refused.
 
 `bikeshed get <id>` prints an HTML document as its Markdown reading, every page of it, and `bikeshed get <id> --source > index.html` writes the whole source, however long it is. `get_document` returns 200,000 characters at a time and sets `truncated` when there is more. Never send a cut source back as an update: the new version would be missing everything after the cut.
 
@@ -372,7 +372,7 @@ Anything else is refused. A version may be 500 MB and 2,000 files, each path at 
 **An update keeps the document's format, and what it replaces depends on what you send. Send only what changed.**
 
 - **Only `files`**, through `update_document`, replaces each file at its path or adds it, and keeps everything else, the page included. Changing a document's files takes being one of its editors, not open editing.
-- **Several files, or one that is not a page**, through `bikeshed update <id> <files…>`, each replace the file of the same name, wherever it is, or are added; a path such as `img/chart.png` names exactly one, and `site/img/chart.png`, from the folder above, still replaces `img/chart.png`. A name two files share is refused with both paths. The output says where each file went, and marks each one that was added.
+- **Several files, or one that is not a page**, through `bikeshed update <id> <files…>` (0.24.0 or later), each replace the file of the same name, wherever it is, or are added; a path such as `img/chart.png` names exactly one, and `site/img/chart.png`, from the folder above, still replaces `img/chart.png`. A name two files share is refused with both paths. The output says where each file went, and marks each one that was added.
 - **One `.md` or `.html` file**, through `bikeshed update` or `update_document` with `content`, replaces the entry. Every file beside it is kept, so you can revise a bundle's text and its images and stylesheets stay where they were.
 - **A folder or a `.zip`**, through `bikeshed update`, replaces the whole bundle. A file it leaves out is gone from the new version. This takes somebody the document is shared with as an editor, not open editing.
 
