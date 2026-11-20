@@ -7,6 +7,7 @@ const admin = require("firebase-admin");
 
 const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
 const { TOOLS } = require("../lib/mcp/tools.js");
+const { LOOKS_LIKE_HTML } = require("../lib/mcp/tools/shared.js");
 
 const tool = (name) => TOOLS.find((t) => t.name === name);
 
@@ -303,4 +304,19 @@ test("a reading sent back as an update is refused, and the source it names is wh
   assert.equal(source.markdown, undefined);
   await w.update(source.source.replace("two weekends", "one weekend"), { baseVersion: "v1" });
   assert.equal(w.doc().currentVersion, "v2");
+});
+
+test("a picture sent as the page's text is refused, as bikeshed-now 0.23.0 sends one", async () => {
+  /**
+   * Up to 0.23.0, `bikeshed update <id> chart.png` read the file as UTF-8 and
+   * sent it to update_document as content. A PNG starts with its signature
+   * and a chunk length full of NUL bytes, and a screenshot often holds a
+   * tag's worth of bytes by chance, so the HTML check alone let it through
+   * and the page became the picture.
+   */
+  const w = world();
+  const picture = Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.from("<a "), Buffer.alloc(16)]).toString("utf8");
+  assert.match(picture, LOOKS_LIKE_HTML, "the HTML check alone would take it");
+  await assert.rejects(w.update(picture, { baseVersion: "v1" }), /NUL byte[\s\S]*bikeshed-now 0\.24\.0 or later/);
+  assert.equal(w.doc().currentVersion, "v1", "nothing was published");
 });

@@ -563,6 +563,18 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
       const sendsFiles = Array.isArray(args.files) && args.files.length > 0;
       if (content === null && !sendsFiles) throw new Error("send content, files, or both");
       if (content !== null && !content.trim()) throw new Error("content is empty");
+      // A picture, a film or a font read as text has NUL bytes, and no page
+      // does. Up to 0.23.0, bikeshed sent any file but a .zip here as the
+      // page, so `bikeshed update <id> chart.png` replaced the page with the
+      // picture: a screenshot often holds a tag's worth of bytes somewhere,
+      // which is all the HTML check below asks for.
+      if (content !== null && content.includes("\u0000")) {
+        throw new Error(
+          "that content has a NUL byte in it, which no page has, so it looks like a picture or another binary file read as text. " +
+            "To replace or add a file beside the page, send it in files. " +
+            "From a shell, bikeshed update <id> <file> does that with bikeshed-now 0.24.0 or later; an older one sends every file but a .zip as the page",
+        );
+      }
       // Changing what a document is made of is its editors' own (SPEC §19), as
       // a bundle upload is: open editing exists for correcting text in place.
       if (sendsFiles && !isDocEditor(data, ctx.caller.uid, ctx.caller.emailLower)) {

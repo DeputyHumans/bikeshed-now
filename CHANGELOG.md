@@ -34,6 +34,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ### Fixed
 
+- **An older `bikeshed` can no longer publish a picture as the page.** Up to 0.23.0, `bikeshed update <id> chart.png` sent the picture to `update_document` as the page's new text. On an HTML document the only check was for a tag, which 6 of this repository's 9 pictures pass by chance, so the page became the picture. `update_document` now refuses content with a NUL byte in it, which pictures, films and fonts have and pages do not. A stylesheet or a script is text, so an older CLI still sends one as the page; the skills, the guides and the CLI's README now say so, and say to check `bikeshed --version` first.
 - **Closing the upload dialog stops the upload.** Cancel, Escape or a click outside closed the dialog and left the upload running, and it published anyway. Closing it while the bytes are on their way now stops them and nothing is published. Once they have all arrived the dialog says publishing will finish, and offers only its own close. Leaving the page while sending asks first.
 - **A file that is not there is a 404 that nobody caches.** A HEAD answered 200 for any path, and a missing file at a public document's address answered 404 with `public, max-age` already set, so a shared cache could keep the 404 for five minutes. A HEAD now asks whether the file exists, at no cost when the version's list knows it, and every refusal is `private, no-store`.
 - **Sizes read as megabytes.** The dropzone showed a 200 MB file as "204800 KB".
