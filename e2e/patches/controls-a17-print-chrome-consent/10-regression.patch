@@ -1,9 +1,9 @@
 --- a/app/src/styles/viewer.css
 +++ b/app/src/styles/viewer.css
-@@ -368,7 +368,6 @@
-   .viewer-toolbar,
-   .viewer-banners,
+@@ -559,7 +559,6 @@
    .comments-panel,
+   .explorer,
+   .explorer-scrim,
 -  .consent,
    .slide-rail,
    .slide-overview,

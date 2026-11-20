@@ -1,8 +1,8 @@
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -177,7 +177,7 @@
-   const [pane, setPane] = useState<"doc" | "comments">("doc");
-   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
+@@ -193,7 +193,7 @@
+   // Beside the document, above this component (viewer/explorer.tsx); told when to step aside.
+   const explorer = useExplorer();
    // Closed to start with in one column, where it is a drawer over the slide it lists.
 -  const [railOpen, setRailOpen] = useState(!singleColumn);
 +  const [railOpen, setRailOpen] = useState(true);
