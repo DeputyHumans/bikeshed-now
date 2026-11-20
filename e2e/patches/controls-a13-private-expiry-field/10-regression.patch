@@ -1,0 +1,11 @@
+--- a/app/src/components/VisibilitySection.tsx
++++ b/app/src/components/VisibilitySection.tsx
+@@ -247,7 +247,7 @@
+       {/* A date makes a shared document or folder private (SPEC §17), so on
+           one that is private already it does nothing worth setting — unless
+           one is set and needs clearing. */}
+-      {state.visibility !== "private" || state.expiresAt !== null ? (
++      {state.visibility !== "private" || state.expiresAt !== null || state.visibility === "private" ? (
+       <div className="expiry-row">
+         <label htmlFor="expires-on">
+           <strong>Make private after</strong>

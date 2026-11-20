@@ -873,13 +873,18 @@ scenario("A13.8 the visibility radios set the level; Copy puts the ?k= link on t
   assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null }, "making private withdraws open editing");
   await eventually(async () => (await openEdit.count()) === 0 && (await link.count()) === 0, { timeout: 10_000, message: "no #public-edit and no link while private" });
 
-  ctx.step("expiry: a date a month out is stored as the end of that day; Clear removes it");
+  // A date makes a shared document private (SPEC §17), so a private one offers
+  // none to set (29ba128b); the date is set and cleared on a shared level.
+  const date = dialog.locator("#expires-on");
+  assert.equal(await date.count(), 0, "no expiry date to set while private");
+
+  ctx.step("expiry, on a document shared by link: a date a month out is stored as the end of that day; Clear removes it");
+  await pick("unlisted");
   const day = await o.page.evaluate(() => {
     const d = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const p = (n) => String(n).padStart(2, "0");
     return { input: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, end: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime() };
   });
-  const date = dialog.locator("#expires-on");
   const clear = dialog.getByRole("button", { name: "Clear", exact: true });
   const set = await posting(o, "/visibility", () => date.fill(day.input));
   assert.equal(set.status, 200);
@@ -895,7 +900,11 @@ scenario("A13.8 the visibility radios set the level; Copy puts the ?k= link on t
   assert.equal((await levelOf(docId)).expiresAt, day.end);
   const emptied = await posting(o, "/visibility", () => date.fill(""));
   assert.equal(emptied.status, 200);
-  assert.deepEqual(await levelOf(docId), { visibility: "private", publicEdit: false, linkToken: null, expiresAt: null }, "an emptied field clears the expiry and nothing else");
+  const after = await levelOf(docId);
+  assert.deepEqual({ ...after, linkToken: typeof after.linkToken }, { visibility: "unlisted", publicEdit: false, linkToken: "string", expiresAt: null }, "an emptied field clears the expiry and nothing else");
+
+  ctx.step("private once more, as the case found it");
+  await pick("private");
 });
 
 // --- A13.9 --------------------------------------------------------------------

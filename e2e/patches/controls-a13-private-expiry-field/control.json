@@ -1,0 +1,13 @@
+{
+  "oracle": "A13.8 the visibility radios set the level; Copy puts the ?k= link on the clipboard; open editing is offered only off private; the expiry date can be cleared",
+  "what": "Offer an expiry date on a private document, where a date can only make it what it already is.",
+  "target": {
+    "spec": "e2e/specs/functional/a13-sharing.spec.mjs",
+    "case": "A13.8 the visibility radios set the level; Copy puts the ?k= link on the clipboard; open editing is offered only off private; the expiry date can be cleared",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "^no expiry date to set while private"
+  }
+}
