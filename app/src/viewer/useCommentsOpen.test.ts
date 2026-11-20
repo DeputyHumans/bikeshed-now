@@ -69,8 +69,8 @@ describe("useCommentsOpen", () => {
   });
 
   it("decides again for another document in the same viewer instance", () => {
-    // The same DocViewer navigates from one document straight into the next
-    // without unmounting — the sequence useDocumentTitle already guards.
+    // App remounts the viewer for each document today (ViewerRoute's key);
+    // this holds if a viewer is ever reused for the next one instead.
     const { result, rerender } = renderHook(({ docId }) => useCommentsOpen(docId), {
       initialProps: { docId: "doc-a" },
     });

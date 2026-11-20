@@ -4,8 +4,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Incremental } from "../hooks/useIncremental";
 
-/** Every item's title link, in the order the lists draw them: folders, then documents. */
-const ITEM_TITLES = "a.doc-card-title, a.doc-row-title";
+/** Every item's title link, in the order the lists draw them: folders, then documents. The explorer's are documents alone. */
+const ITEM_TITLES = "a.doc-card-title, a.doc-row-title, a.explorer-doc";
 
 /**
  * The sentinel `useIncremental` watches, and the way to the next batch for

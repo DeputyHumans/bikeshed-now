@@ -403,7 +403,7 @@ export function watchAccountMove(
 export async function saveUserProfile(
   uid: string,
   emailLower: string,
-  fields: Partial<Pick<UserRecord, "displayName" | "photoURL" | "providers" | "emailNotifications" | "analyticsOptOut" | "defaultMarking">>,
+  fields: Partial<Pick<UserRecord, "displayName" | "photoURL" | "providers" | "emailNotifications" | "analyticsOptOut" | "defaultMarking" | "explorerOpen">>,
 ): Promise<void> {
   await setDoc(
     doc(db, "users", uid),

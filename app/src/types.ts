@@ -312,6 +312,8 @@ export interface UserRecord {
   emailNotifications?: boolean;
   analyticsOptOut?: boolean;
   defaultMarking?: Marking;
+  /** The viewer's explorer column, open or closed, on every device this account uses (SPEC §13). */
+  explorerOpen?: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }

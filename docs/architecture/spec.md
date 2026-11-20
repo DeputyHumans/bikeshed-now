@@ -308,7 +308,7 @@ docs/{docId}/linkGrants/{uid}                  LinkGrant        (server-written)
 forks/{forkDocId}                              ForkRecord       (server-only, §21)
 folders/{folderId}                             FolderMeta
 teams/{teamId}                                 TeamMeta
-users/{uid}                                    UserRecord
+users/{uid}                                    UserRecord       (self-only; `explorerOpen` is the explorer's open or closed, §13)
 users/{uid}/tokens/{tokenId}                   TokenRecord
 users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
 public/{docId}                                 PublicDoc        (projection, public only — its own level or a folder's, §17)
@@ -587,6 +587,7 @@ app/src/
   viewer/{useDocFrame.ts,useAnnotationLayer.ts,useInlineEditor.ts,...}
   embed/{main.ts,embed.ts,embed.css}  (the embed page's own entry, app/embed.html; never imports the app)
   workspace/{tree.ts,prefs.ts}
+  viewer/explorer.tsx               (the explorer's shell, above the keyed viewer, §13)
   pages/{DocList.tsx,DocViewer.tsx,SharedFolder.tsx,SignUp.tsx,Account.tsx,Legal.tsx,Landing.tsx}
   components/*.tsx
   hooks/{breakpoints.ts,useMediaQuery.ts}
@@ -600,7 +601,7 @@ app/src/
 
 **On a phone the header is the wordmark and one menu.** At 600 px and below the address, Account, Docs and Sign out need more room than there is, so they fold behind one button (`AccountMenu`). A signed-out visitor finds Docs and Sign in there, and Sign in comes back to the same place through `next`.
 
-**On a phone the bars above a document are two rows.** At 600 px and below, or on a phone on its side (`(max-height: 500px) and (pointer: coarse)`, `CONDENSED_QUERY`), the app header folds into the toolbar, whose first row holds the mark, the document's title and that one menu, and whose second holds Document/Comments and what fits beside it. On its side, where Safari leaves under 300 px of height, it is one row.
+**On a phone the bars above a document are two rows.** At 600 px and below, or on a phone on its side (`(max-height: 500px) and (pointer: coarse)`, `CONDENSED_QUERY`), the app header folds into the toolbar, whose first row holds the explorer's toggle (§13 "The explorer"), the mark, the document's title and that one menu, and whose second holds Document/Comments and what fits beside it. On its side, where Safari leaves under 300 px of height, it is one row.
 
 | Width | A document | A deck |
 |---|---|---|
@@ -874,7 +875,7 @@ The workspace shows its folders and documents as cards or as a list, and each ki
 
 Every workspace list draws 25 items at first, folders before documents, and 25 more when its end comes within 400 px of the screen (`hooks/useIncremental.ts`) or "Show 25 more" is pressed; the button moves focus to the first item it drew, so nobody has to scroll to reach the rest. A line under the list says how many of how many are shown. A new page, folder, search, sort, filter or layout starts again at 25; a live update does not, so a document arriving keeps your place. Only the drawing is limited: the list is fetched whole as before, so a search, the sort, the filters and the empty states see every item, and the covers filled in for the cards on screen are those of the documents drawn. A folder opened by its link (`SharedFolder`) draws its items the same way. Back from a document returns to the same place: how many items were drawn and how far the window was scrolled are kept for that history entry in the tab's `sessionStorage` (`workspace/place.ts`), by an id the entry carries in its own `history.state` rather than the router's key, which is the same for every freshly loaded page. They are restored once the list's items have landed, and only to the same view, folder, sort, layout and filters. The workspace stays mounted while you move between its pages, so it looks the entry up again on every navigation: Back or Forward to one of its pages returns to that page's place, and a page opened anew, from the rail, a folder or a link, starts at the top. A new visit starts at the top, and nothing is kept until a restored list has scrolled back, so the scroll a half-drawn page clamps to never replaces the place.
 
-The sort and each kind of page's layout are kept in the browser's own storage (`workspace/prefs.ts`) and never sent anywhere; where storage is blocked they last as long as the page. "Last read by anyone" sorts by `stats.lastViewedAt`, which any reader moves; a person's own reads are listed by Recent.
+The sort and each kind of page's layout are kept in the browser's own storage (`workspace/prefs.ts`) and never sent anywhere; where storage is blocked they last as long as the page. The explorer's open or closed is the exception, kept on the account (§13 "The explorer"). "Last read by anyone" sorts by `stats.lastViewedAt`, which any reader moves; a person's own reads are listed by Recent.
 
 ### Recent
 
@@ -887,6 +888,12 @@ Everything, the top of the folder tree, is at `/everything`. Signed out, `/` is 
 ### Shared with me
 
 `/shared` lists every document somebody else owns that its reader can read, from every folder, with the usual sorts. Folders shared with you are already in the rail, so it lists none. It is where a document shared with you inside a folder you were not given can be found without its link or a search: Everything and the folder tree show only folders you can open.
+
+### The explorer
+
+A document's toolbar starts with Your documents, for a signed-in account that is reading. It opens the explorer at the left of the document: a filter by title, then Recent and Shared with me, ten at a time, then every folder you can open with its documents, and the documents in no folder after them. A document filed in a folder you cannot open is listed at the top level rather than nowhere. The open document is marked, the folders above it start open, and so does Recent. It lists what the workspace query returns, so a document you read only through its link is not in it, as it is not in the workspace. Its lists are the workspace's own queries, subscribed from the first time it opens until the reader leaves the viewer, and your reads are fetched again for each document you open, as Recent's are.
+
+It lives above the keyed viewer (`viewer/explorer.tsx`, ADR 0039), so opening another document from it remounts the viewer and leaves the explorer, its open folders and its filter as they were. Above 1100 px it is a 260 px column beside the document and its bars, a track that exists only while it is open. Whether it is open is kept on the account, `users/{uid}.explorerOpen`, so it follows the reader to every device; it is the one view choice kept there rather than in the browser. At 1100 px and below it is a drawer over the document with a scrim. The drawer starts closed every time and never writes the account. It closes on Escape, on the scrim and when the reader goes to another page, and gives focus back to the toggle. It steps aside while the reader edits, from the moment they ask to, because its links would leave the document and leaving drops what the editor has not saved yet. Presenting and printing hide it with the rest of the chrome.
 
 ---
 

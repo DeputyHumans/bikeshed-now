@@ -24,10 +24,11 @@ import type { Annotation } from "../types";
  * it changes the answer. A peer's comment landing must not reopen a panel the
  * reader closed, and a toggle before the snapshot is a choice, not a default.
  *
- * Keyed on the document, not the version: the same DocViewer instance navigates
- * from one document straight into the next without unmounting, and the next
- * decides for itself; but publishing a version of THIS document must not
- * collapse a panel the reader had open.
+ * Keyed on the document, not the version. App's `ViewerRoute` remounts the
+ * viewer for every document, so today the next document starts afresh anyway;
+ * the key is what keeps that true if a viewer is ever reused for another
+ * document, which then decides for itself. Publishing a version of THIS
+ * document must not collapse a panel the reader had open.
  *
  * Reads nothing from the frame and puts nothing in the document it owns, so the
  * declaration-order rule at the top of DocViewer does not apply.

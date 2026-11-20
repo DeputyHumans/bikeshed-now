@@ -201,3 +201,42 @@ describe("printing the page", () => {
     expect(selectorsWith(printBlock, "height", "auto")).toContain(".viewer");
   });
 });
+
+/**
+ * The explorer wraps the viewer rather than living in it (viewer/explorer.tsx),
+ * so its column is the shell's, and it repeats `.viewer-body`'s two lessons: a
+ * track that exists only while the panel does, and the viewer pinned to the
+ * last track whatever comes before it.
+ */
+describe("the explorer column", () => {
+  /** The declarations of the rule whose selector is exactly `selector`, punctuation and all. */
+  const exact = (selector: string) => {
+    const at = VIEWER_CSS.indexOf(`\n${selector} {`);
+    if (at < 0) throw new Error(`no rule for ${selector}`);
+    return VIEWER_CSS.slice(VIEWER_CSS.indexOf("{", at) + 1, VIEWER_CSS.indexOf("}", at));
+  };
+  const value = (selector: string, property: string) =>
+    exact(selector).match(new RegExp(`${property}\\s*:\\s*([^;]+);`))?.[1].trim() ?? null;
+
+  it("is a track only while the explorer is open", () => {
+    expect(tracks(value(".viewer-shell", "grid-template-columns") ?? "")).toEqual(["minmax(0, 1fr)"]);
+    expect(tracks(value('.viewer-shell[data-explorer="open"]', "grid-template-columns") ?? "")).toEqual([
+      "260px",
+      "minmax(0, 1fr)",
+    ]);
+  });
+
+  it("pins the viewer to the last track, so it never lands in the explorer's", () => {
+    expect(value(".viewer-shell > :not(.explorer, .explorer-scrim)", "grid-column")).toBe("-2 / -1");
+  });
+
+  it("leaves with the rest of the chrome when presenting, and takes its track with it", () => {
+    const presenting = selectorsWith(VIEWER_CSS, "display", "none");
+    expect(presenting).toContain(".is-presenting .explorer");
+    expect(presenting).toContain(".is-presenting .explorer-scrim");
+    // A pattern, as `selectorsWith` takes its value: the parentheses escaped.
+    const oneTrack = "minmax\\(0, 1fr\\)";
+    expect(selectorsWith(VIEWER_CSS, "grid-template-columns", oneTrack)).toContain(".is-presenting .viewer-shell");
+    expect(selectorsWith(mediaBlock("print"), "grid-template-columns", oneTrack)).toContain(".viewer-shell");
+  });
+});

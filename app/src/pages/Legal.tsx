@@ -19,7 +19,7 @@ import { readConsent, writeConsent } from "../consent";
  * most likely way for them to go stale is somebody adding a third party.
  */
 
-const UPDATED = "4 November 2026";
+const UPDATED = "19 November 2026";
 
 function Contact() {
   if (!LEGAL_CONTACT) {
@@ -169,7 +169,9 @@ export function Privacy() {
       <ul>
         <li>
           <strong>Your account</strong> — the email address and display name
-          your sign-in provider returns, and which providers you have linked.
+          your sign-in provider returns, which providers you have linked, and
+          the settings you choose in the app, such as whether your list of
+          documents stays open beside a document.
         </li>
         <li>
           <strong>What you publish</strong> — documents, their versions, and

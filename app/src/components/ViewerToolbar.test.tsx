@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The expiry sits on the toolbar, beside the version (SPEC §7, §17).
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { phoneActions, ViewerToolbar } from "./ViewerToolbar";
@@ -9,6 +9,9 @@ import { ToastProvider } from "./Toast";
 
 const auth = vi.hoisted(() => ({ user: { uid: "u" }, emailLower: "someone@example.com", gate: "ready", signOut: async () => {} }));
 vi.mock("../auth", () => ({ useAuth: () => auth }));
+/** The explorer beside the viewer, as its shell would hand it down; off unless a test turns it on. */
+const explorer = vi.hoisted(() => ({ available: false, open: false, drawer: false, toggle: () => {}, setSuppressed: () => {} }));
+vi.mock("../viewer/explorer", () => ({ EXPLORER_ID: "doc-explorer", useExplorer: () => explorer }));
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -297,5 +300,59 @@ describe("on a phone", () => {
     expect(container.querySelector(".version-chip")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Bikeshed home" })).toBeNull();
+  });
+});
+
+describe("the explorer's toggle", () => {
+  const phone = (width: number) =>
+    vi.stubGlobal("matchMedia", (query: string) => {
+      const max = query.match(/^\(max-width: (\d+)px\)/);
+      const min = query.match(/^\(min-width: (\d+)px\)/);
+      return {
+        matches: max ? width <= Number(max[1]) : min ? width >= Number(min[1]) : false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      };
+    });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    explorer.available = false;
+    explorer.open = false;
+  });
+
+  test("comes before everything else in the bar, the title included", () => {
+    explorer.available = true;
+    const { container } = renderToolbar();
+    const first = container.querySelector(".viewer-toolbar")!.firstElementChild as HTMLElement;
+    expect(first.getAttribute("aria-label")).toBe("Your documents");
+    expect(first.getAttribute("aria-controls")).toBe("doc-explorer");
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("on a phone too, before the way home, leaving the row of actions as it was", () => {
+    explorer.available = true;
+    explorer.open = true;
+    phone(402);
+    const { container } = renderToolbar({ canEdit: true, canShare: true, singleColumn: true });
+    const bar = container.querySelector(".viewer-toolbar")!;
+    expect((bar.firstElementChild as HTMLElement).getAttribute("aria-label")).toBe("Your documents");
+    expect((bar.firstElementChild as HTMLElement).getAttribute("aria-expanded")).toBe("true");
+    expect((bar.children[1] as HTMLElement).getAttribute("aria-label")).toBe("Bikeshed home");
+    expect(within(container.querySelector(".viewer-toolbar-actions") as HTMLElement).queryByRole("button", { name: "Your documents" })).toBeNull();
+  });
+
+  test("is not drawn where the explorer is not offered", () => {
+    renderToolbar();
+    expect(screen.queryByRole("button", { name: "Your documents" })).toBeNull();
+  });
+
+  test("hands the press to the explorer", () => {
+    explorer.available = true;
+    const toggle = vi.fn();
+    explorer.toggle = toggle;
+    renderToolbar();
+    fireEvent.click(screen.getByRole("button", { name: "Your documents" }));
+    expect(toggle).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Added
+
+- **Your documents, beside the one you are reading.** The first button in a document's toolbar opens a list on the left: a filter by title, Recent, Shared with me, and every folder with its documents, the open one marked. Opening another document from it keeps the list, its open folders and its filter as they were, because the list sits outside the viewer that each document remounts. Whether it is open is kept on the account, so it follows you to every device. At 1100 px and below it is a drawer over the document that starts closed every time and never changes what the account remembers. It is hidden while you edit, because leaving a document mid-edit drops what the editor has not saved yet (SPEC §13, ADR 0039).
+
 ## 0.40.0 — 2026-11-19
 
 ### Added

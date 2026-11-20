@@ -17,6 +17,7 @@ import { Trash } from "./pages/Trash";
 import { SharedFolder } from "./pages/SharedFolder";
 import { Landing } from "./pages/Landing";
 import { DocViewer } from "./pages/DocViewer";
+import { ExplorerShell } from "./viewer/explorer";
 import { SignUp } from "./pages/SignUp";
 import { Account } from "./pages/Account";
 import { Connect } from "./pages/Connect";
@@ -109,10 +110,19 @@ export function ConnectRoute() {
   );
 }
 
-/** Redirect a bare /d/:docId once a version is known, so links stay stable. */
+/**
+ * Redirect a bare /d/:docId once a version is known, so links stay stable.
+ *
+ * The explorer sits outside the key: the viewer is remounted for every
+ * document, and the list of documents beside it is not (viewer/explorer.tsx).
+ */
 function ViewerRoute() {
   const params = useParams();
-  return <DocViewer key={`${params.docId}:${params.versionId ?? "current"}`} />;
+  return (
+    <ExplorerShell>
+      <DocViewer key={`${params.docId}:${params.versionId ?? "current"}`} />
+    </ExplorerShell>
+  );
 }
 
 export function App() {

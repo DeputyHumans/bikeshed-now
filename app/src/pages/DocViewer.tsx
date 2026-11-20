@@ -45,6 +45,7 @@ import { useLiveSync } from "../viewer/useLiveSync";
 import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
 import { useVersionDrop } from "../viewer/useVersionDrop";
+import { useExplorer } from "../viewer/explorer";
 import { baseFilesOf, combine, type Pick } from "../bundleInput";
 import { contentBase, readingSandboxed, readsDraft, type FrameMode } from "../viewer/frameMode";
 
@@ -188,6 +189,8 @@ export function DocViewer() {
   } = useCommentsOpen(docId);
   const [pane, setPane] = useState<"doc" | "comments">("doc");
   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
+  // Beside the document, above this component (viewer/explorer.tsx); told when to step aside.
+  const explorer = useExplorer();
   // Closed to start with in one column, where it is a drawer over the slide it lists.
   const [railOpen, setRailOpen] = useState(!singleColumn);
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(() => readPendingComment(docId));
@@ -601,6 +604,15 @@ export function DocViewer() {
       },
     );
   }, [docId, doc.currentVersion, settleComments, doc.resolvedFor, throughFolder]);
+
+  // The explorer steps aside while this reader edits, from the moment they ask
+  // to: its links would leave the document, and leaving drops what the editor
+  // has not saved yet. The slide rail's precedent: the editor's bar has no
+  // control to bring it back.
+  const { setSuppressed: suppressExplorer } = explorer;
+  const editingSoon = wantsEdit || mode.kind === "editing";
+  useEffect(() => suppressExplorer(editingSoon), [suppressExplorer, editingSoon]);
+  useEffect(() => () => suppressExplorer(false), [suppressExplorer]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -1098,6 +1110,8 @@ export function DocViewer() {
       dialog === null &&
       suggesting === null &&
       !commenting &&
+      // The bars stay while the explorer's drawer is over them.
+      !(explorer.open && explorer.drawer) &&
       !frame.loadError,
     doc: frame.doc,
     epoch: frame.epoch,

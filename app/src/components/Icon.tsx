@@ -42,6 +42,9 @@ const PATHS = {
   // A rail of slides beside the one being shown, and the same rail opened out
   // into a grid. Both read at 14px, which is where the toolbar uses them.
   slides: "M3 5h5v14H3zM11 5h10v14H11z",
+  // A window with its left column drawn in: the explorer beside a document.
+  // One frame, unlike the slides' two, so the two toolbar buttons never read alike.
+  explorer: "M3 5h18v14H3zM9 5v14",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   stats: "M5 20V10M12 20V4M19 20v-7",
   eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",

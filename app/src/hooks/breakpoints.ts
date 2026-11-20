@@ -9,7 +9,8 @@
  *
  *   COMPACT_TOOLBAR  viewer toolbar secondary actions drop their labels and go
  *                    icon-only. Trust and Edit keep theirs at every width,
- *                    because both change what the document DOES.
+ *                    because both change what the document DOES. The
+ *                    explorer stops being a column and becomes a drawer.
  *   ONE_COLUMN       viewer and workspace collapse to one column; the slide
  *                    rail becomes a drawer; a Doc/Comments toggle appears.
  *   PHONE            the header folds behind one menu button; Print leaves the

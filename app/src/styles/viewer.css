@@ -438,6 +438,88 @@
   margin-top: var(--s-1);
 }
 
+/* --- The explorer ---------------------------------------------------------
+ * Every document you can read, beside this one (viewer/explorer.tsx). It sits
+ * outside `.viewer`, around the keyed viewer, so it outlives a switch between
+ * documents; `.viewer` itself is unchanged by it.
+ *
+ * Its column exists only while it is open, for the reason `.viewer-body` gives
+ * for the comments column: a declared track takes its width whether or not
+ * anything is in it. Whatever the viewer renders, the document or a loading
+ * state, is PINNED to the last track, so it can never be auto-placed into the
+ * explorer's.
+ *
+ * As a drawer (1100px and below, decided in JavaScript and said by
+ * `data-drawer`) it lies over the document and the bars above it, so the frame
+ * keeps its width. STACKING: 48, over the slide drawer (45) and the overview
+ * (46), under the modal scrim and present-exit (50).
+ */
+.viewer-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.viewer-shell[data-explorer="open"] {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+.viewer-shell > :not(.explorer, .explorer-scrim) {
+  grid-column: -2 / -1;
+  grid-row: 1;
+  min-width: 0;
+}
+.explorer {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-h));
+  height: calc(100dvh - var(--header-h));
+  min-height: 0;
+  border-right: 1px solid var(--color-line);
+  background: var(--color-bg);
+}
+.explorer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-2);
+  border-bottom: 1px solid var(--color-line);
+}
+.explorer-filter { flex: 1 1 auto; min-width: 0; }
+.explorer-lists {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s-2);
+}
+.explorer-doc { text-decoration: none; }
+.explorer-note { margin: 0; padding: var(--s-1) var(--s-2); }
+.explorer .workspace-more {
+  align-items: flex-start;
+  gap: var(--s-1);
+  margin: var(--s-1) 0 var(--s-2);
+  padding-left: var(--s-2);
+}
+.explorer[data-drawer] {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 48;
+  width: min(300px, 86vw);
+  height: auto;
+  box-shadow: var(--shadow-xl);
+}
+/* A tap beside the drawer closes it, as the slide drawer's scrim does. */
+.explorer-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 47;
+  border: 0;
+  background: rgba(var(--ink-rgb), 0.18);
+  cursor: pointer;
+}
+
 /* --- Presentation mode ---------------------------------------------------
  * Chrome hidden, document full-window. Driven by a state class rather than by
  * unmounting, so the frame is never remounted and the reader never loses their
@@ -450,11 +532,14 @@
 .is-presenting .viewer-toolbar,
 .is-presenting .viewer-banners,
 .is-presenting .comments-panel,
+.is-presenting .explorer,
+.is-presenting .explorer-scrim,
 .is-presenting .consent {
   display: none;
 }
 .is-presenting .viewer { height: 100vh; height: 100dvh; }
-.is-presenting .viewer-body { grid-template-columns: minmax(0, 1fr); }
+.is-presenting .viewer-body,
+.is-presenting .viewer-shell { grid-template-columns: minmax(0, 1fr); }
 
 /* --- Printing the page ---------------------------------------------------
  * Cmd+P is routed to the export (usePrinting), which prints the document
@@ -472,6 +557,8 @@
   .viewer-toolbar,
   .viewer-banners,
   .comments-panel,
+  .explorer,
+  .explorer-scrim,
   .consent,
   .slide-rail,
   .slide-overview,
@@ -484,7 +571,8 @@
     display: none !important;
   }
   .viewer { height: auto; }
-  .viewer-body { grid-template-columns: minmax(0, 1fr); }
+  .viewer-body,
+  .viewer-shell { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Where you are in the deck, while every other piece of chrome is hidden. */

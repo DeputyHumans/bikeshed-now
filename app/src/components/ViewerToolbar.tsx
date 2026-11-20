@@ -18,8 +18,32 @@ import type { MenuEntry } from "./Menu";
 import type { Lineage } from "../forks";
 import type { Peer } from "../presence";
 import type { DocMeta, FolderMeta, Visibility } from "../types";
+import { EXPLORER_ID, useExplorer } from "../viewer/explorer";
 
 export type PhoneAction = "edit" | "share" | "fork" | "slides" | "present";
+
+/**
+ * The first thing in the bar, before the way home and the title: the list of
+ * every document you can read, beside this one (SPEC §13 "The explorer").
+ * Drawn only for a signed-in account that is reading; the editor's bar has none.
+ */
+function ExplorerToggle() {
+  const explorer = useExplorer();
+  if (!explorer.available) return null;
+  return (
+    <button
+      type="button"
+      className="btn btn-quiet btn-sm explorer-toggle"
+      aria-label="Your documents"
+      aria-expanded={explorer.open}
+      aria-controls={EXPLORER_ID}
+      title={explorer.open ? "Hide your documents" : "Show your documents beside this one"}
+      onClick={explorer.toggle}
+    >
+      <Icon name="explorer" size={15} />
+    </button>
+  );
+}
 
 /**
  * What a phone's second row has room for, and what waits in the menu.
@@ -303,6 +327,7 @@ export function ViewerToolbar({
 
     return (
       <div className="viewer-toolbar">
+        <ExplorerToggle />
         <Link to="/" className="viewer-home" aria-label="Bikeshed home">
           <Wordmark variant="mark" />
         </Link>
@@ -330,6 +355,7 @@ export function ViewerToolbar({
 
   return (
     <div className="viewer-toolbar">
+      <ExplorerToggle />
       {/* The title, with everything above it made walkable. A document opened
           from a link used to be a dead end: its folder was named nowhere, and
           the only way back to the workspace was the browser's back button. */}

@@ -172,7 +172,7 @@ Each is a decision with a reason in `docs/architecture/overview.md`, not a gap: 
 | `app/src/viewer/preview.ts` | the separate document a thumbnail renders, and the only thing allowed to force anything on a slide |
 | `app/src/brand/dom.ts` | every `bshd-` identifier, defined once |
 | `scripts/` vs `cli/` | operator tools with Admin credentials vs the end-user CLI over HTTPS |
-| `docs/architecture/adr/` | thirty-seven decisions, each with its reversal condition |
+| `docs/architecture/adr/` | thirty-eight decisions, each with its reversal condition |
 | `docs/development/verification.md` | the emulator walkthrough, and what it proves |
 | `docs/README.md` | every document, by what you want to do |
 | `README.md`, `docs/assets/readme/` | the page for people deciding whether to use Bikeshed, and its images. The SVGs are the source, each in a light and a dark file, with Basic Latin of Bikeshed Sans embedded so a wording change needs no new subset. The screenshots come from a kept e2e stack with the sample documents, made-up names and `example.com` addresses; retake them when the screens they show change. A new PNG there must be added to `EXPECTED_BINARIES` in `scripts/check-secrets.sh`, which reads tracked files only, so it passes `verify` until the commit and then fails CI |

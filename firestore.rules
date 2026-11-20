@@ -374,7 +374,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           'uid', 'email', 'displayName', 'photoURL', 'providers',
           'emailNotifications', 'analyticsOptOut', 'defaultMarking',
-          'createdAt', 'updatedAt'
+          'explorerOpen', 'createdAt', 'updatedAt'
         ]);
       allow update: if isVerifiedUser()
         && request.auth.uid == uid

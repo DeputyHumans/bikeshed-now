@@ -1325,6 +1325,29 @@ describe("firestore rules", () => {
     );
   });
 
+  it("the explorer's open or closed is the account's own to keep, on a new record or an old one", async () => {
+    // SPEC §13 "The explorer": it follows the account to every device.
+    await assertSucceeds(updateDoc(doc(verified(env, OWNER).firestore(), "users/u-owner"), { explorerOpen: true }));
+    await assertSucceeds(
+      setDoc(doc(verified(env, VIEWER).firestore(), "users/u-viewer"), {
+        uid: VIEWER.uid,
+        email: VIEWER.email,
+        explorerOpen: true,
+      }),
+    );
+    // Somebody else's, never.
+    await assertFails(updateDoc(doc(verified(env, VIEWER).firestore(), "users/u-owner"), { explorerOpen: false }));
+    // The create allowlist still holds for anything it does not name.
+    await assertFails(
+      setDoc(doc(verified(env, STRANGER).firestore(), "users/u-stranger"), {
+        uid: STRANGER.uid,
+        email: STRANGER.email,
+        explorerOpen: true,
+        emailCooldowns: {},
+      }),
+    );
+  });
+
   it("token metadata is readable by its owner, and the secret store by nobody", async () => {
     await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "users/u-owner/tokens/tok1")));
     await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "users/u-owner/tokens/tok1")));
