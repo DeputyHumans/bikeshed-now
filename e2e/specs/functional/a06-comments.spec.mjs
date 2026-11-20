@@ -94,6 +94,7 @@ import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { FIRESTORE_LISTEN_PATH, RULES_SERVICE_ERROR_RE } from "../../lib/browser.mjs";
+import { escapeName, nameOfAddress } from "../../lib/names.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -1001,7 +1002,8 @@ scenario("A6.9 an agent's comment is labelled with the token it came through, se
   assert.equal((await badge.textContent()).trim(), "agent", "one word on the page");
   assert.match(
     await badge.getAttribute("title"),
-    new RegExp(`^Posted on ${ownerAcct.email.toLowerCase().replace(/[.+]/g, "\\$&")}'s behalf by personal token “e2e a06 .+”$`),
+    // The person by name, as the app draws everyone (ADR 0040).
+    new RegExp(`^Posted on ${escapeName(nameOfAddress(ownerAcct.email))}'s behalf by personal token “e2e a06 .+”$`),
     "the credential in words, as the server stored it, behind the badge",
   );
 

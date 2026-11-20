@@ -136,6 +136,7 @@ import { frameText, inFrameDoc } from "../../lib/frame.mjs";
 import { KNOWN_OWN_VALUES, bodyAttrDiff, decorations, diffFingerprint, entryHtml, fingerprint, foreignMarkers, parseAndRun, rehashZip, summarize } from "../../lib/bytes.mjs";
 import { rtdbRulesStatus } from "../../lib/rtdb.mjs";
 import { zipFiles } from "../../lib/zipread.mjs";
+import { nameOfAddress } from "../../lib/names.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -753,7 +754,7 @@ scenario("A9.5 with a draft saved, an editor reads it under the unpublished-edit
     views[u.name].text = await frameText(await u.frame());
   }
   ctx.ev.json("views", views);
-  for (const [who, by] of [["editor", "you"], ["owner", editorAcct.email.toLowerCase()]]) {
+  for (const [who, by] of [["editor", "you"], ["owner", nameOfAddress(editorAcct.email)]]) {
     const r = views[who];
     assert.equal(r.label, "v1 · draft", `${who}: the label`);
     const banner = r.banners.find((b) => b.startsWith("You're reading unpublished edits"));

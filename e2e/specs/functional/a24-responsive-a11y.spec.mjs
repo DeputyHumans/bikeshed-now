@@ -77,6 +77,7 @@ import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { authorizeParams, pkce, register, startReceiver } from "../../lib/oauth.mjs";
 import { frameGeometry, framePointToPage, rangeRects, selectionText, setSelection } from "../../lib/frame.mjs";
+import { escapeName, nameOfAddress } from "../../lib/names.mjs";
 
 // Shared option objects are opaque to the static budget scanner; cover all 25 case budgets.
 const E2E_FILE_TIMEOUT_MS = 95 * 60_000;
@@ -1413,7 +1414,7 @@ scenario("A24.4b on a touch phone (one column), a tap on a highlight shows its t
 
 // --- A24.5: shape, words, contrast and names -------------------------------------------------------------
 
-/** The chip a user sees for `email`: its dot's shape, the Editing icon, its colour. */
+/** The chip a user sees for `email`, by the name the app draws for it: its dot's shape, the Editing icon, its colour. */
 async function chipFor(u, email) {
   return u.page.evaluate((who) => {
     const chip = [...document.querySelectorAll(".presence-bar .presence-chip")].find((b) => b.querySelector(".presence-name")?.textContent === who);
@@ -1430,7 +1431,7 @@ async function chipFor(u, email) {
       dotBackground: cs.backgroundColor,
       chipBackground: getComputedStyle(chip).backgroundColor,
     };
-  }, email.toLowerCase());
+  }, nameOfAddress(email));
 }
 
 scenario("A24.5a mode is shown by shape: in forced colours, where colour carries nothing, an editor's chip differs from a reader's by its dot's shape and by the word \"Editing\" in its accessible name", {
@@ -1446,7 +1447,8 @@ scenario("A24.5a mode is shown by shape: in forced colours, where colour carries
   precondition(await o.page.evaluate(() => matchMedia("(forced-colors: active)").matches), "the owner's page is in forced colours");
   await Promise.all([openDoc(ctx, o, docId), openDoc(ctx, e, docId)]);
   const who = accounts[1].email.toLowerCase();
-  const nameRe = new RegExp(`${who.replace(/[.+]/g, "\\$&")}.*Editing`);
+  // Each person is drawn by first name and last initial (ADR 0040).
+  const nameRe = new RegExp(`${escapeName(nameOfAddress(who))}.*Editing`);
 
   ctx.step("the editor reads: the owner sees a round dot, and no Editing in the chip's accessible name");
   const reading = await eventually(async () => {
@@ -1517,7 +1519,7 @@ scenario("A24.5d with three others in a document, on a phone and on a desktop, t
   const readers = [];
   for (const [i, account] of others.entries()) readers.push(await signInAs(ctx, account, `viewer-${i + 1}`));
   await Promise.all([desk, phone, ...readers].map((u) => openDoc(ctx, u, docId)));
-  const names = others.map((a) => a.email.toLowerCase()).sort();
+  const names = others.map((a) => nameOfAddress(a.email)).sort();
 
   for (const [label, u] of [["phone", phone], ["desktop", desk]]) {
     ctx.step(`the ${label} shows a chip for each of the three, shown or folded`);
@@ -1593,7 +1595,8 @@ scenario("A24.5b a suggestion is put in words for a screen reader in the panel a
   await change.waitFor({ state: "visible", timeout: LISTEN_MS });
   const spoken = await spokenText(change);
   const me = owner.account.email.toLowerCase();
-  assert.ok([`${me} suggests: replace lazy dog with ${R}`, `${me} suggests: delete really quite important`].includes(spoken), `the bar reads the change in words: ${JSON.stringify(spoken)}`);
+  const named = nameOfAddress(me);
+  assert.ok([`${named} suggests: replace lazy dog with ${R}`, `${named} suggests: delete really quite important`].includes(spoken), `the bar reads the change in words: ${JSON.stringify(spoken)}`);
   assert.equal(await change.getAttribute("aria-live"), "polite", "the bar announces each change as the pass moves");
 });
 

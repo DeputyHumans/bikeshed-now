@@ -55,6 +55,7 @@ import { createFolder, publish, publishMcp, readSample, updateUpload } from "../
 import { share } from "../../lib/grant.mjs";
 import { closeAdmin } from "../../lib/admin.mjs";
 import { authorizeParams, pkce, register } from "../../lib/oauth.mjs";
+import { nameOfAddress } from "../../lib/names.mjs";
 
 // Shared option objects are opaque to the static budget scanner; cover the walk and its judges.
 const E2E_FILE_TIMEOUT_MS = 60 * 60_000;
@@ -684,7 +685,7 @@ scenario("A28.19 a tap on the agent badge says what acted, in a comment and on a
   ctx.ev.json("comment-badge", fit);
   assert.ok(fit.content <= fit.box, `the word stays inside the badge, beside a long address: ${JSON.stringify(fit)}`);
   assert.ok(fit.height >= 44 && fit.box >= 44, `a finger's hit area: ${JSON.stringify(fit)}`);
-  const words = `Posted on ${account.email.toLowerCase()}'s behalf by personal token “${name}”`;
+  const words = `Posted on ${nameOfAddress(account.email)}'s behalf by personal token “${name}”`;
   assert.equal(await chip.getAttribute("title"), words, "the same words for a pointer");
   const thread = u.page.locator(".comments-panel .thread").first();
   assert.equal(await thread.getAttribute("aria-selected"), "false", "precondition: the thread is not selected");

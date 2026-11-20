@@ -72,6 +72,7 @@ import { adminFor, closeAdmin, readCollection, readDoc } from "../../lib/admin.m
 import { eventually, sameBytes, sameHeadersExceptDate } from "../../lib/assert.mjs";
 import { clientFirestore } from "../../lib/firestore-client.mjs";
 import { finalBeatSettled, observeFinalBeacon } from "../../lib/reading-observation.mjs";
+import { nameOfAddress } from "../../lib/names.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -454,7 +455,9 @@ async function openActivity(u, { labelsOnly = false } = {}) {
     const list = readersHeading?.nextElementSibling ?? null;
     return {
       headings: h3.map((h) => h.textContent.trim()),
-      readers: readersHeading ? [...(list?.querySelectorAll("li.activity-row") ?? [])].map((li) => li.querySelector("span")?.textContent.trim() ?? "") : null,
+      // Each reader by the address under their name, and the name drawn (ADR 0040).
+      readers: readersHeading ? [...(list?.querySelectorAll("li.activity-row") ?? [])].map((li) => li.querySelector(".person")?.getAttribute("title") ?? "") : null,
+      readerNames: readersHeading ? [...(list?.querySelectorAll("li.activity-row") ?? [])].map((li) => li.querySelector(".person-name")?.textContent.trim() ?? "") : null,
       tiles: [...el.querySelectorAll(".stat-tile")].map((t) => ({ value: t.querySelector(".stat-value")?.textContent.trim(), label: t.querySelector(".stat-label")?.textContent.trim() })),
       text: el.innerText,
     };
@@ -526,6 +529,7 @@ scenario("A18.4 the Activity panel's per-person detail is for the owner and edit
     const shown = new Set(panel.readers);
     assert.ok(shown.has(viewer.account.email.toLowerCase()) && shown.has(editor.account.email.toLowerCase()), `${u.name}: the readers include the viewer and the editor: ${panel.readers.join(", ")}`);
     assert.ok(panel.readers.every((e) => members.has(e)), `${u.name}: every reader listed is somebody who read it: ${panel.readers.join(", ")}`);
+    assert.deepEqual(panel.readerNames, panel.readers.map((e) => nameOfAddress(e)), `${u.name}: each reader is shown by first name and last initial, the address under it`);
     assert.equal(panel.tiles[0]?.label, `visits · ${panel.readers.length} identified`, `${u.name}: the visits tile says how many are identified`);
     assert.ok(!panel.text.includes(DETAIL_HINT), `${u.name}: no "only editors" hint for ${s.account.role}`);
     await u.page.keyboard.press("Escape");
@@ -537,7 +541,11 @@ scenario("A18.4 the Activity panel's per-person detail is for the owner and edit
     { readers: null, headings: [], visitsLabel: "visits", hint: true },
     "viewer: the aggregate and the hint, no readers, no activity",
   );
-  for (const s of [owner, editor]) assert.ok(!vp.panel.text.toLowerCase().includes(s.account.email.toLowerCase()), `viewer's panel names nobody (found ${s.account.role}'s address)`);
+  // Nobody by address, and nobody by the name the app draws for them either (ADR 0040).
+  for (const s of [owner, editor]) {
+    assert.ok(!vp.panel.text.toLowerCase().includes(s.account.email.toLowerCase()), `viewer's panel names nobody (found ${s.account.role}'s address)`);
+    assert.ok(!vp.panel.text.includes(nameOfAddress(s.account.email)), `viewer's panel names nobody (found ${s.account.role}'s name)`);
+  }
   await eventually(async () => {
     const value = (await vp.dialog.locator(".stat-tile .stat-value").first().textContent())?.trim();
     const views = (await statsOf(D.docId)).views ?? 0;

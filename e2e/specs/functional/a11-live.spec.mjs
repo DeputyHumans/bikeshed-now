@@ -94,6 +94,7 @@ import { eventually } from "../../lib/assert.mjs";
 import { armArrival, bodyHash, frameGeometry, framePointToPage, waitForArrival } from "../../lib/frame.mjs";
 import { rtdbAs, rtdbRulesStatus } from "../../lib/rtdb.mjs";
 import { makeToken } from "../../lib/tokens.mjs";
+import { nameOfAddress } from "../../lib/names.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -349,8 +350,9 @@ async function chips(user) {
   );
 }
 
+/** A person's chip, found by the short name the app draws for their address (ADR 0040). */
 async function chipFor(user, email) {
-  return (await chips(user)).find((c) => c.name === email.toLowerCase()) ?? null;
+  return (await chips(user)).find((c) => c.name === nameOfAddress(email)) ?? null;
 }
 
 /** The peer overlay in a user's document frame: does it exist, and what is drawn in it. */
@@ -528,7 +530,7 @@ scenario("A11.2 a peer's presence chip shows data-mode=edit while they edit, in 
     return ov;
   }, { timeout: 10_000, interval: 200, message: "the owner's overlay draws the editor's selection and its caret bar" });
   ctx.step(`overlay: ${JSON.stringify(drawn)}`);
-  assert.equal(drawn.labelText, editorEmail, "the caret is labelled with the editor's name");
+  assert.equal(drawn.labelText, nameOfAddress(editorEmail), "the caret is labelled with the editor's name");
   assert.equal(drawn.labelColor, editE.color, "the caret label is painted in the chip's colour (one palette)");
 
   ctx.step("the owner reloads: the editor's chip comes back in edit mode and the same colour");
@@ -634,7 +636,7 @@ scenario("A11.2b a collapsed caret an editor clicks into a paragraph reaches the
   }, { timeout: 10_000, interval: 200, stableSamples: 3, message: "control: the editor's whole selection reaches the server as focus and holds still" });
   const selDrawn = await eventually(async () => {
     const c = await caretsOver(o, "e2e-5");
-    return c.carets.some((x) => x.on) && c.labels.includes(editorEmail) ? c : false;
+    return c.carets.some((x) => x.on) && c.labels.includes(nameOfAddress(editorEmail)) ? c : false;
   }, { timeout: 10_000, interval: 200, message: "control: the owner's overlay draws the selection's caret bar on #e2e-5, labelled" });
   ctx.step(`control: focus ${JSON.stringify(selFocus)}; the owner's overlay ${JSON.stringify(selDrawn)}`);
 
@@ -655,7 +657,7 @@ scenario("A11.2b a collapsed caret an editor clicks into a paragraph reaches the
   await eventually(async () => {
     seen.focus = await serverFocus(w.docId, editorUid);
     seen.overlay = await caretsOver(o, "e2e-8");
-    return seen.focus !== null && seen.overlay.carets.some((x) => x.on) && seen.overlay.labels.includes(editorEmail);
+    return seen.focus !== null && seen.overlay.carets.some((x) => x.on) && seen.overlay.labels.includes(nameOfAddress(editorEmail));
   }, { timeout: 10_000, interval: 200, message: "the caret's focus and its drawing" }).catch((err) => {
     // Only "not there within 10 s" is the oracle's answer; a read that kept
     // throwing (its cause) measured nothing, and FAILS.
@@ -664,7 +666,7 @@ scenario("A11.2b a collapsed caret an editor clicks into a paragraph reaches the
   ctx.ev.json("collapsed-caret", { control: { focus: selFocus, overlay: selDrawn }, click: click.clickedAt, own: mine, seen });
   ctx.step(`after the click: focus ${JSON.stringify(seen.focus)}; the owner's overlay ${JSON.stringify(seen.overlay)}`);
   assert.notEqual(seen.focus, null, "X-a11-live-1: a collapsed caret is broadcast as no focus at all, though SPEC §16 spec.md:1516 says `focus` is \"selection or caret, as an ephemeral `Anchor`\" (anchor.ts:55 returns null for a collapsed selection)");
-  assert.ok(seen.overlay.carets.some((x) => x.on) && seen.overlay.labels.includes(editorEmail), `X-a11-live-1: the reader's overlay draws no caret on #e2e-8 labelled ${editorEmail} (SPEC §16 spec.md:1575 "Peer carets and selections update at 200 ms", spec.md:1480 "carets carry name labels"): ${JSON.stringify(seen.overlay)}`);
+  assert.ok(seen.overlay.carets.some((x) => x.on) && seen.overlay.labels.includes(nameOfAddress(editorEmail)), `X-a11-live-1: the reader's overlay draws no caret on #e2e-8 labelled ${editorEmail} (SPEC §16 spec.md:1575 "Peer carets and selections update at 200 ms", spec.md:1480 "carets carry name labels"): ${JSON.stringify(seen.overlay)}`);
 });
 
 // --- A11.3 ---------------------------------------------------------------------
@@ -693,7 +695,7 @@ scenario("A11.3 no edit frame ever holds the peer overlay #bshd-peers, though th
     return ov;
   }, { timeout: 10_000, interval: 200, message: "the reading frame draws the editor's caret" });
   ctx.step(`reading frame: ${JSON.stringify(reading)}`);
-  assert.equal(reading.labelText, editorEmail);
+  assert.equal(reading.labelText, nameOfAddress(editorEmail));
 
   ctx.step("the owner presses Edit; then each editor selects a passage, and both edit frames are sampled for any trace of the overlay");
   await bothShared(o);
@@ -739,7 +741,8 @@ scenario("A11.4 follow keeps the reader within 0.02 of the leader's scroll fract
     if (c?.pressed !== "true") throw new Error(JSON.stringify(c));
     return c;
   }, { timeout: 5_000, message: "the chip is pressed" });
-  assert.match(following.title, /^Following .+, who can see that you are\. Scroll to stop\.$/, "the chip says the follower is following, and that the leader can see it");
+  // The address is the tooltip's second line (ADR 0040).
+  assert.match(following.title, /^Following .+, who can see that you are\. Scroll to stop\.\n\S+@\S+$/, "the chip says the follower is following, and that the leader can see it");
   const max = (await scrollFrac(f)).max;
   precondition(max > 400, `the document scrolls in the follower's frame (max ${max} px)`);
 

@@ -312,7 +312,10 @@ function chipsInPage() {
     const dot = b.querySelector(".presence-dot");
     const cs = dot ? getComputedStyle(dot) : null;
     return {
-      name: (b.querySelector(".presence-name")?.textContent ?? "").trim().toLowerCase(),
+      name: (b.querySelector(".presence-name")?.textContent ?? "").trim(),
+      // Whose chip: the address on the tooltip's second line. A short name
+      // ("Typist K") is not unique among twenty accounts of one role (ADR 0040).
+      email: ((b.getAttribute("title") ?? "").split("\n")[1] ?? "").trim().toLowerCase(),
       mode: dot?.getAttribute("data-mode") ?? null,
       dotRadius: cs?.borderTopLeftRadius ?? null,
       dotRotated: cs ? cs.transform !== "none" : null,
@@ -331,21 +334,21 @@ function chipsInPage() {
  */
 function chipProblems(name, chips, want) {
   const out = [];
-  const names = sorted(chips.map((c) => c.name));
+  const names = sorted(chips.map((c) => c.email));
   const wanted = sorted(want.map((w) => w.email));
   if (JSON.stringify(names) !== JSON.stringify(wanted)) {
     out.push({ kind: "count", text: `${name} shows ${chips.length} chip(s) [${names.join(", ")}], want ${want.length}: [${wanted.join(", ")}]` });
   }
   const modeOf = new Map(want.map((w) => [w.email, w.mode]));
   for (const c of chips) {
-    const mode = modeOf.get(c.name);
+    const mode = modeOf.get(c.email);
     if (!mode) continue;
     const bad = [];
     if (c.mode !== mode) bad.push(`data-mode ${JSON.stringify(c.mode)}, want ${JSON.stringify(mode)}`);
     const square = c.dotRadius === "2px" && c.dotRotated === true;
     if (mode === "edit" ? !square : square || c.dotRotated !== false) bad.push(`dot radius ${c.dotRadius}, rotated ${c.dotRotated} (want the ${mode === "edit" ? "square, rotated" : "round, unrotated"} dot)`);
     if (c.editingIcon !== (mode === "edit")) bad.push(mode === "edit" ? "no Editing icon" : "an Editing icon on a reader");
-    if (bad.length) out.push({ kind: "mode", text: `${name}'s chip for ${c.name} (${mode === "edit" ? "editing" : "reading"}): ${bad.join(", ")}` });
+    if (bad.length) out.push({ kind: "mode", text: `${name}'s chip for ${c.email} (${mode === "edit" ? "editing" : "reading"}): ${bad.join(", ")}` });
   }
   return out;
 }

@@ -107,6 +107,7 @@ import { holdRequests } from "../../lib/sync.mjs";
 import { bodyHash } from "../../lib/frame.mjs";
 import { bodyAttrDiff, diffFingerprint, entryHtml, fingerprint, rehashZip, summarize } from "../../lib/bytes.mjs";
 import { zipFiles } from "../../lib/zipread.mjs";
+import { nameOfAddress } from "../../lib/names.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -599,7 +600,7 @@ scenario("A8.2 the pass marks the quote with the CSS highlight API and zero muta
   await watchMutations(a);
   await barButton(a, "Review it").click({ timeout: CLIENT_MS });
   const pass = await passOn(a, { count: "1 of 1", exact: Q[1].exact });
-  assert.deepEqual({ by: pass.by, ins: pass.ins, stale: pass.stale }, { by: `${by.suggester.account.email}:`, ins: R, stale: null }, "the bar shows the change and who suggested it");
+  assert.deepEqual({ by: pass.by, ins: pass.ins, stale: pass.stale }, { by: `${nameOfAddress(by.suggester.account.email)}:`, ins: R, stale: null }, "the bar shows the change and who suggested it");
 
   ctx.step("the target is marked by a bshd-review highlight over exactly the quote, and nothing in the document changed");
   const mark = await eventually(async () => {
@@ -713,7 +714,7 @@ scenario("A8.3 Reject with a reason leaves the note Rejected: <reason>, without 
   for (const [exact, body] of [[Q[3].exact, `Rejected: ${reason}`], [Q[1].exact, "Rejected."]]) {
     const t = s.thread(exact, { kind: "suggestion" }).first();
     await t.locator(".comment-body", { hasText: body }).first().waitFor({ state: "visible", timeout: PAGE_MS });
-    assert.equal((await t.locator(".suggestion-status").textContent()).trim(), `Rejected by ${me}`, `the status of "${exact}"`);
+    assert.equal((await t.locator(".suggestion-status").textContent()).trim(), `Rejected by ${nameOfAddress(me)}`, `the status of "${exact}"`);
   }
   noPageErrors([a, s]);
 });

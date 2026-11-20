@@ -75,6 +75,7 @@ import { adminFor, closeAdmin, listObjects, readCollection, readDoc, readObject,
 import { eventually } from "../../lib/assert.mjs";
 import { shimControl } from "../../lib/mail/shimctl.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
+import { nameOfAddress } from "../../lib/names.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -1197,7 +1198,7 @@ scenario("A14.5b Move… into a shared folder makes its readers the document's m
   await v.page.locator(`a.doc-card-title[href="/folder/${F}"]`).waitFor({ timeout: 90_000 });
   const vMenu = await openActions(v.page, folderCard(v.page, F), fName);
   const vTrash = vMenu.getByRole("menuitem", { name: TRASH_LABEL });
-  assert.deepEqual({ disabled: await vTrash.isDisabled(), reason: await vTrash.getAttribute("title") }, { disabled: true, reason: `Only ${email} can move this folder to the Trash.` });
+  assert.deepEqual({ disabled: await vTrash.isDisabled(), reason: await vTrash.getAttribute("title") }, { disabled: true, reason: `Only ${nameOfAddress(email)} can move this folder to the Trash.` });
   await v.page.keyboard.press("Escape");
   const vRefused = await Promise.all(["trash", "delete"].map((op) => V.http.postJson("/organize", { kind: "folder", id: F, op })));
   assert.deepEqual(vRefused.map((r) => r.status), [403, 403], "a reader may not move the folder to the Trash");
@@ -1701,7 +1702,7 @@ scenario("A14.9 Recent, at /, lists what the reader read and what got a new vers
   };
   await order([ids.C, ids.R, ids.H], "Recent: the newest event first");
   const [changed, read, hidden] = await ours();
-  assert.ok(changed.why.startsWith("New version") && changed.why.includes(O.account.email) && changed.why.endsWith("New since you read it"), `Changed says who published it and that it is new since the read: ${changed.why}`);
+  assert.ok(changed.why.startsWith("New version") && changed.why.includes(`by ${nameOfAddress(O.account.email)}`) && changed.why.endsWith("New since you read it"), `Changed says who published it and that it is new since the read: ${changed.why}`);
   assert.ok(read.why.startsWith("You read it") && !read.why.includes("New since"), `Read says the reader read it: ${read.why}`);
   assert.ok(hidden.why.startsWith("New version") && !hidden.why.includes("New since"), `the folder's document is there by its version, not marked: ${hidden.why}`);
   assert.equal(hidden.where, "A folder you can't open", "the folder the viewer was not given is not named");
