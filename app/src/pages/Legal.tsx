@@ -268,6 +268,10 @@ export function Privacy() {
           receive your address and name, not your password.
         </li>
         <li>
+          <strong>People who read the same documents</strong> see your first name
+          and last initial, and your address when they point at it.
+        </li>
+        <li>
           <strong>Resend</strong> delivers transactional email, if this
           deployment configured it. It sees the recipient address and the
           message.

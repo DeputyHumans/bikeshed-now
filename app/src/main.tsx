@@ -9,7 +9,12 @@ import { AuthProvider } from "./auth";
 import { ToastProvider } from "./components/Toast";
 import { App } from "./App";
 import { FONT_FACE_CSS } from "./brand/fonts";
+import { readProfile } from "./firestore";
+import { setProfileReader } from "./people";
 import "./styles/index.css";
+
+// Names are read from profiles/{uid}; wired here so nothing else has to (people.ts).
+setProfileReader(readProfile);
 
 /**
  * The @font-face rule is injected from the same module the edit-iframe injector

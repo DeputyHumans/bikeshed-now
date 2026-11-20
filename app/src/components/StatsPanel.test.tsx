@@ -74,7 +74,7 @@ describe("the Activity feed", () => {
   it("is one list, newest first, each row saying who, what, and through what", async () => {
     await open();
     expect(rows()).toEqual([
-      expect.stringContaining("own@example.comread it"),
+      expect.stringContaining("Ownread it"),
       expect.stringContaining("gave a@example.com access"),
       expect.stringContaining("published a version from the editor"),
     ]);

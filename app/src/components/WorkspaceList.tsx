@@ -17,6 +17,7 @@ import { liveReach } from "../visibility";
 import { currentSummary, type SortKey } from "../workspace/tree";
 import type { Layout } from "../workspace/prefs";
 import type { RecentRow } from "../workspace/recent";
+import { usePersonName } from "../people";
 import type { DocMeta, FolderMeta } from "../types";
 import type { Pick } from "../bundleInput";
 
@@ -188,7 +189,7 @@ export function DocRow({
   showCover: boolean;
   /** Its folder in words, when the list shows where each row is filed. */
   location?: string;
-  /** "You", or the owner's address. */
+  /** "You", or the owner's short name; the address is the cell's tooltip. */
   owner: string;
   /** On Recent: why it is there, in place of owner, update and reads. */
   reason?: ReactNode;
@@ -220,7 +221,7 @@ export function DocRow({
         <span role="cell" data-col="why">{reason}</span>
       ) : (
         <>
-          <span role="cell" data-col="owner" title={owner}>{owner}</span>
+          <span role="cell" data-col="owner" title={doc.ownerEmail}>{owner}</span>
           <span role="cell" data-col="updated">{updated}</span>
           <span role="cell" data-col="reads" className="numeric" title={`Read ${views === 1 ? "once" : `${views} times`} by people`}>
             {views}
@@ -274,7 +275,7 @@ export function FolderRow({
         ) : null}
       </span>
       {location !== undefined ? <span role="cell" data-col="location" title={location}>{location}</span> : null}
-      <span role="cell" data-col="owner" title={owner}>{owner}</span>
+      <span role="cell" data-col="owner" title={folder.ownerEmail}>{owner}</span>
       <span role="cell" data-col="people" aria-colspan={2}>{people}</span>
       <span role="cell" data-col="summary">{people}</span>
       <RowMenu label={folder.name} entries={menu} />
@@ -288,7 +289,9 @@ export function FolderRow({
  */
 export function RecentReason({ row, me }: { row: RecentRow; me: string }) {
   const latest = currentSummary(row.doc).latest;
-  const by = latest?.byEmail ? (latest.byEmail === me ? "you" : latest.byEmail) : null;
+  // The summary keeps an address alone: a name learned for it this session, else the address's.
+  const named = usePersonName({ email: latest?.byEmail ?? "" });
+  const by = latest?.byEmail ? (latest.byEmail === me ? "you" : named) : null;
   const via = viaOf(latest);
   return (
     <>

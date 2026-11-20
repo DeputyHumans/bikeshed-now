@@ -33,14 +33,8 @@
   gap: var(--s-2);
 }
 
-.header-email {
-  font-size: var(--fs-caption);
-  color: var(--color-ink-muted);
-  max-width: 22ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* The signed-in person's chip; its name shortens before the bar runs out. */
+.header-person { max-width: 22ch; }
 
 .main {
   flex: 1;

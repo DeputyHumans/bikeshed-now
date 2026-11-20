@@ -26,6 +26,7 @@ import {
   sortDocs,
   type SortKey,
 } from "../workspace/tree";
+import { personName, usePeople } from "../people";
 import { PREF_KEYS, isLayout, useRemembered, type Layout, type PrefKey } from "../workspace/prefs";
 import {
   NO_FILTERS,
@@ -533,7 +534,10 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
   // and Shared with me always come from every folder.
   const spansFolders = Boolean(search) || across;
   const placeOf = (id: string | null | undefined) => locationOf(id, folders) ?? UNREADABLE_FOLDER;
-  const ownerLabel = (email: string) => (email === emailLower ? "You" : email);
+  // Owners by short name (ADR 0040), asked for once each however many they own.
+  usePeople(useMemo(() => [...docs, ...folders].map((item) => ({ uid: item.ownerUid, email: item.ownerEmail })), [docs, folders]));
+  const nameOf = (item: { ownerUid: string | null; ownerEmail: string }) => personName({ uid: item.ownerUid, email: item.ownerEmail });
+  const ownerLabel = (item: { ownerUid: string | null; ownerEmail: string }) => (item.ownerEmail === emailLower ? "You" : nameOf(item));
   /** On Recent, and not while a search is on: why each document is there. */
   const reasonFor = (doc: DocMeta) => {
     if (view !== "recent" || search) return undefined;
@@ -571,7 +575,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
         id: "share",
         label: "Share…",
         disabled: !isOwner,
-        reason: `Only ${doc.ownerEmail} can change sharing.`,
+        reason: `Only ${nameOf(doc)} can change sharing.`,
         onSelect: () => shareDoc(doc),
       },
       {
@@ -591,7 +595,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
         id: "move",
         label: "Move…",
         disabled: !isOwner,
-        reason: `Only ${doc.ownerEmail} can move this: moving it changes who can read it.`,
+        reason: `Only ${nameOf(doc)} can move this: moving it changes who can read it.`,
         onSelect: () =>
           setMoving({
             kind: "doc",
@@ -623,7 +627,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
         label: "Move to Trash",
         danger: true,
         disabled: !isOwner,
-        reason: `Only ${doc.ownerEmail} can move this to the Trash.`,
+        reason: `Only ${nameOf(doc)} can move this to the Trash.`,
         onSelect: () => void moveToTrash(toast, "doc", doc.docId, doc.title),
       },
     ];
@@ -637,7 +641,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
         id: "share",
         label: "Share…",
         disabled: !isOwner,
-        reason: `Only ${folder.ownerEmail} can change sharing.`,
+        reason: `Only ${nameOf(folder)} can change sharing.`,
         onSelect: () => shareFolder(folder),
       },
       {
@@ -655,7 +659,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
         id: "move",
         label: "Move…",
         disabled: !isOwner,
-        reason: `Only ${folder.ownerEmail} can move this folder: moving it changes who can read everything in it.`,
+        reason: `Only ${nameOf(folder)} can move this folder: moving it changes who can read everything in it.`,
         onSelect: () =>
           setMoving({
             kind: "folder",
@@ -670,7 +674,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
         label: "Move to Trash",
         danger: true,
         disabled: !isOwner,
-        reason: `Only ${folder.ownerEmail} can move this folder to the Trash.`,
+        reason: `Only ${nameOf(folder)} can move this folder to the Trash.`,
         onSelect: () => {
           // The one that asks: a folder takes everything in it, other
           // people's documents too, and they are told only by finding them
@@ -904,7 +908,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                     onFiles={uploadFiles}
                     onShare={folder.ownerEmail === emailLower ? () => shareFolder(folder) : undefined}
                     location={spansFolders ? placeOf(folder.parentId) : undefined}
-                    owner={ownerLabel(folder.ownerEmail)}
+                    owner={ownerLabel(folder)}
                   />
                 ))}
                 {shownDocs.map((doc) => {
@@ -918,7 +922,7 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
                       onShare={isOwner ? () => shareDoc(doc) : undefined}
                       showCover={isOwner || !isExpired(doc.expiresAt)}
                       location={spansFolders ? placeOf(doc.folderId) : undefined}
-                      owner={ownerLabel(doc.ownerEmail)}
+                      owner={ownerLabel(doc)}
                       reason={reasonFor(doc)}
                     />
                   );

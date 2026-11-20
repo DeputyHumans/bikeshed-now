@@ -45,7 +45,10 @@ describe("a document's details", () => {
   it("tell a member how long it is, when it was made and updated, by whom and through what, and every version", () => {
     const dialog = open({ meta: META, versions: VERSIONS, words: 2380, showDraft: true });
     expect(dialog.textContent).toContain("10 min read · 2,380 words");
-    expect(dialog.textContent).toContain("by ana@example.com");
+    // By name, the address under the pointer (ADR 0040).
+    expect(dialog.textContent).toContain("by Ana");
+    expect(dialog.textContent).not.toContain("@example.com");
+    expect(dialog.querySelector(".person")?.getAttribute("title")).toBe("ana@example.com");
     const chips = within(dialog).getAllByRole("button", { name: "agent" });
     expect(chips.length).toBeGreaterThan(0);
     for (const chip of chips) expect(chip.getAttribute("title")).toContain("“Claude” (connected app)");
@@ -53,7 +56,7 @@ describe("a document's details", () => {
     expect(dialog.textContent).toContain("Changes saved");
     const rows = [...dialog.querySelectorAll(".details-versions li")].map((li) => li.textContent);
     expect(rows[0]).toMatch(/^v2 · current.*published from the editor.*agent/);
-    expect(rows[1]).toMatch(/^v1.*uploaded by ana@example.com/);
+    expect(rows[1]).toMatch(/^v1.*uploaded by Ana/);
     expect(rows[1]).not.toContain("agent");
   });
 

@@ -2,7 +2,7 @@
 
 `docs/architecture/spec.md` says what the system does and is normative. This file says why it is shaped this way, and — more usefully — what it deliberately is not.
 
-The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty-eight records of about thirty lines each.
+The individual decisions, with their costs and their reversal conditions, are in [`adr/`](adr/) — thirty-nine records of about thirty lines each.
 
 ## The one-paragraph version
 

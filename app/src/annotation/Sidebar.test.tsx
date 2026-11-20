@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // A reply posts once, and a suggestion offers only what its reader may do (SPEC §6, §22).
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import type { Annotation } from "../types";
 
-const { addComment, comments, rejectSuggestion, reviseSuggestion, withdrawSuggestion } = vi.hoisted(() => ({
+const { addComment, comments, profiles, rejectSuggestion, reviseSuggestion, withdrawSuggestion } = vi.hoisted(() => ({
   addComment: vi.fn(),
+  /** profiles/{uid}, as the lookup by uid finds them; an absent uid has none. */
+  profiles: {} as Record<string, { name?: string; chosen: boolean }>,
   comments: { current: [] as unknown[] },
   rejectSuggestion: vi.fn(async () => ({ state: "rejected" })),
   withdrawSuggestion: vi.fn(async () => ({ state: "withdrawn" })),
@@ -27,6 +29,7 @@ vi.mock("../analytics", () => ({ logEvent: vi.fn() }));
 vi.mock("../suggestions", () => ({ rejectSuggestion, reviseSuggestion, withdrawSuggestion }));
 
 import { Sidebar } from "./Sidebar";
+import { forgetNames, setProfileReader } from "../people";
 import { ToastProvider } from "../components/Toast";
 
 const THREAD = {
@@ -125,6 +128,31 @@ function mountWith(
   );
 }
 
+beforeEach(() => {
+  forgetNames();
+  for (const uid of Object.keys(profiles)) delete profiles[uid];
+  setProfileReader(async (uid) => profiles[uid] ?? null);
+});
+
+describe("who wrote a comment", () => {
+  it("is named by their profile's short name, with their dot, and their address under the pointer", async () => {
+    profiles["u-ana"] = { name: "Ana Lima", chosen: false };
+    comments.current = [
+      { commentId: "c1", body: "Looks right.", authorUid: "u-ana", authorEmail: "ana.lima@example.com", actor: { channel: "web" } },
+      { commentId: "c2", body: "Agreed.", authorUid: "u-bo", authorEmail: "bo.chen@example.com", actor: { channel: "web" } },
+    ];
+    mount();
+    const [ana, bo] = [...document.querySelectorAll(".comment-author")] as HTMLElement[];
+    // Ana's profile answers; Bo has none, so his address's name stands in.
+    await waitFor(() => expect(ana.textContent).toBe("Ana L"));
+    expect(ana.getAttribute("title")).toBe("ana.lima@example.com");
+    expect(ana.querySelector(".person-dot")).not.toBeNull();
+    expect(bo.textContent).toBe("Bo C");
+    expect(bo.getAttribute("title")).toBe("bo.chen@example.com");
+    expect(document.querySelector(".comments-panel")?.textContent).not.toContain("@example.com");
+  });
+});
+
 describe("what acted on a comment", () => {
   const COMMENTS = [
     { commentId: "c1", body: "From a token.", authorEmail: "ana@example.com", actor: { channel: "cli", via: "CLI on mbp" } },
@@ -137,7 +165,7 @@ describe("what acted on a comment", () => {
     const [fromToken, fromPerson] = [...document.querySelectorAll(".comment")] as HTMLElement[];
     expect(fromToken.querySelector(".comment-head")?.textContent).toContain("agent");
     expect(fromToken.textContent).not.toContain("CLI on mbp");
-    expect(fromToken.querySelector(".badge-automated")?.getAttribute("title")).toBe("Posted on ana@example.com's behalf by CLI on mbp");
+    expect(fromToken.querySelector(".badge-automated")?.getAttribute("title")).toBe("Posted on Ana's behalf by CLI on mbp");
     expect(fromPerson.querySelector(".badge-automated")).toBeNull();
   });
 
@@ -165,7 +193,7 @@ describe("what acted on a comment", () => {
       </ToastProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "agent" }));
-    expect(screen.getByText("Posted on ana@example.com's behalf by CLI on mbp")).toBeTruthy();
+    expect(screen.getByText("Posted on Ana's behalf by CLI on mbp")).toBeTruthy();
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
@@ -227,7 +255,7 @@ describe("a suggestion's thread", () => {
         suggestion: { ...SUGGESTION.suggestion, claim: { uid: "u-appr", email: "appr@example.com", until: { toMillis: () => until } } },
       } as unknown as Annotation;
       mountWith(claimed, { uid: "u-sug" });
-      expect(screen.getByText(/appr@example\.com is applying it/)).toBeTruthy();
+      expect(screen.getByText(/Appr is applying it/)).toBeTruthy();
       expect((screen.getByRole("button", { name: "Withdraw" }) as HTMLButtonElement).disabled).toBe(true);
       expect((screen.getByRole("button", { name: "Edit" }) as HTMLButtonElement).disabled).toBe(true);
       act(() => {
@@ -295,7 +323,7 @@ describe("a suggestion's thread", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show resolved" }));
     expect(screen.queryByText("Suggested replacing …")).toBeNull();
     expect(screen.getByText("Rejected: Keep it.")).toBeTruthy();
-    expect(screen.getByText("Rejected by owner@example.com")).toBeTruthy();
+    expect(screen.getByText("Rejected by Owner")).toBeTruthy();
   });
 
   it("marks a decision an agent made with the badge beside the approver, and says what acted only behind it", () => {
@@ -306,7 +334,7 @@ describe("a suggestion's thread", () => {
     } as unknown as Annotation);
     fireEvent.click(screen.getByRole("button", { name: "Show resolved" }));
     const status = document.querySelector(".suggestion-status")!;
-    expect(status.textContent).toBe("Accepted by owner@example.com agent");
+    expect(status.textContent).toBe("Accepted by Owner agent");
     expect(status.querySelector(".badge-automated")?.getAttribute("title")).toBe("Accepted through CLI on mbp, not by a person in the browser");
   });
 
@@ -316,7 +344,7 @@ describe("a suggestion's thread", () => {
       suggestion: { replacement: "x", state: "rejected", decidedBy: { email: "owner@example.com", channel: "web" } },
     } as unknown as Annotation);
     const status = document.querySelector(".suggestion-status")!;
-    expect(status.textContent).toBe("Rejected by owner@example.com");
+    expect(status.textContent).toBe("Rejected by Owner");
     expect(status.querySelector(".badge-automated")).toBeNull();
   });
 
@@ -356,7 +384,7 @@ describe("a suggestion's thread", () => {
     } as Annotation;
     mountWith(withdrawn, { uid: "u-sug", isApprover: true, onReview: vi.fn() });
     fireEvent.click(screen.getByRole("button", { name: "Show resolved" }));
-    expect(screen.getByText("Withdrawn by sug@example.com")).toBeTruthy();
+    expect(screen.getByText("Withdrawn by Sug")).toBeTruthy();
     expect(screen.queryByText("Waiting for the owner or an approver.")).toBeNull();
     expect(screen.getByText("Withdrawn.")).toBeTruthy();
     for (const name of ["Withdraw", "Edit", "Reject…", "Review"]) {

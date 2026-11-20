@@ -8,6 +8,7 @@ import { Icon, type IconName } from "./Icon";
 import { Loading } from "./Spinner";
 import { formatDuration, formatRelative, formatTimestamp, listDocViewers } from "../firestore";
 import { describeActivity, fetchActivity, subjectOf, type ActivityItem } from "../activity";
+import { Person } from "./Person";
 import { formatDay } from "../expiry";
 import { viaOf } from "../provenance";
 import { ViaBadge } from "./ViaBadge";
@@ -51,7 +52,7 @@ function ViewerRows({ viewers }: { viewers: ViewerStat[] }) {
     <ul className="activity-feed">
       {viewers.map((v) => (
         <li key={v.uid} className="activity-row">
-          <span>{v.email}</span>
+          <Person uid={v.uid} email={v.email} mark="dot" />
           <span className="caption">
             {v.views} {v.views === 1 ? "visit" : "visits"} · {formatDuration(v.totalMs)}
           </span>
@@ -72,7 +73,8 @@ function ActivityRow({ item, docId }: { item: ActivityItem; docId: string }) {
   return (
     <li className="activity-row">
       <Icon name={ICON[item.type] ?? "comment"} size={14} />
-      <span>{subjectOf(item)}</span>
+      {/* A person by their short name; a moved address is about addresses, and says them. */}
+      <span>{item.by && subjectOf(item) === item.by && item.reason !== "address-moved" ? <Person email={item.by} /> : subjectOf(item)}</span>
       <span>{describeActivity(item)}</span>
       <ViaBadge via={via} title={`Done through ${via}, not by a person in the browser`} />
       {item.version ? (

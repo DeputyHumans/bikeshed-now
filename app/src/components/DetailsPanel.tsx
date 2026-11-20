@@ -2,6 +2,7 @@
 // A document's details: how long it is, when it was made and last updated, by whom and through what, and every version (SPEC §4, §17).
 
 import { Link } from "react-router-dom";
+import { Person } from "./Person";
 import { Modal } from "./Modal";
 import { expiryMs, formatDay, isExpired } from "../expiry";
 import { formatTimestamp } from "../firestore";
@@ -24,11 +25,16 @@ import type { DocMeta, DocVersion, PublicDoc } from "../types";
 
 const ORIGIN: Record<string, string> = { upload: "uploaded", edit: "published from the editor", fork: "made as a fork" };
 
-function Who({ email, via }: { email: string | null | undefined; via: string | null }) {
+function Who({ uid, email, via }: { uid?: string | null; email: string | null | undefined; via: string | null }) {
   if (!email && !via) return null;
   return (
     <>
-      {email ? ` by ${email}` : ""}
+      {email ? (
+        <>
+          {" by "}
+          <Person uid={uid} email={email} />
+        </>
+      ) : null}
       {via ? " " : ""}
       <ViaBadge via={via} title={`Published through ${via}, not by a person in the browser`} />
     </>
@@ -90,7 +96,7 @@ export function DetailsPanel({
           <>
             <dt>Created</dt>
             <dd>
-              {formatTimestamp(meta.createdAt)} by {meta.ownerEmail}
+              {formatTimestamp(meta.createdAt)} by <Person uid={meta.ownerUid} email={meta.ownerEmail} />
             </dd>
           </>
         ) : null}
@@ -117,7 +123,7 @@ export function DetailsPanel({
           <>
             <dt>Unpublished</dt>
             <dd>
-              Changes saved {formatTimestamp(draft.updatedAt)} by {draft.updatedByEmail}, not yet published
+              Changes saved {formatTimestamp(draft.updatedAt)} by <Person email={draft.updatedByEmail} />, not yet published
             </dd>
           </>
         ) : null}
@@ -146,7 +152,7 @@ export function DetailsPanel({
                   </span>
                   <span className="details-how">
                     {how ?? "published"}
-                    <Who email={v.publishedByEmail} via={viaOf(v.publishedBy)} />
+                    <Who uid={v.publishedBy?.uid} email={v.publishedByEmail} via={viaOf(v.publishedBy)} />
                   </span>
                   {length ? <span className="caption">{length}</span> : null}
                   <span className="activity-when">{formatTimestamp(v.publishedAt)}</span>

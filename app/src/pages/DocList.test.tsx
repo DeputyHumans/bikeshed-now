@@ -217,7 +217,7 @@ describe("a document's way to the Trash", () => {
     act(() => listeners.docs!([docMeta()]));
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     const item = screen.getByRole("menuitem", { name: "Move to Trash" }) as HTMLButtonElement;
-    expect([item.disabled, item.title]).toEqual([true, "Only ana@example.com can move this to the Trash."]);
+    expect([item.disabled, item.title]).toEqual([true, "Only Ana can move this to the Trash."]);
   });
 
   it("Move… is the owner's too, because moving a document changes who can read it", () => {
@@ -226,7 +226,7 @@ describe("a document's way to the Trash", () => {
     act(() => listeners.docs!([docMeta()]));
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     const item = screen.getByRole("menuitem", { name: "Move…" }) as HTMLButtonElement;
-    expect([item.disabled, item.title]).toEqual([true, "Only ana@example.com can move this: moving it changes who can read it."]);
+    expect([item.disabled, item.title]).toEqual([true, "Only Ana can move this: moving it changes who can read it."]);
   });
 });
 
@@ -471,10 +471,10 @@ describe("the open folder's own actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Folder actions" }));
     const share = screen.getByRole("menuitem", { name: "Share…" }) as HTMLButtonElement;
     expect(share.disabled).toBe(true);
-    expect(share.title).toBe("Only dana@example.com can change sharing.");
+    expect(share.title).toBe("Only Dana can change sharing.");
     // Moving it is sharing everything in it with its new parent's readers.
     const move = screen.getByRole("menuitem", { name: "Move…" }) as HTMLButtonElement;
-    expect([move.disabled, move.title]).toEqual([true, "Only dana@example.com can move this folder: moving it changes who can read everything in it."]);
+    expect([move.disabled, move.title]).toEqual([true, "Only Dana can move this folder: moving it changes who can read everything in it."]);
   });
 
   it("goes up a level when the folder being looked at goes to the Trash, rather than stay on one only its owner can see", () => {
@@ -576,7 +576,9 @@ describe("the list layout", () => {
     expect(cell(folderRow, "people")).toBe("1 person");
     expect(cell(mineRow, "owner")).toBe("You");
     expect(cell(mineRow, "reads")).toBe("7");
-    expect(cell(theirsRow, "owner")).toBe("ana@example.com");
+    // By short name, the address the cell's tooltip (ADR 0040).
+    expect(cell(theirsRow, "owner")).toBe("Ana");
+    expect(theirsRow.querySelector('[data-col="owner"]')?.getAttribute("title")).toBe("ana@example.com");
     expect(cell(theirsRow, "reads")).toBe("0");
     expect(mineRow.querySelector('a.doc-row-title')?.getAttribute("href")).toBe("/d/mine");
     const thumb = mineRow.querySelector<HTMLAnchorElement>("a.doc-row-thumb")!;
@@ -710,7 +712,7 @@ describe("Recent", () => {
     const why = (title: string) =>
       (screen.getByText(title).closest('[role="row"]') as HTMLElement).querySelector('[data-col="why"]')?.textContent;
     expect(why("read-it")).toBe("You read it just now");
-    expect(why("changed")).toBe("New version just now by ana@example.com");
+    expect(why("changed")).toBe("New version just now by Ana");
   });
 
   it("marks what someone else published after you read it, and not what you published yourself", async () => {

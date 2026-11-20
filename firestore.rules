@@ -392,6 +392,27 @@ service cloud.firestore {
       }
     }
 
+    // --- Profiles (SPEC §4, ADR 0040) --------------------------------------
+    // The short name shown for a person, and nothing else. Anybody past the
+    // gate may read one BY UID, which they learn only from a record they can
+    // already read; nobody may list them, so names cannot be enumerated. Only
+    // its own account writes it, with exactly these keys, and a name is the
+    // person's own to choose, so it is self-reported like every display name.
+    match /profiles/{uid} {
+      allow get: if isVerifiedUser();
+      allow list: if false;
+      allow create, update: if isVerifiedUser()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'chosen', 'updatedAt'])
+        && request.resource.data.chosen is bool
+        && request.resource.data.updatedAt == request.time
+        && (!('name' in request.resource.data)
+            || (request.resource.data.name is string
+                && request.resource.data.name.size() >= 1
+                && request.resource.data.name.size() <= 40));
+      allow delete: if false;
+    }
+
     // --- Verification challenges (SPEC §14) ------------------------------
     // Server-only, its own account included. A six-digit code's hash is the
     // code to whoever can read it — a million guesses take under a second —

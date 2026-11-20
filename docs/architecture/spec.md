@@ -309,6 +309,7 @@ forks/{forkDocId}                              ForkRecord       (server-only, §
 folders/{folderId}                             FolderMeta
 teams/{teamId}                                 TeamMeta
 users/{uid}                                    UserRecord       (self-only; `explorerOpen` is the explorer's open or closed, §13)
+profiles/{uid}                                 ProfileRecord    (the short name shown for a person: read by uid past the gate, never listed, self-written, §16)
 users/{uid}/tokens/{tokenId}                   TokenRecord
 users/{uid}/cursors/{tokenId}~{docId}          SavedCursor      (server-only, §19)
 public/{docId}                                 PublicDoc        (projection, public only — its own level or a folder's, §17)
@@ -580,7 +581,7 @@ app/src/
   generated/policy.ts               (GENERATED)
   config.ts firebase.ts auth.tsx analytics.ts
   firestore.ts access.ts folders.ts teams.ts upload.ts edit.ts trust.ts
-  presence.ts stats.ts tokens.ts visibility.ts marking.ts
+  presence.ts stats.ts tokens.ts visibility.ts marking.ts people.ts profiles.ts
   annotation/{anchor.ts,highlighter.ts,Sidebar.tsx}
   wysiwyg/{EditToolbar.tsx,placeholders.ts}
   export/{labels.ts,html.ts,pdf.ts,image.ts}
@@ -599,7 +600,9 @@ app/src/
 
 **A text field is 16 CSS px on a touch screen.** Below that iOS zooms the whole page when one takes focus, and leaves it zoomed. The rule sits beside the tap floor in `base.css`, important for the same reason, and the larger verification code field is exempt. Pinch zoom is never blocked.
 
-**On a phone the header is the wordmark and one menu.** At 600 px and below the address, Account, Docs and Sign out need more room than there is, so they fold behind one button (`AccountMenu`). A signed-out visitor finds Docs and Sign in there, and Sign in comes back to the same place through `next`.
+**The header names you as everyone else sees you.** Beside Account and Sign out, the signed-in person is a chip with their dot and short name, "Pavel S", and their address as its tooltip (§16 "Names").
+
+**On a phone the header is the wordmark and one menu.** At 600 px and below your name, Account, Docs and Sign out need more room than there is, so they fold behind one button (`AccountMenu`), whose headings are your name and, because a phone has no pointer for the chip's tooltip, your address. A signed-out visitor finds Docs and Sign in there, and Sign in comes back to the same place through `next`.
 
 **On a phone the bars above a document are two rows.** At 600 px and below, or on a phone on its side (`(max-height: 500px) and (pointer: coarse)`, `CONDENSED_QUERY`), the app header folds into the toolbar, whose first row holds the explorer's toggle (§13 "The explorer"), the mark, the document's title and that one menu, and whose second holds Document/Comments and what fits beside it. On its side, where Safari leaves under 300 px of height, it is one row.
 
@@ -1018,7 +1021,13 @@ Account-level opt-out (`users/{uid}.analyticsOptOut` → `setAnalyticsCollection
 
 `PresenceBar`'s deterministic per-email palette is the single source of peer identity, reused by the presence chip, the live caret and selection, the scroll-rail marker, the comment-thread accent, and the author edge on each persisted highlight. It is derived from the email, so it is stable between sessions. **Colour is never the only signal**: carets carry name labels, rail markers label on hover, presence chips encode mode by dot shape.
 
-The presence bar is one line that never scrolls, and on a phone it is a row of its own, there only while someone else is (§7). Each chip shows the person's whole name on one line. As many chips as fit beside the rest of the toolbar are shown, and the rest fold into a "+N" button that lists them, each with their dot, and follows whoever is chosen. A folded chip stays in the page, invisible and out of the tab order, so the fold is measured against widths that do not change with it and cannot oscillate.
+The presence bar is one line that never scrolls, and on a phone it is a row of its own, there only while someone else is (§7). Each chip shows the person's short name on one line, with their address on the second line of its tooltip. As many chips as fit beside the rest of the toolbar are shown, and the rest fold into a "+N" button that lists them, each with their dot, and follows whoever is chosen. A folded chip stays in the page, invisible and out of the tab order, so the fold is measured against widths that do not change with it and cannot oscillate.
+
+### Names
+
+A person is drawn by a short name: the first word of their name and the first letter of its last, "Pavel S" (`people.ts`, ADR 0040). It comes from `profiles/{uid}`, `{ name?, chosen, updatedAt }`, the one record about a person that anybody past the identity gate may read, by uid and never by listing, so names cannot be enumerated and a uid is learned only from a record its reader can already read. Only its own account writes it, with exactly those keys and a name of 1 to 40 characters. On every load the person's own browser keeps it holding the short form of the name their sign-in provider gives, unless they chose one on Account, which a sign-in never replaces; an empty choice gives the sign-in name back. Somebody with no name there, a password account or someone who has not opened the app since, is named from their address: `dana.kim@` is "Dana K". A record that holds only an address, a draft or a version summary, uses the name a profile gave that address in the same session. A name is self-reported, as a display name always is, so wherever one is drawn the address is its tooltip, the dot beside it is the colour that address has everywhere, and nothing compares names: access, matching and every agent's output stay keyed by address. A presence record still carries a name, short, for a reader whose profile read fails.
+
+Names replace addresses where a person is shown: the header, comment and suggestion authors, who decided or is applying a suggestion, who is replying, presence chips and carets, the details panel, the draft and conflict banners, the upload dialog, Recent's reasons, the Owner column, forks and the owner's statistics. Addresses stay where the address is the point: the share panel and team members, where access is granted by address; the sign-in and account screens that confirm which account is in use; an address that moved; the export marking; email; and the MCP and CLI surface.
 
 ### Ephemeral presence is an overlay, never inline DOM
 
@@ -1298,7 +1307,7 @@ Where a mutable operation needs a receipt rather than an existing immutable resu
 
 One reverse-chronological feed per document from `GET /activity?docId=…&before=…`, gated to `isDocEditor` (a reader who is not an editor gets 403, anyone who cannot read the document the absent id's 404, and an expired document's activity is its owner's alone). It merges the change log `get_changes` reads (§19, ADR 0016) with the reading sessions in `views/`, and is rendered by the same code as `get_changes`, so an agent and a person read the same words for the same event ([ADR 0023](adr/0023-attribution-names-the-credential.md)). It adds **no new writes**.
 
-Every row says who acted, what they did, and through what: the person's address, joined at read time from `users/{uid}` so an account that moved address reads under its new one, and `channel`, `via` and `automated` from the stored actor. A version's row says how it arrived (`origin`) and links to it. An account move reads as an address changing, not as the new address granting itself access. The owner alone sees that a fork was made, never by whom (§21).
+Every row says who acted, what they did, and through what: the person's address, joined at read time from `users/{uid}` so an account that moved address reads under its new one, and drawn as their short name with the address as its tooltip (§16 "Names"), and `channel`, `via` and `automated` from the stored actor. A version's row says how it arrived (`origin`) and links to it. An account move reads as an address changing, not as the new address granting itself access. The owner alone sees that a fork was made, never by whom (§21).
 
 The People / Automation filter applies to every row, not only reads. Pages hold 50 rows; the `before` cursor carries an exact position in each of the two sources, so rows that share a timestamp are never repeated or skipped at a page boundary. Responses are `private, no-store`. It is served by the `recordView` function, so it needs no function, and no public invoker grant, of its own.
 

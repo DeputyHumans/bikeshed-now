@@ -319,6 +319,18 @@ export interface UserRecord {
 }
 
 /**
+ * Firestore: profiles/{uid}. The one thing about a person anybody signed in may
+ * read, by uid and never by listing: the short name shown for them (SPEC §4, ADR 0040).
+ */
+export interface ProfileRecord {
+  /** Already short, "Pavel S"; absent when neither a sign-in name nor a chosen one exists. */
+  name?: string;
+  /** True once the person typed it on Account: a sign-in name never replaces it. */
+  chosen: boolean;
+  updatedAt?: Timestamp;
+}
+
+/**
  * Firestore: users/{uid}/tokens/{tokenId} — metadata only; never the secret.
  *
  * A connected app (SPEC §23) is a row here too, with `kind: "oauth"`, so the

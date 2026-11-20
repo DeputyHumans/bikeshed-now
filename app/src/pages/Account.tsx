@@ -13,6 +13,8 @@ import { Spinner } from "../components/Spinner";
 import { TeamsSection } from "../components/TeamsSection";
 import { useToast } from "../components/Toast";
 import { DEPLOYMENT_MARKING } from "../config";
+import { nameFromEmail, shortName, usePersonName } from "../people";
+import { chooseName } from "../profiles";
 import type { Marking, TeamMeta, TokenSummary, UserRecord } from "../types";
 
 function TokenList({
@@ -343,6 +345,61 @@ function ConnectSection() {
   );
 }
 
+/**
+ * The name other people see, "Pavel S" (ADR 0040). It starts as the short form
+ * of the name your sign-in provider gives; a name typed here wins over it from
+ * then on, and an empty one gives it back.
+ */
+function NameSection({ uid, emailLower, providerName }: { uid: string; emailLower: string; providerName: string | null }) {
+  const toast = useToast();
+  const current = usePersonName({ uid, email: emailLower, known: providerName });
+  // Null until somebody types, so the field follows the name until then.
+  const [typed, setTyped] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const value = typed ?? current;
+  const shown = shortName(value) || shortName(providerName ?? "") || nameFromEmail(emailLower);
+
+  return (
+    <section style={{ marginTop: "var(--s-5)" }}>
+      <h2>Your name</h2>
+      <form
+        style={{ display: "flex", gap: "var(--s-2)", margin: "var(--s-3) 0" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (saving || typed === null) return;
+          setSaving(true);
+          void chooseName(uid, emailLower, typed, providerName)
+            .then(() => {
+              setTyped(null);
+              toast.show(`People now see you as ${shown}.`);
+            })
+            .catch((err) => toast.error((err as Error).message))
+            .finally(() => setSaving(false));
+        }}
+      >
+        <input
+          id="display-name"
+          className="input"
+          aria-label="Your name"
+          aria-describedby="display-name-hint"
+          autoComplete="name"
+          maxLength={80}
+          value={value}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        <button type="submit" className="btn btn-primary" disabled={saving || typed === null} aria-busy={saving}>
+          Save
+        </button>
+      </form>
+      <p id="display-name-hint" className="field-hint">
+        People who read the same documents see you as <strong>{shown}</strong>: your first
+        name and last initial. They see your address when they point at it. Leave it empty
+        to go back to the name you signed in with.
+      </p>
+    </section>
+  );
+}
+
 export function Account() {
   const { user, emailLower } = useAuth();
   const toast = useToast();
@@ -382,6 +439,8 @@ export function Account() {
     <div className="container">
       <h1>Account</h1>
       <p className="caption">{emailLower}</p>
+
+      <NameSection uid={user.uid} emailLower={emailLower} providerName={user.displayName} />
 
       <section style={{ marginTop: "var(--s-5)" }}>
         <h2>Email</h2>

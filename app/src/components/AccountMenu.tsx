@@ -3,6 +3,7 @@
 
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { usePersonName } from "../people";
 import { Icon } from "./Icon";
 import { Menu, type MenuEntry } from "./Menu";
 import { useToast } from "./Toast";
@@ -20,11 +21,15 @@ export function AccountMenu({ extra = [] }: { extra?: MenuEntry[] }) {
   const navigate = useNavigate();
   const toast = useToast();
   const signedIn = gate === "ready" && Boolean(user);
+  const name = usePersonName({ uid: user?.uid, email: emailLower, known: user?.displayName });
 
   const entries: MenuEntry[] = [...extra];
   if (signedIn) {
     entries.push(
-      { id: "who", label: emailLower, heading: true },
+      // Your name as others see it, and the address it stands for: a phone has
+      // no pointer to show the address the header's chip keeps in its tooltip.
+      { id: "who", label: name, heading: true },
+      { id: "who-address", label: emailLower, heading: true },
       { id: "account", label: "Account", onSelect: () => navigate("/account") },
     );
   } else if (gate !== "loading" && pathname !== "/signup") {

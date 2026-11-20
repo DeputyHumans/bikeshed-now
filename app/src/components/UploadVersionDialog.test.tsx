@@ -144,7 +144,7 @@ describe("UploadVersionDialog", () => {
     expect(notes()).not.toContain("scripts");
 
     rerender({ draftBy: "ana@example.com", trusted: true });
-    expect(notes()).toContain("The unpublished edits ana@example.com last saved are discarded.");
+    expect(notes()).toContain("The unpublished edits Ana last saved are discarded.");
     expect(notes()).toContain("Its scripts are blocked again");
   });
 

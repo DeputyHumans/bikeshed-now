@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // A follower lands in the same words on a screen of another width: the reading place between two ids (SPEC §16).
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { readingPlace, scrollFraction, scrollToFraction, scrollToPlace } from "./peers";
 
 /**
@@ -134,5 +134,33 @@ describe("following on a screen of another width", () => {
     expect(follower.where()).toBe(NARROW.height - NARROW.viewport);
     expect(scrollToPlace(follower.doc, { b: "one", at: 0 })).toBe(true);
     expect(follower.where()).toBe(0);
+  });
+});
+
+describe("a peer's caret label", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("is their short name, as the presence bar draws it, never the whole name or the address", async () => {
+    const { createPeerOverlay } = await import("./peers");
+    const doc = document.implementation.createHTMLDocument("peers");
+    doc.body.innerHTML = '<p id="p1">Hello there, world</p>';
+    // jsdom lays nothing out: one rect where a browser would draw the selection.
+    const proto = Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
+    const had = proto.getClientRects;
+    proto.getClientRects = () => [new DOMRect(10, 10, 40, 16)];
+    onTestFinished(() => {
+      proto.getClientRects = had;
+    });
+    Object.defineProperty(doc, "defaultView", { value: { scrollX: 0, scrollY: 0, requestAnimationFrame: (cb: FrameRequestCallback) => (cb(0), 1), cancelAnimationFrame: () => {} } });
+    const overlay = createPeerOverlay(doc);
+    const focus = { elementId: "p1", exact: "there", prefix: "Hello ", suffix: ", world", start: 6, end: 11 };
+    const base = { mode: "view" as const, lastChanged: 0, color: "#7c3aed", focus };
+    overlay.render([
+      { ...base, uid: "u1", email: "dana.kim@example.com", name: "Dana Kimberly-Smith" },
+      { ...base, uid: "u2", email: "bo.chen@example.com", name: "bo.chen@example.com" },
+    ]);
+    const labels = [...doc.querySelectorAll(".bshd-peer-label")].map((el) => el.textContent);
+    expect(labels).toEqual(["Dana K", "Bo C"]);
+    overlay.destroy();
   });
 });

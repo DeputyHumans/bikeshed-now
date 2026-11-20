@@ -2,6 +2,7 @@
 // Everything the viewer needs to say above the document (SPEC §6a, §6c, §16).
 
 import { Icon } from "./Icon";
+import { Person } from "./Person";
 
 /**
  * Presentational only: every decision is made in a hook, and this file just
@@ -73,7 +74,7 @@ export function ViewerBanners(props: {
       <div key="draft" className="banner" role="status">
         <Icon name="edit" size={15} />
         <span>
-          You're reading unpublished edits, last saved by {byYou ? "you" : byEmail}
+          You're reading unpublished edits, last saved by {byYou ? "you" : <Person email={byEmail} />}
           {when ? ` ${when}` : ""}. Everyone else still sees {version} until they're saved as a
           new version.
         </span>
@@ -107,7 +108,7 @@ export function ViewerBanners(props: {
       // destructive option has to be chosen, not defaulted into.
       <div key="conflict" className="banner banner-warn" role="alert">
         <Icon name="edit" size={15} />
-        <span>{props.conflict.byEmail} saved a change while you were editing.</span>
+        <span><Person email={props.conflict.byEmail} /> saved a change while you were editing.</span>
         <button type="button" className="btn btn-sm" onClick={props.onTakeTheirs}>
           Load theirs
         </button>

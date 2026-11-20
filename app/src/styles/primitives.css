@@ -182,6 +182,31 @@
   color: var(--color-warn);
 }
 
+/* A person (components/Person.tsx): a dot in their colour and their short name,
+   the address in the tooltip. The dot sits beside the name, never instead of it,
+   and keeps its colour in forced colours, where it is decoration and no signal. */
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+.person-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  forced-color-adjust: none;
+}
+.person-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.person-chip { color: var(--color-ink); }
+
 /* An expiry escalates rather than shouting from the start: a date eleven months
    out is information, the last week is a warning, and past it is a state. Each
    step is also carried by the WORDING, so the colour is never the only signal.

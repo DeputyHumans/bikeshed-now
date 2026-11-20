@@ -2,6 +2,7 @@
 // Where a document came from, and what has been made from it (SPEC §21).
 
 import { useEffect } from "react";
+import { Person } from "./Person";
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal";
 import { Loading } from "./Spinner";
@@ -104,7 +105,9 @@ function AncestorRow({ ancestor }: { ancestor: Ancestor }) {
         {ancestor.title}
       </Link>
       <span className="caption">
-        {[ancestor.versionId, ancestor.ownerEmail].filter(Boolean).join(" · ")}
+        {ancestor.versionId}
+        {ancestor.versionId && ancestor.ownerEmail ? " · " : null}
+        {ancestor.ownerEmail ? <Person email={ancestor.ownerEmail} /> : null}
       </span>
     </li>
   );
@@ -162,7 +165,9 @@ function ForkRow({ fork }: { fork: ForkListing }) {
     <li className="activity-row">
       <Link to={`/d/${fork.docId}`}>{fork.title}</Link>
       <span className="caption">
-        {[VISIBILITY[fork.visibility], fork.ownerEmail].filter(Boolean).join(" · ")}
+        {VISIBILITY[fork.visibility]}
+        {VISIBILITY[fork.visibility] && fork.ownerEmail ? " · " : null}
+        {fork.ownerEmail ? <Person email={fork.ownerEmail} /> : null}
       </span>
       {fork.forkedAt ? (
         <span className="activity-when">

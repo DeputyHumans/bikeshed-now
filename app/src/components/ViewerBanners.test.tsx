@@ -28,7 +28,8 @@ describe("the draft banner", () => {
   test("says the page is unpublished work, whose it is, and what everyone else sees", () => {
     render(<ViewerBanners draft={DRAFT} onEdit={() => {}} />);
     const text = screen.getByRole("status").textContent ?? "";
-    expect(text).toContain("You're reading unpublished edits, last saved by bo@example.com 5m ago.");
+    expect(text).toContain("You're reading unpublished edits, last saved by Bo 5m ago.");
+    expect(screen.getByRole("status").querySelector(".person")?.getAttribute("title")).toBe("bo@example.com");
     expect(text).toContain("Everyone else still sees v1");
     expect(screen.getByRole("button", { name: "Edit" })).toBeTruthy();
   });

@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "./Modal";
+import { Person } from "./Person";
 import { FileDropzone } from "./FileDropzone";
 import { PlanSummary } from "./PlanSummary";
 import { UploadProgress } from "./UploadProgress";
@@ -158,7 +159,7 @@ export function UploadVersionDialog({
 
       <ul className="upload-notes">
         <li>Comments stay on {baseVersion || "the current version"}. The new version starts with none.</li>
-        {draftBy ? <li>The unpublished edits {draftBy} last saved are discarded.</li> : null}
+        {draftBy ? <li>The unpublished edits <Person email={draftBy} /> last saved are discarded.</li> : null}
         {trusted ? <li>Its scripts are blocked again until somebody trusts the new version.</li> : null}
       </ul>
     </Modal>

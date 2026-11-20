@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import type { Annotation } from "../types";
+import { usePersonName } from "../people";
 
 /**
  * Two states. Idle, it says how many suggestions are waiting — which is also
@@ -46,6 +47,9 @@ export function ReviewBar({
   // approver decides that one, or its author withdraws it, the pass moves on;
   // a reason still open would reject the next one, for this one's reason.
   const [draft, setDraft] = useState<{ annId: string; reason: string } | null>(null);
+  // Before any return, as a hook must be: the suggestion the pass is on, as below.
+  const shown = pending.find((a) => a.annId === currentId) ?? pending[0];
+  const author = usePersonName({ uid: shown?.authorUid, email: shown?.authorEmail ?? "" });
   const n = pending.length;
   if (n === 0) return null;
 
@@ -93,9 +97,9 @@ export function ReviewBar({
         {index + 1} of {n}
       </span>
       <p className="review-change" aria-live="polite">
-        <span className="visually-hidden">{current.authorEmail} suggests: </span>
-        <span className="review-by" aria-hidden="true">
-          {current.authorEmail}:
+        <span className="visually-hidden">{author} suggests: </span>
+        <span className="review-by" aria-hidden="true" title={current.authorEmail}>
+          {author}:
         </span>{" "}
         <span className="visually-hidden">{s.replacement === "" ? "delete " : "replace "}</span>
         <del>{current.anchor.exact}</del>

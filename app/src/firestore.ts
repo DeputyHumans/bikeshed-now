@@ -25,6 +25,7 @@ import { db } from "./firebase";
 import { isTrashed } from "./trash";
 import { TOKENS } from "./brand/tokens";
 import type {
+  ProfileRecord,
   Actor,
   Anchor,
   Annotation,
@@ -410,6 +411,27 @@ export async function saveUserProfile(
     { uid, email: emailLower, ...fields, updatedAt: serverTimestamp() },
     { merge: true },
   );
+}
+
+/**
+ * The short name shown for a person, or null when they have none yet or the
+ * caller may not read it: signed out, the rules refuse every profile (ADR 0040).
+ */
+export async function readProfile(uid: string): Promise<ProfileRecord | null> {
+  const snap = await fbGetDoc(doc(db, "profiles", uid));
+  return snap.exists() ? (snap.data() as ProfileRecord) : null;
+}
+
+/**
+ * Write your own. A whole record every time, so a profile with no name drops
+ * the one it had: the rules take exactly these keys and nothing else.
+ */
+export async function saveProfile(uid: string, profile: { name?: string; chosen: boolean }): Promise<void> {
+  await setDoc(doc(db, "profiles", uid), {
+    ...(profile.name ? { name: profile.name } : {}),
+    chosen: profile.chosen,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /** Seed once; a stored choice, including explicit off, always wins (SPEC §20). */

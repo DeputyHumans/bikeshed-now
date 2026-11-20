@@ -13,6 +13,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 ### Added
 
 - **Your documents, beside the one you are reading.** The first button in a document's toolbar opens a list on the left: a filter by title, Recent, Shared with me, and every folder with its documents, the open one marked. Opening another document from it keeps the list, its open folders and its filter as they were, because the list sits outside the viewer that each document remounts. Whether it is open is kept on the account, so it follows you to every device. At 1100 px and below it is a drawer over the document that starts closed every time and never changes what the account remembers. It is hidden while you edit, because leaving a document mid-edit drops what the editor has not saved yet (SPEC §13, ADR 0039).
+- **People are shown by first name and last initial, with their address under the pointer.** The header, comments, suggestions, the people in a document, the details panel, Recent and the Owner column showed an address, or the whole name a sign-in provider gives. Each now shows a dot in the person's colour and a short name, “Pavel S”. It is your sign-in name, shortened, unless you type another on Account, which a sign-in never replaces. Somebody with no name, a password account say, is named from their address. Names live in `profiles/{uid}`, which anybody signed in may read by uid and nobody may list. Sharing, teams, email and agent output keep addresses (SPEC §16, ADR 0040).
 
 ## 0.40.0 — 2026-11-19
 

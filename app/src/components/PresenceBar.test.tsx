@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The presence bar: whole names on one line, the rest folded into "+N" (SPEC §16).
+// The presence bar: short names on one line, the rest folded into "+N" (SPEC §16, ADR 0040).
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -72,10 +72,13 @@ describe("PresenceBar", () => {
     expect(container.querySelector(".presence-bar")).toBeNull();
   });
 
-  test("unmeasured (jsdom): every chip shows its whole name, none is folded, and +N is idle", () => {
+  test("unmeasured (jsdom): every chip shows its short name, none is folded, and +N is idle", () => {
     const { container } = render(<PresenceBar peers={PEERS} following={null} onToggleFollow={() => {}} />);
     const chips = Array.from(container.querySelectorAll(".presence-chip"));
-    expect(chips.map((chip) => chip.querySelector(".presence-name")?.textContent)).toEqual(PEERS.map((p) => p.name));
+    // The first name and the last name's initial, whatever the presence record carried.
+    expect(chips.map((chip) => chip.querySelector(".presence-name")?.textContent)).toEqual(["Victoria A", "Bartholomew O", "Chen W", "Dolores H"]);
+    // The address is the tooltip's second line: what tells two of a name apart.
+    expect((chips[0] as HTMLElement).title.split("\n")).toEqual(["Follow Victoria A's scrolling", "a@example.com"]);
     expect(chips.filter((chip) => chip.hasAttribute("data-folded"))).toHaveLength(0);
     expect(container.querySelector(".presence-more")?.hasAttribute("data-idle")).toBe(true);
   });
@@ -91,7 +94,7 @@ describe("PresenceBar", () => {
     expect(more.hasAttribute("data-idle")).toBe(false);
     expect(more.textContent).toBe("+2");
     expect(more.getAttribute("aria-label")).toBe("2 more people here");
-    expect(more.title).toBe("Chen Wei, Dolores Haze");
+    expect(more.title).toBe("Chen W, Dolores H");
   });
 
   test("the +N list names every folded person, says who is editing, and following one is the same as clicking their chip", () => {
@@ -100,7 +103,7 @@ describe("PresenceBar", () => {
     render(<PresenceBar peers={PEERS} following={null} onToggleFollow={onToggleFollow} />);
     fireEvent.click(screen.getByRole("button", { name: "2 more people here" }));
     const items = screen.getAllByRole("menuitem");
-    expect(items.map((item) => item.textContent)).toEqual(["Follow Chen Wei", "Follow Dolores Haze (editing)"]);
+    expect(items.map((item) => item.textContent)).toEqual(["Follow Chen W", "Follow Dolores H (editing)"]);
     expect(items[1].querySelector(".presence-dot")?.getAttribute("data-mode")).toBe("edit");
     fireEvent.click(items[1]);
     expect(onToggleFollow).toHaveBeenCalledWith("d");
@@ -109,10 +112,10 @@ describe("PresenceBar", () => {
   test("following someone who is folded: +N says so, and the list offers to stop", () => {
     layOut(300);
     render(<PresenceBar peers={PEERS} following="c" onToggleFollow={() => {}} />);
-    const more = screen.getByRole("button", { name: "2 more people here, following Chen Wei" });
+    const more = screen.getByRole("button", { name: "2 more people here, following Chen W" });
     expect(more.hasAttribute("data-following")).toBe(true);
     fireEvent.click(more);
-    expect(screen.getAllByRole("menuitem")[0].textContent).toBe("Stop following Chen Wei");
+    expect(screen.getAllByRole("menuitem")[0].textContent).toBe("Stop following Chen W");
   });
 
   test("one person folded is a person, not people", () => {
@@ -125,13 +128,13 @@ describe("PresenceBar", () => {
   test("someone following this reader: an eye read aloud as Following you, a wash of their colour, a title that says so, and nobody else is marked", () => {
     const peers = [peer("a", "Ana Lima"), { ...peer("b", "Bo Chen"), followsYou: true as const }];
     render(<PresenceBar peers={peers} following={null} onToggleFollow={() => {}} />);
-    const bo = screen.getByRole("button", { name: "Bo Chen Following you" });
+    const bo = screen.getByRole("button", { name: "Bo C Following you" });
     expect(bo.hasAttribute("data-follows-you")).toBe(true);
-    expect(bo.title).toBe("Bo Chen is following you. Follow Bo Chen's scrolling");
-    const ana = screen.getByRole("button", { name: "Ana Lima" });
+    expect(bo.title).toBe("Bo C is following you. Follow Bo C's scrolling\nb@example.com");
+    const ana = screen.getByRole("button", { name: "Ana L" });
     expect(ana.hasAttribute("data-follows-you")).toBe(false);
     expect(ana.querySelector('[aria-label="Following you"]')).toBeNull();
-    expect(ana.title).toBe("Follow Ana Lima's scrolling");
+    expect(ana.title).toBe("Follow Ana L's scrolling\na@example.com");
   });
 
   test("followers come first, so a fold hides them last, and everyone else keeps their order", () => {
@@ -145,7 +148,7 @@ describe("PresenceBar", () => {
 
   test("the follower's own chip tells them the person they follow can see it", () => {
     render(<PresenceBar peers={[peer("a", "Ana Lima")]} following="a" onToggleFollow={() => {}} />);
-    expect(screen.getByRole("button", { name: "Ana Lima" }).title).toBe("Following Ana Lima, who can see that you are. Scroll to stop.");
+    expect(screen.getByRole("button", { name: "Ana L" }).title).toBe("Following Ana L, who can see that you are. Scroll to stop.\na@example.com");
   });
 
   test("a follower folded anyway is named so in the +N list, beside editing", () => {

@@ -58,7 +58,9 @@ describe("the forks panel", () => {
     });
     expect(screen.getByRole("link", { name: "Beta" }).getAttribute("href")).toBe("/d/beta/v1");
     expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("/d/alpha/v2");
-    expect(screen.getByText("v1 · b@example.com")).toBeDefined();
+    const hop = screen.getByRole("link", { name: "Beta" }).closest("li")!.querySelector(".caption")!;
+    expect(hop.textContent).toBe("v1 · B");
+    expect(hop.querySelector(".person")?.getAttribute("title")).toBe("b@example.com");
     expect(screen.getByText(/forked from a document you can't open/)).toBeDefined();
     expect(screen.getByText(/The original has changed since this was forked/)).toBeDefined();
     expect(screen.getByRole("link", { name: "See it as it is now" }).getAttribute("href")).toBe("/d/beta");
@@ -96,7 +98,9 @@ describe("the forks panel", () => {
     mount({ forked: false, isOwner: true, lineage });
     expect(screen.getByText("Forked 3 times. The one you can't open isn't listed.")).toBeDefined();
     expect(screen.getByRole("link", { name: "Ana's take" }).getAttribute("href")).toBe("/d/f1");
-    expect(screen.getByText("Private · lee@example.com")).toBeDefined();
+    const row = screen.getByRole("link", { name: "Team copy" }).closest("li")!.querySelector(".caption")!;
+    expect(row.textContent).toBe("Private · Lee");
+    expect(row.querySelector(".person")?.getAttribute("title")).toBe("lee@example.com");
   });
 
   it("does not show a reader an inventory that is not theirs", () => {

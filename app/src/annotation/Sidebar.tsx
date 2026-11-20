@@ -14,6 +14,8 @@ import { rejectSuggestion, reviseSuggestion, withdrawSuggestion } from "../sugge
 import { SuggestForm } from "../components/SuggestPopover";
 import type { Annotation, Comment, Suggestion } from "../types";
 import type { Peer } from "../presence";
+import { Person } from "../components/Person";
+import { personName, usePeople, usePersonName } from "../people";
 
 /**
  * A thread carries its author's colour, the same value that paints their
@@ -24,13 +26,14 @@ import type { Peer } from "../presence";
 
 function CommentAuthor({ comment }: { comment: Comment }) {
   const via = viaOf(comment.actor);
+  const name = usePersonName({ uid: comment.authorUid, email: comment.authorEmail });
   return (
     <div className="comment-head">
-      <span className="comment-author">{comment.authorEmail}</span>
+      <Person uid={comment.authorUid} email={comment.authorEmail} mark="dot" className="comment-author" />
       {/* Server-derived, so it can be stated as fact. The self-reported client
           and agent strings beside it get no badge, because a badge implying
           verification it does not have is worse than no badge. */}
-      <ViaBadge via={via} title={`Posted on ${comment.authorEmail}'s behalf by ${via}`} />
+      <ViaBadge via={via} title={`Posted on ${name}'s behalf by ${via}`} />
       {comment.actor?.agent ? (
         <span className="self-reported" title="Self-reported by the client">
           {comment.actor.agent}
@@ -42,9 +45,9 @@ function CommentAuthor({ comment }: { comment: Comment }) {
 }
 
 /** Whether a suggestion's claim is still held, and by whom. */
-function claimHolder(s: Suggestion, now = Date.now()): string | null {
+function claimHolder(s: Suggestion, now = Date.now()): { uid: string; email: string } | null {
   const until = s.claim?.until?.toMillis?.() ?? 0;
-  return s.claim && until > now ? s.claim.email : null;
+  return s.claim && until > now ? { uid: s.claim.uid, email: s.claim.email } : null;
 }
 
 /**
@@ -56,15 +59,17 @@ function SuggestionChange({ exact, suggestion, stale }: { exact: string; suggest
   const holder = suggestion.state === "pending" ? claimHolder(suggestion) : null;
   const decided = suggestion.state === "accepted" ? "Accepted" : suggestion.state === "rejected" ? "Rejected" : null;
   const decidedVia = decided ? viaOf(suggestion.decidedBy) : null;
+  const decider = suggestion.decidedBy?.email ? { uid: suggestion.decidedBy.uid, email: suggestion.decidedBy.email } : null;
+  usePeople([decider, holder].filter((p): p is { uid: string; email: string } => p !== null));
   const status =
     decided
-      ? `${decided} by ${suggestion.decidedBy?.email ?? "an approver"}`
+      ? `${decided} by ${decider ? personName(decider) : "an approver"}`
       : suggestion.state === "withdrawn"
-        ? `Withdrawn by ${suggestion.decidedBy?.email ?? "its author"}`
+        ? `Withdrawn by ${decider ? personName(decider) : "its author"}`
         : stale
           ? "The text has changed since this was suggested, so it can’t be applied."
           : holder
-            ? `${holder} is applying it…`
+            ? `${personName(holder)} is applying it…`
             : "Waiting for the owner or an approver.";
   return (
     <div className="suggestion" data-state={suggestion.state} data-stale={stale || undefined}>
@@ -153,6 +158,7 @@ function Thread({
   const toast = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
   const [reply, setReply] = useState("");
+  usePeople(composingPeers.map((peer) => ({ uid: peer.uid, email: peer.email })));
   const [busy, setBusy] = useState(false);
   // Rejecting asks for a reason, which is optional; the field opens on demand.
   const [rejecting, setRejecting] = useState(false);
@@ -175,7 +181,8 @@ function Thread({
     const t = setTimeout(() => setNow(Date.now()), left + 50);
     return () => clearTimeout(t);
   }, [until]);
-  const heldBy = claim && until > now ? claim.email : null;
+  usePeople(claim ? [{ uid: claim.uid, email: claim.email }] : []);
+  const heldBy = claim && until > now ? personName({ uid: claim.uid, email: claim.email }) : null;
   const heldTitle = heldBy ? `${heldBy} is applying it right now.` : undefined;
 
   /** One suggestion action at a time, with its failure said rather than swallowed. */
@@ -398,7 +405,7 @@ function Thread({
           style={{ ["--peer-color" as string]: peer.color }}
         >
           <span className="presence-dot" />
-          {peer.name} is replying…
+          {personName({ uid: peer.uid, email: peer.email, known: peer.name })} is replying…
         </p>
       ))}
 

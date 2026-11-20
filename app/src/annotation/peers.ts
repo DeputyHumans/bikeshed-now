@@ -4,6 +4,7 @@
 import { OWN_SELECTOR, PEER_LAYER_ID, PEER_STYLE_ID, markOwn } from "../brand/dom";
 import { rangeFromAnchor } from "./anchor";
 import { PLACE_ID_MAX, type Peer, type ReadingPlace } from "../presence";
+import { personName } from "../people";
 
 /**
  * The most important constraint in this feature: ephemeral peer presence NEVER
@@ -164,7 +165,9 @@ export function createPeerOverlay(doc: Document): PeerOverlay {
       label.style.setProperty("--bshd-peer", peer.color);
       label.style.left = `${last.left + last.width}px`;
       label.style.top = `${last.top}px`;
-      label.textContent = peer.name || peer.email;
+      // The short name, as the presence bar draws it; the caret repaints with
+      // every move, so a name that arrives later is here by the next one.
+      label.textContent = personName({ uid: peer.uid, email: peer.email, known: peer.name });
       layer.appendChild(label);
     }
   };

@@ -46,6 +46,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0037](0037-a-pages-files-sit-beside-it.md) | A page's files sit beside it; video and audio go by a short-lived Storage link | Accepted |
 | [0038](0038-large-media-go-straight-to-storage.md) | Large media go straight to Storage through a server-issued session | Accepted |
 | [0039](0039-the-viewer-has-an-explorer.md) | The viewer has an explorer, above the keyed viewer and remembered on the account | Accepted |
+| [0040](0040-a-person-is-shown-by-a-short-name.md) | A person is shown by a short name, looked up by uid | Accepted |
 
 ## Format
 

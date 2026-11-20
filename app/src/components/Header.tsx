@@ -7,6 +7,7 @@ import { Wordmark } from "../brand/Wordmark";
 import { useAuth } from "../auth";
 import { useIsPhone } from "../hooks/useMediaQuery";
 import { AccountMenu } from "./AccountMenu";
+import { Person } from "./Person";
 
 export function Header() {
   const { user, emailLower, gate, signOut } = useAuth();
@@ -32,9 +33,9 @@ export function Header() {
           </a>
           {gate === "ready" && user ? (
             <>
-              <span className="header-email" title={emailLower}>
-                {emailLower}
-              </span>
+              {/* Who is signed in, as everyone else sees them: the short name
+                  and its dot, the address under the pointer (ADR 0040). */}
+              <Person uid={user.uid} email={emailLower} known={user.displayName} mark="chip" className="header-person" />
               <Link to="/account" className="btn btn-quiet btn-sm">
                 Account
               </Link>

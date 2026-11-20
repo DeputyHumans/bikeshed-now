@@ -6,6 +6,7 @@ import { Icon } from "./Icon";
 import { Menu } from "./Menu";
 import { chipsThatFit } from "./presenceFit";
 import type { Peer } from "../presence";
+import { personName, usePeople } from "../people";
 
 /**
  * One colour per person, and the SAME colour everywhere.
@@ -20,12 +21,14 @@ import type { Peer } from "../presence";
  * encoded by dot SHAPE — round for reading, square for editing — so somebody
  * who cannot distinguish two hues still gets both facts.
  *
- * One line, whole names, and never a scrollbar. The bar shows as many chips as
- * fit beside the rest of the toolbar, each with the person's full name, and
- * folds the others into a "+N" button that lists them. It used to be a
- * sideways-scrolling row whose names were cut at 12 characters and wrapped
+ * One line, short names, and never a scrollbar. The bar shows as many chips as
+ * fit beside the rest of the toolbar, each with the person's short name,
+ * "Pavel S", and folds the others into a "+N" button that lists them; the
+ * address is on the second line of the chip's tooltip (ADR 0040). It used to be
+ * a sideways-scrolling row whose names were cut at 12 characters and wrapped
  * inside a chip one line tall, which put a scrollbar on the bar and half a
  * name in each chip; on a phone the row pushed Edit off the screen (S29).
+ * Whole names then made a chip as wide as a sign-in provider liked.
  *
  * A folded chip stays in the page, invisible and out of the tab order, rather
  * than leaving it: it keeps its width, so the fold is measured against widths
@@ -47,7 +50,13 @@ export function PresenceBar({
   following: string | null;
   onToggleFollow: (uid: string) => void;
 }) {
-  const peers = followersFirst(given);
+  // Each by their short name: the one their profile holds, or the one their
+  // presence carries, or their address's.
+  usePeople(given.map((peer) => ({ uid: peer.uid, email: peer.email })));
+  const peers = followersFirst(given).map((peer) => ({
+    ...peer,
+    name: personName({ uid: peer.uid, email: peer.email, known: peer.name }),
+  }));
   const barRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(peers.length);
   // What a chip's width depends on: who, under what name, in which mode, and
@@ -99,7 +108,7 @@ export function PresenceBar({
           data-follows-you={peer.followsYou ? "" : undefined}
           style={{ color: peer.color }}
           aria-pressed={following === peer.uid}
-          title={chipTitle(peer, following === peer.uid)}
+          title={`${chipTitle(peer, following === peer.uid)}\n${peer.email}`}
           onClick={() => onToggleFollow(peer.uid)}
         >
           <span className="presence-dot" data-mode={peer.mode} />

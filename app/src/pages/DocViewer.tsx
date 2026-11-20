@@ -46,6 +46,7 @@ import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
 import { useVersionDrop } from "../viewer/useVersionDrop";
 import { useExplorer } from "../viewer/explorer";
+import { nameFromEmail, personName, shortName, usePeople } from "../people";
 import { baseFilesOf, combine, type Pick } from "../bundleInput";
 import { contentBase, readingSandboxed, readsDraft, type FrameMode } from "../viewer/frameMode";
 
@@ -349,13 +350,19 @@ export function DocViewer() {
     docId,
     uid: user?.uid ?? null,
     emailLower,
-    displayName: user?.displayName || emailLower,
+    // Short, and steady for the session: a change rejoins presence. Readers
+    // look up the profile by uid first, so a name chosen on Account still wins.
+    displayName: user?.displayName ? shortName(user.displayName) : nameFromEmail(emailLower),
     doc: frame.doc,
     epoch: frame.epoch,
     mode: mode.kind === "editing" ? "edit" : "view",
     liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
     enabled: signedIn && !throughFolder,
   });
+
+  // Their names, for the upload dialog's "has it open in the editor". Reads
+  // nothing from the document and puts nothing in it.
+  usePeople(presence.peers.map((peer) => ({ uid: peer.uid, email: peer.email })));
 
   // Between the annotation layer and the editor, deliberately: cleanups run in
   // declaration order, so highlights are stripped before the shared document is
@@ -1545,7 +1552,7 @@ export function DocViewer() {
           headVersion={headVersion}
           trusted={trust.trusted}
           draftBy={doc.meta.draft?.updatedByEmail ?? null}
-          editing={presence.peers.filter((p) => p.mode === "edit").map((p) => p.name || p.email)}
+          editing={presence.peers.filter((p) => p.mode === "edit").map((p) => personName({ uid: p.uid, email: p.email, known: p.name }))}
           initialPick={droppedPick}
           base={doc.version && doc.version.versionId === headVersion ? baseFilesOf(doc.version) : undefined}
           onClose={() => setDialog(null)}

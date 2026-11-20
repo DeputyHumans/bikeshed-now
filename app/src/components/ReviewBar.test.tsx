@@ -65,7 +65,7 @@ describe("ReviewBar", () => {
     bar();
     expect(screen.getByText("1 of 2")).toBeTruthy();
     expect(document.querySelector(".review-change")!.textContent).toMatch(
-      /sug@example\.com suggests: .*replace a single weekend with .*two weekends/,
+      /Sug suggests: .*replace a single weekend with .*two weekends/,
     );
   });
 

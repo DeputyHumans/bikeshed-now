@@ -9,7 +9,7 @@ import { Header } from "./Header";
 import { ToastProvider } from "./Toast";
 
 const auth = vi.hoisted(() => ({
-  user: null as { uid: string } | null,
+  user: null as { uid: string; displayName?: string | null } | null,
   emailLower: "",
   gate: "signed_out",
   signOut: vi.fn(async () => {}),
@@ -45,11 +45,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AccountMenu", () => {
-  it("signed in: the address as a heading, then Account, Docs and Sign out", () => {
-    auth.user = { uid: "u" };
+  it("signed in: your name and your address as headings, then Account, Docs and Sign out", () => {
+    auth.user = { uid: "u", displayName: "Someone Else" };
     auth.emailLower = "someone@example.com";
     auth.gate = "ready";
     open();
+    // A phone has no pointer for the header chip's tooltip, so the address is spelled out here.
+    expect(screen.getByText("Someone E").className).toBe("menu-label");
     expect(screen.getByText("someone@example.com").className).toBe("menu-label");
     expect(items()).toEqual(["Account", "Docs", "Sign out"]);
   });
@@ -144,5 +146,28 @@ describe("Header", () => {
     expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("/docs");
+  });
+
+  it("names who is signed in by a chip with their short name, and keeps the address for the pointer", () => {
+    widthIs(false);
+    auth.user = { uid: "u", displayName: "Pavel Spesivtsev" };
+    auth.emailLower = "pavel@deputyhumans.example";
+    auth.gate = "ready";
+    open("/", <Header />);
+    const header = document.querySelector(".app-header") as HTMLElement;
+    const chip = header.querySelector(".person-chip") as HTMLElement;
+    expect(chip.textContent).toBe("Pavel S");
+    expect(chip.getAttribute("title")).toBe("pavel@deputyhumans.example");
+    expect(chip.querySelector(".person-dot")).not.toBeNull();
+    expect(header.textContent).not.toContain("@");
+  });
+
+  it("falls back to a name made from the address when the sign-in gave none", () => {
+    widthIs(false);
+    auth.user = { uid: "u", displayName: null };
+    auth.emailLower = "dana.kim@example.com";
+    auth.gate = "ready";
+    open("/", <Header />);
+    expect(document.querySelector(".app-header .person-chip")?.textContent).toBe("Dana K");
   });
 });

@@ -1348,6 +1348,42 @@ describe("firestore rules", () => {
     );
   });
 
+  // --- Profiles (ADR 0040) --------------------------------------------------
+
+  it("a profile is read by uid by anybody past the gate, and listed by nobody", async () => {
+    await assertSucceeds(
+      setDoc(doc(verified(env, OWNER).firestore(), "profiles/u-owner"), { name: "Olive O", chosen: false, updatedAt: serverTimestamp() }),
+    );
+    await assertSucceeds(getDoc(doc(verified(env, VIEWER).firestore(), "profiles/u-owner")));
+    await assertSucceeds(getDoc(doc(verified(env, STRANGER).firestore(), "profiles/u-owner")));
+    // No enumeration: a name is reached only through a uid already in hand.
+    await assertFails(getDocs(collection(verified(env, VIEWER).firestore(), "profiles")));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "profiles/u-owner")));
+    await assertFails(
+      getDoc(doc(env.authenticatedContext(VIEWER.uid, { email: VIEWER.email, email_verified: false }).firestore(), "profiles/u-owner")),
+    );
+  });
+
+  it("a profile is its own account's to write, with exactly its keys and a name of 1 to 40 characters", async () => {
+    const own = doc(verified(env, VIEWER).firestore(), "profiles/u-viewer");
+    await assertSucceeds(setDoc(own, { name: "Vera V", chosen: true, updatedAt: serverTimestamp() }));
+    // No name at all is allowed: the address's stands in.
+    await assertSucceeds(setDoc(own, { chosen: false, updatedAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(own, { name: "x".repeat(40), chosen: true, updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(own, { name: "x".repeat(41), chosen: true, updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(own, { name: "", chosen: true, updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(own, { name: 7, chosen: true, updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(own, { name: "Vera V", chosen: "yes", updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(own, { name: "Vera V", updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(own, { name: "Vera V", chosen: true, updatedAt: serverTimestamp(), email: VIEWER.email }));
+    await assertFails(setDoc(own, { name: "Vera V", chosen: true, updatedAt: new Date(0) }));
+    // Somebody else's, never; and no account deletes even its own.
+    await assertFails(
+      setDoc(doc(verified(env, STRANGER).firestore(), "profiles/u-viewer"), { name: "Not Vera", chosen: true, updatedAt: serverTimestamp() }),
+    );
+    await assertFails(deleteDoc(own));
+  });
+
   it("token metadata is readable by its owner, and the secret store by nobody", async () => {
     await assertSucceeds(getDoc(doc(verified(env, OWNER).firestore(), "users/u-owner/tokens/tok1")));
     await assertFails(getDoc(doc(verified(env, VIEWER).firestore(), "users/u-owner/tokens/tok1")));

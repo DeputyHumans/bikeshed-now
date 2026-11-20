@@ -12,7 +12,7 @@ import type { TokenSummary } from "../types";
 import { Account } from "./Account";
 
 /** One user object, as the real provider gives: the page subscribes per user. */
-const signedIn = vi.hoisted(() => ({ user: { uid: "u1" }, emailLower: "ana@example.com" }));
+const signedIn = vi.hoisted(() => ({ user: { uid: "u1", displayName: "Ana Lima" }, emailLower: "ana@example.com" }));
 vi.mock("../auth", () => ({ useAuth: () => signedIn }));
 
 /** Vitest loads app/.env.local; analytics must not pick up a real id. */
@@ -45,6 +45,10 @@ vi.mock("../tokens", () => ({
 }));
 
 vi.mock("../components/TeamsSection", () => ({ TeamsSection: () => null }));
+
+/** What the name field saves, standing in for profiles.ts and its two Firestore calls. */
+const chooseName = vi.hoisted(() => vi.fn(async (_uid: string, _email: string, typed: string, provider: string | null) => typed.trim() || provider));
+vi.mock("../profiles", () => ({ chooseName }));
 
 const when = Timestamp.fromMillis(1_700_000_000_000);
 
@@ -322,5 +326,37 @@ describe("the access token list", () => {
     fireEvent.click(within(row("Claude")).getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(revokeToken).toHaveBeenCalledTimes(1));
     expect(revokeToken).toHaveBeenCalledWith("tok-oauth");
+  });
+});
+
+describe("your name", () => {
+  beforeEach(() => {
+    chooseName.mockClear();
+  });
+
+  it("starts as the short form of your sign-in name, and says how others see it", () => {
+    renderAccount();
+    const field = screen.getByRole("textbox", { name: "Your name" }) as HTMLInputElement;
+    expect(field.value).toBe("Ana L");
+    expect(screen.getByText(/People who read the same documents see you as/).textContent).toContain("Ana L");
+    // Nothing typed, nothing to save.
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("saves what you type, and shows its short form before you do", async () => {
+    renderAccount();
+    const field = screen.getByRole("textbox", { name: "Your name" });
+    fireEvent.change(field, { target: { value: "Annie Lima-Ross" } });
+    expect(screen.getByText(/People who read the same documents see you as/).textContent).toContain("Annie L");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    expect(chooseName).toHaveBeenCalledWith("u1", "ana@example.com", "Annie Lima-Ross", "Ana Lima");
+  });
+
+  it("emptied, says it goes back to the sign-in name, and saves the empty choice", async () => {
+    renderAccount();
+    fireEvent.change(screen.getByRole("textbox", { name: "Your name" }), { target: { value: "" } });
+    expect(screen.getByText(/People who read the same documents see you as/).textContent).toContain("Ana L");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    expect(chooseName).toHaveBeenCalledWith("u1", "ana@example.com", "", "Ana Lima");
   });
 });

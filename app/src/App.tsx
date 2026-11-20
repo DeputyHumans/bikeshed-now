@@ -18,6 +18,8 @@ import { SharedFolder } from "./pages/SharedFolder";
 import { Landing } from "./pages/Landing";
 import { DocViewer } from "./pages/DocViewer";
 import { ExplorerShell } from "./viewer/explorer";
+import { forgetNames } from "./people";
+import { syncSignInName } from "./profiles";
 import { SignUp } from "./pages/SignUp";
 import { Account } from "./pages/Account";
 import { Connect } from "./pages/Connect";
@@ -45,6 +47,22 @@ function useHeaderHeightVar() {
     observer.observe(header);
     return () => observer.disconnect();
   }, []);
+}
+
+/**
+ * Your short name, kept in step with the one your sign-in provider gives on
+ * every load, and everyone else's forgotten when the account changes: what one
+ * account could read is not what the next can (people.ts, ADR 0040).
+ */
+function useSignInName() {
+  const { user, gate, emailLower } = useAuth();
+  const uid = gate === "ready" && user ? user.uid : null;
+  const providerName = user?.displayName ?? null;
+  useEffect(() => {
+    forgetNames();
+    if (!uid) return;
+    void syncSignInName(uid, emailLower, providerName).catch(() => {});
+  }, [uid, emailLower, providerName]);
 }
 
 /** Log route changes as PATTERNS. Never the concrete path (SPEC §15). */
@@ -128,6 +146,7 @@ function ViewerRoute() {
 export function App() {
   useHeaderHeightVar();
   useRouteAnalytics();
+  useSignInName();
 
   return (
     <div className="app-shell">
