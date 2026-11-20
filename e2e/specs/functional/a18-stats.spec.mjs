@@ -612,6 +612,8 @@ async function activityRows(dialog, filter) {
     const feed = lists[lists.length - 1];
     return [...(feed?.querySelectorAll("li.activity-row") ?? [])].map((li) => ({
       who: li.querySelector("span")?.textContent.trim() ?? null,
+      // The address under a person's name (ADR 0040); null for a subject that is not a person.
+      address: li.querySelector(".person")?.getAttribute("title") ?? null,
       badge: li.querySelector(".badge-automated")?.innerText.trim() ?? null,
       // What acted, behind the badge: a title, so no stylesheet can change the case of the token's name it quotes.
       how: li.querySelector(".badge-automated")?.getAttribute("title") ?? null,
@@ -665,8 +667,9 @@ scenario("A18.4 (automation filter) the owner's Activity panel lists an MCP get_
   const MCP_HOW = "Done through personal token “e2e a18 feed mcp”, not by a person in the browser";
   const shown = rows.map((r) => r.badge).filter(Boolean);
   assert.ok(shown.length > 0 && shown.every((b) => b === "agent"), `each badge reads agent, as rendered: ${JSON.stringify(shown)}`);
-  precondition(rows.some((r) => r.how === CLI_HOW && r.who === email), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
-  assert.ok(rows.some((r) => r.how === MCP_HOW && r.who === email), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
+  const byOwner = (r) => r.who === nameOfAddress(email) && r.address === email;
+  precondition(rows.some((r) => r.how === CLI_HOW && byOwner(r)), `positive control: the token's POST /view is listed under Automation: ${JSON.stringify(rows)}`);
+  assert.ok(rows.some((r) => r.how === MCP_HOW && byOwner(r)), `the Automation filter lists no MCP read, though one is stored (a session without startedAt): ${JSON.stringify(rows)}`);
   assert.ok(rows.every((r) => r.how === MCP_HOW || r.how === CLI_HOW), "Automation excludes human activity");
   const apiReads = (await statsOf(D.docId)).apiReads;
   precondition(apiReads === 2, "the two automated reads are recorded before inspecting their tile");

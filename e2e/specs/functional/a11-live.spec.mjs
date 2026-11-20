@@ -733,7 +733,7 @@ scenario("A11.4 follow keeps the reader within 0.02 of the leader's scroll fract
 
   ctx.step("the leader edits (Shared); the follower reads and presses the leader's chip");
   await bothShared(l);
-  const chip = f.page.locator(".presence-bar .presence-chip", { hasText: leaderEmail });
+  const chip = f.page.locator(".presence-bar .presence-chip", { hasText: nameOfAddress(leaderEmail) });
   await chip.waitFor({ state: "visible", timeout: 15_000 });
   await chip.click();
   const following = await eventually(async () => {
