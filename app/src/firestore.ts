@@ -378,6 +378,12 @@ export function watchUser(
   );
 }
 
+/** Your own record, once, for a page that must not follow later changes to it. */
+export async function readUser(uid: string): Promise<UserRecord | null> {
+  const snap = await fbGetDoc(doc(db, "users", uid));
+  return snap.exists() ? (snap.data() as UserRecord) : null;
+}
+
 /**
  * Follow an account's move to the address Google renamed it to (SPEC §14): its
  * job's `state`, or null while it cannot be read. Only the server writes it.

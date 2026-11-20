@@ -4,7 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
-import { listMyDocs, listMyFolders, listMyReading, saveUserProfile, watchUser } from "../firestore";
+import { listMyDocs, listMyFolders, listMyReading, readUser, saveUserProfile } from "../firestore";
 import { useIsCompactToolbar } from "../hooks/useMediaQuery";
 import { pathToFolder } from "../workspace/tree";
 import { RECENT_READS_LIMIT } from "../workspace/recent";
@@ -40,6 +40,19 @@ export const useExplorer = () => useContext(ExplorerContext);
 export const EXPLORER_ID = "doc-explorer";
 
 /**
+ * This tab's own open or closed, once it has one: read from the account the
+ * first time the tab opens a document, then changed only by its own toggle,
+ * until the tab is reloaded. Kept per account, for a tab somebody else signs in on.
+ */
+let tabChoice: { uid: string; open: boolean } | null = null;
+const choiceFor = (uid: string | null) => (uid !== null && tabChoice?.uid === uid ? tabChoice.open : null);
+
+/** Every test is a new tab. */
+export function forgetTabChoice() {
+  tabChoice = null;
+}
+
+/**
  * Above the keyed viewer, deliberately.
  *
  * Opening another document remounts `DocViewer` behind a full-page loading
@@ -49,7 +62,9 @@ export const EXPLORER_ID = "doc-explorer";
  * stays mounted for as long as the reader moves between documents.
  *
  * Open or closed is remembered on the account (`users/{uid}.explorerOpen`), so
- * it follows the reader to every device, and only where it is a column. At
+ * it follows the reader to every device, and only where it is a column. A tab
+ * reads it once and keeps its own from then on: pressing the toggle in one tab
+ * changes no other page already open, here or on another device. At
  * 1100px and below it is a drawer over the document that starts closed every
  * time: opening one on a phone to jump somewhere is not a wish to have a column
  * on the desktop.
@@ -61,7 +76,7 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
   const drawer = useIsCompactToolbar();
   const uid = gate === "ready" && user ? user.uid : null;
 
-  const [remembered, setRemembered] = useState(false);
+  const [remembered, setRemembered] = useState(() => choiceFor(uid) ?? false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [suppressed, setSuppressed] = useState(false);
   // Set only when somebody opens it, so the filter takes focus then: not on a
@@ -70,13 +85,26 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
   const focused = useCallback(() => setFocusWanted(false), []);
 
   useEffect(() => {
+    const mine = choiceFor(uid);
+    if (!uid || mine !== null) {
+      setRemembered(mine ?? false);
+      return;
+    }
     setRemembered(false);
-    if (!uid) return;
-    return watchUser(
-      uid,
-      (record) => setRemembered(record?.explorerOpen === true),
-      () => setRemembered(false),
-    );
+    let live = true;
+    readUser(uid)
+      .then((record) => {
+        // A press of the toggle before the account answered stands.
+        if (!live || choiceFor(uid) !== null) return;
+        const open = record?.explorerOpen === true;
+        tabChoice = { uid, open };
+        setRemembered(open);
+      })
+      // Unreadable: closed, and asked again the next time a document opens.
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
   }, [uid]);
 
   // A drawer is opened to go somewhere, and once there it is in the way.
@@ -93,9 +121,13 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
     }
     if (!uid) return;
     const next = !remembered;
+    tabChoice = { uid, open: next };
     setRemembered(next);
-    // The snapshot that follows says the same; a refused write puts it back.
-    void saveUserProfile(uid, emailLower, { explorerOpen: next }).catch(() => setRemembered(!next));
+    // A refused write puts it back, here and in what the tab remembers.
+    void saveUserProfile(uid, emailLower, { explorerOpen: next }).catch(() => {
+      tabChoice = { uid, open: !next };
+      setRemembered(!next);
+    });
   }, [open, drawer, uid, remembered, emailLower]);
 
   const closeDrawer = useCallback(() => {
