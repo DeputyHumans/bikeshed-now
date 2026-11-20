@@ -24,7 +24,7 @@ Nobody could read another person's name. A comment, a version and a document rec
 - A name is self-reported, so two people can choose the same one, and one person can choose another's. The tooltip and the colour are how a reader tells them apart, and nothing that decides access looks at a name.
 - Somebody who has not opened the app since this shipped, or who signs in with a password, is named from their address until they choose a name or sign in with a provider that gives one.
 - A draft, a version summary and an Activity row carry an address without a uid, so they show the address's name unless a profile for that address was read earlier in the session.
-- Each distinct author on screen costs one small read per session.
+- Each distinct author on screen costs one small read per session, and that read is kept: a name somebody changes shows to others on their next load, not while they are on the page.
 
 ## What would change this
 
