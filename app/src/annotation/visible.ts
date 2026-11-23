@@ -23,7 +23,7 @@ export function isVisible(el: Element): boolean {
   const check = (el as Element & { checkVisibility?: (options?: Record<string, boolean>) => boolean }).checkVisibility;
   if (typeof check === "function") return check.call(el, { visibilityProperty: true, opacityProperty: true });
   const view = el.ownerDocument.defaultView;
-  if (!view) return true;
+  if (!view || typeof view.getComputedStyle !== "function") return true;
   const own = view.getComputedStyle(el);
   if (own.visibility === "hidden" || own.visibility === "collapse") return false;
   for (let at: Element | null = el; at; at = at.parentElement) {

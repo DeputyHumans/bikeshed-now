@@ -151,6 +151,101 @@ describe("following on a screen of another width", () => {
   });
 });
 
+describe("a peer's selection on a deck that stacks its slides", () => {
+  /**
+   * Four slides in one box, one shown, as a stacked deck lays them out. jsdom
+   * computes the inline `visibility` and `opacity` the slides are hidden with;
+   * it lays nothing out, so every passage gets one stated rect — the same one,
+   * which is exactly what a stacked deck gives a browser too.
+   */
+  function deck(hide = "visibility: hidden") {
+    const frame = document.createElement("iframe");
+    document.body.appendChild(frame);
+    frames.push(frame);
+    const doc = frame.contentDocument!;
+    doc.open();
+    doc.write(
+      `<!doctype html><html><body>${["s1", "s2", "s3", "s4"]
+        .map((id) => `<section id="${id}" style="${id === "s1" ? "" : hide}"><p id="p-${id}">Words on ${id}</p></section>`)
+        .join("")}</body></html>`,
+    );
+    doc.close();
+    const view = doc.defaultView!;
+    const proto = view.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
+    proto.getClientRects = () => [new DOMRect(10, 10, 40, 16)];
+    // Frames run when the test says so, and are counted.
+    const queue: FrameRequestCallback[] = [];
+    const requested = vi.fn((cb: FrameRequestCallback) => queue.push(cb));
+    view.requestAnimationFrame = requested as unknown as typeof view.requestAnimationFrame;
+    view.cancelAnimationFrame = () => {};
+    const flush = async () => {
+      // A MutationObserver reports in a microtask; the frame it asks for runs here.
+      await Promise.resolve();
+      for (const cb of queue.splice(0)) cb(0);
+    };
+    const show = (id: string) => {
+      for (const el of Array.from(doc.querySelectorAll("section"))) el.setAttribute("style", el.id === id ? "" : hide);
+    };
+    const carets = () => doc.querySelectorAll(".bshd-peer-caret").length;
+    return { doc, flush, show, carets, requested };
+  }
+
+  const on = (id: string) => ({
+    uid: "u1", email: "dana.kim@example.com", name: "Dana K", mode: "view" as const, lastChanged: 0, color: "#7c3aed",
+    focus: { elementId: `p-${id}`, exact: "Words", prefix: "", suffix: ` on ${id}`, start: 0, end: 5 },
+  });
+
+  it("draws it only on the slide it is on, never over the slide shown", async () => {
+    for (const hide of ["visibility: hidden", "opacity: 0"]) {
+      const { doc, flush, carets } = deck(hide);
+      const { createPeerOverlay } = await import("./peers");
+      const overlay = createPeerOverlay(doc);
+      overlay.render([on("s3")]);
+      await flush();
+      expect(carets(), `${hide}: a selection on a hidden slide`).toBe(0);
+      overlay.render([on("s1")]);
+      await flush();
+      expect(carets(), `${hide}: a selection on the slide shown`).toBe(1);
+      overlay.destroy();
+    }
+  });
+
+  it("shows and hides it as the deck changes slide, with nothing else changing", async () => {
+    const { doc, flush, show, carets } = deck();
+    const { createPeerOverlay } = await import("./peers");
+    const overlay = createPeerOverlay(doc);
+    overlay.render([on("s3")]);
+    await flush();
+    expect(carets()).toBe(0);
+    // The deck moves by changing an attribute: no scroll, no resize, no presence update.
+    show("s3");
+    await flush();
+    expect(carets()).toBe(1);
+    show("s2");
+    await flush();
+    expect(carets()).toBe(0);
+    overlay.destroy();
+  });
+
+  it("does not schedule itself again by drawing", async () => {
+    const { doc, flush, carets, requested } = deck();
+    const { createPeerOverlay } = await import("./peers");
+    const overlay = createPeerOverlay(doc);
+    overlay.render([on("s1")]);
+    await flush();
+    expect(carets()).toBe(1);
+    const asked = requested.mock.calls.length;
+    await flush();
+    await flush();
+    expect(requested.mock.calls.length).toBe(asked);
+    overlay.destroy();
+    // Destroyed, it hears the deck no more.
+    doc.getElementById("s2")!.setAttribute("style", "");
+    await flush();
+    expect(requested.mock.calls.length).toBe(asked);
+  });
+});
+
 describe("a peer's caret label", () => {
   afterEach(() => vi.restoreAllMocks());
 

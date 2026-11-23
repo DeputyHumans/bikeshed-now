@@ -1042,6 +1042,8 @@ Three reasons this is not merely tidier:
 2. **It cannot fight the editor.** Wrapping text nodes inside a `contentEditable` lands in the browser's undo stack and can move the local caret. An overlay is invisible to `execCommand`.
 3. **It survives rapid updates.** Repositioning rectangles is cheap; re-wrapping text nodes five times a second is not.
 
+A peer's selection is drawn only where the reader can see it: where its passage starts must not be hidden by `display`, `visibility` or an opacity of 0 on it or above it (`annotation/visible.ts`). On a deck that stacks its slides every hidden slide keeps its box in the same place as the shown one, so without this a selection on slide seven was drawn over whichever slide the reader turned to. Such a deck changes slide by changing an attribute, with no scroll and no resize, so the overlay also redraws on the deck's own signals, the ones `useDeck` reads its position from: a change to `class`, `style`, `hidden` or `aria-hidden` anywhere in the body, outside our own nodes, and the end of a transition or an animation.
+
 ### Transport
 
 Realtime Database, under `status/{docId}`:

@@ -114,6 +114,22 @@ function pageRects(doc: Document, range: Range): DOMRect[] {
   );
 }
 
+/**
+ * Whether a passage is on screen to draw over: where it starts must be
+ * something the reader can see. On a deck that stacks its slides, a passage on
+ * a hidden slide still has rects, and they are exactly where the shown slide's
+ * words are, so without this somebody's selection on slide seven was drawn on
+ * every slide the reader turned to.
+ */
+function passageVisible(range: Range): boolean {
+  const start = range.startContainer;
+  const el = start.nodeType === 1 ? (start as Element) : start.parentElement;
+  return el ? isVisible(el) : false;
+}
+
+/** The attributes a deck changes to show another slide, which is all it changes. */
+const SHOWN_BY = ["class", "style", "hidden", "aria-hidden"];
+
 export function createPeerOverlay(doc: Document): PeerOverlay {
   ensureStyles(doc);
   const layer = ensureLayer(doc);
@@ -130,7 +146,7 @@ export function createPeerOverlay(doc: Document): PeerOverlay {
     for (const peer of current) {
       if (!peer.focus) continue;
       const range = rangeFromAnchor(doc, peer.focus);
-      if (!range) continue;
+      if (!range || !passageVisible(range)) continue;
 
       const rects = pageRects(doc, range);
       if (rects.length === 0) continue;
@@ -182,6 +198,29 @@ export function createPeerOverlay(doc: Document): PeerOverlay {
     frame = view.requestAnimationFrame(draw);
   };
 
+  /**
+   * A deck that stacks its slides changes slide by changing an attribute, and
+   * nothing scrolls or resizes, so neither of those tells the overlay that a
+   * passage came into view or left it. The deck's own signals do, the ones
+   * `useDeck` reads its position from: an attribute that shows a slide, and the
+   * end of the fade or animation it shows it with. Observation only, from the
+   * frame's own realm; records inside our own layer are its redraws, and
+   * acting on them would draw forever.
+   */
+  const view = doc.defaultView;
+  const settle = () => {
+    if (current.some((peer) => peer.focus)) schedule();
+  };
+  const Observer = view?.MutationObserver;
+  const observer = Observer && doc.body
+    ? new Observer((records) => {
+        if (records.some((record) => !(record.target as Element).closest?.(OWN_SELECTOR))) settle();
+      })
+    : null;
+  if (observer && doc.body) observer.observe(doc.body, { attributes: true, subtree: true, attributeFilter: SHOWN_BY });
+  const motionEnds = ["transitionend", "animationend"];
+  for (const type of motionEnds) doc.addEventListener(type, settle, true);
+
   return {
     render(peers) {
       current = peers;
@@ -189,7 +228,8 @@ export function createPeerOverlay(doc: Document): PeerOverlay {
     },
     reflow: schedule,
     destroy() {
-      const view = doc.defaultView;
+      observer?.disconnect();
+      for (const type of motionEnds) doc.removeEventListener(type, settle, true);
       if (frame && view) view.cancelAnimationFrame(frame);
       layer.remove();
       doc.getElementById(PEER_STYLE_ID)?.remove();
