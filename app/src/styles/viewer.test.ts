@@ -243,6 +243,10 @@ describe("the explorer column", () => {
     ]);
   });
 
+  it("follows its edge at once, with no transition for base.css's reduced-motion block to stretch", () => {
+    expect(value(".viewer-shell", "transition")).toBe("none");
+  });
+
   it("while its edge is dragged, keeps the document's frame from taking the pointer and the page from selecting", () => {
     expect(value(".viewer-shell[data-resizing] iframe", "pointer-events")).toBe("none");
     expect(value(".viewer-shell[data-resizing]", "user-select")).toBe("none");

@@ -464,6 +464,10 @@
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  /* The column follows a dragged edge at once. Under reduced motion, base.css
+     gives every element a 0.01ms transition on every property, which left the
+     track a frame behind the pointer and stale when measured after a drag. */
+  transition: none;
 }
 .viewer-shell[data-explorer="open"] {
   grid-template-columns: clamp(200px, var(--explorer-width, 260px), min(480px, 35vw)) minmax(0, 1fr);
