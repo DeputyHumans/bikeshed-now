@@ -449,6 +449,11 @@
  * state, is PINNED to the last track, so it can never be auto-placed into the
  * explorer's.
  *
+ * Its width is the reader's (SPEC §13): `--explorer-width`, set from
+ * viewer/explorer.tsx while the column is open, between 200px and the lesser
+ * of 480px and 35% of the window, so the document always keeps the rest. The
+ * same bounds are EXPLORER_WIDTH there, which the handle's ARIA values say.
+ *
  * As a drawer (1100px and below, decided in JavaScript and said by
  * `data-drawer`) it lies over the document and the bars above it, so the frame
  * keeps its width. STACKING: 48, over the slide drawer (45) and the overview
@@ -460,14 +465,24 @@
   grid-template-columns: minmax(0, 1fr);
 }
 .viewer-shell[data-explorer="open"] {
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: clamp(200px, var(--explorer-width, 260px), min(480px, 35vw)) minmax(0, 1fr);
 }
+/* While the edge is dragged: no text is selected on the way, and the
+   document's frame, which would take every move once the pointer crosses
+   into it, takes none. */
+.viewer-shell[data-resizing] {
+  cursor: col-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.viewer-shell[data-resizing] iframe { pointer-events: none; }
 .viewer-shell > :not(.explorer, .explorer-scrim) {
   grid-column: -2 / -1;
   grid-row: 1;
   min-width: 0;
 }
 .explorer {
+  position: relative;
   grid-column: 1;
   grid-row: 1;
   display: flex;
@@ -495,6 +510,31 @@
   padding: var(--s-2);
 }
 .explorer-doc { text-decoration: none; }
+/* The column's edge, centred on its border: wider than it looks, so it is
+   easy to catch, and over the document's first few pixels for that. */
+.explorer-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -5px;
+  z-index: 1;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.explorer-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+}
+.explorer-resize:hover::after,
+.viewer-shell[data-resizing] .explorer-resize::after { background: var(--color-accent); }
+.explorer-resize:focus-visible { outline-offset: 0; }
+.explorer-resize:focus-visible::after { background: var(--color-focus); }
 .explorer-note { margin: 0; padding: var(--s-1) var(--s-2); }
 .explorer .workspace-more {
   align-items: flex-start;

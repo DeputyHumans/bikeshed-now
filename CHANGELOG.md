@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Added
+
+- **The list of your documents beside a document can be made wider or narrower.** Drag its right edge, or focus the edge and use the arrow keys (Shift for bigger steps, Home and End for the narrowest and widest). Enter or a double click puts it back to where it starts. It stays between 200 px and the lesser of 480 px and a little over a third of the window, so the document always keeps the rest, and your account remembers the width on every device. On a narrow window, where the list opens over the document, it keeps its own width (SPEC §13).
+
 ### Changed
 
 - **Your view choices follow your account to every device.** How you sorted and laid out each kind of page in the workspace, and which of Recent's filters you left on, were kept in the browser alone, so a new laptop or a second browser started from the defaults. They are now kept with your account, beside whether the list of your documents stays open, and this browser keeps a copy so a page draws right at once. A tab takes them from your account when it opens and keeps its own from then, so changing one in one tab changes no other page already open. What a browser had chosen before moves to your account the first time you sign in, unless your account already has a choice of its own. The privacy page says so (SPEC §13, ADR 0041).

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The explorer: remembered on the account as a column only, a drawer that never is, out of the way while editing (SPEC §13 "The explorer").
 
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup as cleanupMounted, fireEvent, render, screen, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -53,6 +53,8 @@ vi.mock("../firestore", () => ({
 }));
 
 import { ExplorerShell, EXPLORER_ID, useExplorer } from "./explorer";
+import { EXPLORER_WIDTH, widthBounds } from "./explorerWidth";
+import { RESIZE_SETTLE_MS, RESIZE_STEP, RESIZE_STEP_LARGE } from "../components/ExplorerResize";
 import { cacheKey, forgetViewChoices } from "../workspace/prefs";
 
 function docMeta(overrides: Partial<DocMeta>): DocMeta {
@@ -538,5 +540,156 @@ describe("each tab keeps its own, read from the account once", () => {
     mount();
     expect(panel()).toBeNull();
     expect(state.reads).toEqual(["u-me"]);
+  });
+});
+
+describe("the column's width", () => {
+  // jsdom has no PointerEvent; a MouseEvent that carries a pointer id is what React reads.
+  const Had = (window as { PointerEvent?: unknown }).PointerEvent;
+  beforeEach(() => {
+    class TestPointerEvent extends MouseEvent {
+      pointerId: number;
+      constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 1;
+      }
+    }
+    (window as { PointerEvent?: unknown }).PointerEvent = TestPointerEvent;
+    onTestFinished(() => {
+      (window as { PointerEvent?: unknown }).PointerEvent = Had;
+    });
+  });
+
+  const shell = () => document.querySelector<HTMLElement>(".viewer-shell")!;
+  const drawn = () => shell().style.getPropertyValue("--explorer-width");
+  const edge = () => screen.getByRole("separator", { name: "Resize the document list" });
+  const widthWrites = () => state.save.mock.calls.map(([, , fields]) => fields).filter((f) => f.view?.explorerWidth !== undefined);
+  const max = () => widthBounds(window.innerWidth).max;
+
+  async function openColumn(record: Partial<UserRecord> = { explorerOpen: true }) {
+    mount();
+    await answer(record);
+    expect(panel()).not.toBeNull();
+  }
+
+  it("is a separator on the column's edge that says how wide it is, and where it may go", async () => {
+    await openColumn();
+    expect(edge().getAttribute("aria-orientation")).toBe("vertical");
+    expect(edge().getAttribute("aria-controls")).toBe(EXPLORER_ID);
+    expect(edge().getAttribute("aria-valuenow")).toBe(String(EXPLORER_WIDTH.initial));
+    expect(edge().getAttribute("aria-valuemin")).toBe(String(EXPLORER_WIDTH.min));
+    expect(edge().getAttribute("aria-valuemax")).toBe(String(max()));
+    expect(drawn()).toBe(`${EXPLORER_WIDTH.initial}px`);
+  });
+
+  it("starts at the width the account keeps, and reads one it does not understand as the default", async () => {
+    await openColumn({ explorerOpen: true, view: { explorerWidth: 320 } });
+    expect(drawn()).toBe("320px");
+    forgetViewChoices();
+    window.localStorage.clear();
+    cleanupMounted();
+    await openColumn({ explorerOpen: true, view: { explorerWidth: 9999 } });
+    expect(drawn()).toBe(`${EXPLORER_WIDTH.initial}px`);
+  });
+
+  it("follows a drag, and keeps the width once, when the pointer comes up", async () => {
+    await openColumn();
+    fireEvent.pointerDown(edge(), { pointerId: 3, button: 0, clientX: 260 });
+    expect(shell().hasAttribute("data-resizing")).toBe(true);
+    fireEvent.pointerMove(edge(), { pointerId: 3, clientX: 300 });
+    fireEvent.pointerMove(edge(), { pointerId: 3, clientX: 330 });
+    expect(drawn()).toBe("330px");
+    expect(edge().getAttribute("aria-valuenow")).toBe("330");
+    expect(widthWrites()).toEqual([]);
+    await act(async () => fireEvent.pointerUp(edge(), { pointerId: 3, clientX: 330 }));
+    expect(shell().hasAttribute("data-resizing")).toBe(false);
+    expect(widthWrites()).toEqual([{ view: { explorerWidth: 330 } }]);
+    expect(drawn()).toBe("330px");
+  });
+
+  it("never drags past its bounds", async () => {
+    await openColumn();
+    fireEvent.pointerDown(edge(), { pointerId: 1, button: 0, clientX: 260 });
+    fireEvent.pointerMove(edge(), { pointerId: 1, clientX: 5000 });
+    expect(drawn()).toBe(`${max()}px`);
+    fireEvent.pointerMove(edge(), { pointerId: 1, clientX: -5000 });
+    expect(drawn()).toBe(`${EXPLORER_WIDTH.min}px`);
+    await act(async () => fireEvent.pointerUp(edge(), { pointerId: 1 }));
+    expect(widthWrites()).toEqual([{ view: { explorerWidth: EXPLORER_WIDTH.min } }]);
+  });
+
+  it("moves with the arrow keys, Home and End, and keeps the width once the keys pause", async () => {
+    vi.useFakeTimers();
+    await openColumn();
+    fireEvent.keyDown(edge(), { key: "ArrowRight" });
+    fireEvent.keyDown(edge(), { key: "ArrowRight", shiftKey: true });
+    expect(drawn()).toBe(`${EXPLORER_WIDTH.initial + RESIZE_STEP + RESIZE_STEP_LARGE}px`);
+    expect(widthWrites()).toEqual([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESIZE_SETTLE_MS);
+    });
+    expect(widthWrites()).toEqual([{ view: { explorerWidth: EXPLORER_WIDTH.initial + RESIZE_STEP + RESIZE_STEP_LARGE } }]);
+    fireEvent.keyDown(edge(), { key: "Home" });
+    expect(drawn()).toBe(`${EXPLORER_WIDTH.min}px`);
+    fireEvent.keyDown(edge(), { key: "End" });
+    expect(drawn()).toBe(`${max()}px`);
+    fireEvent.keyDown(edge(), { key: "ArrowLeft" });
+    expect(drawn()).toBe(`${max() - RESIZE_STEP}px`);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RESIZE_SETTLE_MS);
+    });
+    expect(widthWrites().at(-1)).toEqual({ view: { explorerWidth: max() - RESIZE_STEP } });
+    expect(widthWrites()).toHaveLength(2);
+  });
+
+  it("goes back to where it starts on Enter or a double click", async () => {
+    await openColumn({ explorerOpen: true, view: { explorerWidth: 400 } });
+    await act(async () => fireEvent.keyDown(edge(), { key: "Enter" }));
+    expect(drawn()).toBe(`${EXPLORER_WIDTH.initial}px`);
+    fireEvent.pointerDown(edge(), { pointerId: 2, button: 0, clientX: 260 });
+    fireEvent.pointerMove(edge(), { pointerId: 2, clientX: 340 });
+    await act(async () => fireEvent.pointerUp(edge(), { pointerId: 2 }));
+    expect(drawn()).toBe("340px");
+    await act(async () => fireEvent.doubleClick(edge()));
+    expect(drawn()).toBe(`${EXPLORER_WIDTH.initial}px`);
+    expect(widthWrites().at(-1)).toEqual({ view: { explorerWidth: EXPLORER_WIDTH.initial } });
+  });
+
+  it("is not on a drawer, whose width is its own", async () => {
+    state.compact = true;
+    mount();
+    fireEvent.click(toggle());
+    expect(panel()?.getAttribute("data-drawer")).toBe("open");
+    expect(screen.queryByRole("separator")).toBeNull();
+    expect(drawn()).toBe("");
+  });
+
+  it("leaves the page selectable and the frame reachable when the column goes mid-drag, and when it comes back", async () => {
+    const tree = (editing: boolean) => (
+      <MemoryRouter initialEntries={["/d/here"]}>
+        <Routes>
+          <Route
+            path="/d/:docId"
+            element={
+              <ExplorerShell>
+                <Viewer editing={editing} />
+              </ExplorerShell>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    const { rerender } = mount();
+    await answer({ explorerOpen: true });
+    fireEvent.pointerDown(edge(), { pointerId: 4, button: 0, clientX: 260 });
+    expect(shell().hasAttribute("data-resizing")).toBe(true);
+    // The reader starts to edit: the explorer steps aside with the drag still held.
+    rerender(tree(true));
+    expect(panel()).toBeNull();
+    expect(shell().hasAttribute("data-resizing")).toBe(false);
+    // And stops: the column is back, with no drag left behind on it.
+    rerender(tree(false));
+    expect(panel()).not.toBeNull();
+    expect(shell().hasAttribute("data-resizing")).toBe(false);
   });
 });

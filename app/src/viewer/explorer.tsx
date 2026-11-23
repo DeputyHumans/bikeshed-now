@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The explorer beside a document: open or closed on the account, a drawer when narrow, and the lists it reads (SPEC §13 "The explorer", ADR 0041).
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { listMyDocs, listMyFolders, listMyReading } from "../firestore";
@@ -10,6 +10,8 @@ import { pathToFolder } from "../workspace/tree";
 import { RECENT_READS_LIMIT } from "../workspace/recent";
 import { useViewChoice } from "../workspace/prefs";
 import { ExplorerPanel } from "../components/ExplorerPanel";
+import { ExplorerResize } from "../components/ExplorerResize";
+import { EXPLORER_WIDTH, isWidthChoice, widthBounds } from "./explorerWidth";
 import type { DocMeta, FolderMeta } from "../types";
 
 /** What the toggle in the document's toolbar needs. */
@@ -42,6 +44,12 @@ export const EXPLORER_ID = "doc-explorer";
 
 const isOpenChoice = (v: unknown): v is boolean => typeof v === "boolean";
 
+function subscribeViewport(onChange: () => void) {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
+}
+const viewportWidth = () => window.innerWidth;
+
 /**
  * Above the keyed viewer, deliberately.
  *
@@ -69,6 +77,19 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
   const uid = gate === "ready" && user ? user.uid : null;
 
   const [remembered, setRemembered] = useViewChoice("explorerOpen", false, isOpenChoice);
+  const [keptWidth, keepWidth] = useViewChoice("explorerWidth", EXPLORER_WIDTH.initial, isWidthChoice);
+  // What a drag or a run of keys shows before it is kept.
+  const [liveWidth, setLiveWidth] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const bounds = widthBounds(useSyncExternalStore(subscribeViewport, viewportWidth));
+  const width = Math.min(bounds.max, Math.max(bounds.min, liveWidth ?? keptWidth));
+  const commitWidth = useCallback(
+    (next: number) => {
+      setLiveWidth(null);
+      void keepWidth(next);
+    },
+    [keepWidth],
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [suppressed, setSuppressed] = useState(false);
   // Set only when somebody opens it, so the filter takes focus then: not on a
@@ -183,6 +204,8 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
     if (path.length > 0) setExpanded((prev) => (path.every((id) => prev.has(id)) ? prev : new Set([...prev, ...path])));
   }
 
+  const column = open && !drawer;
+
   const value = useMemo<Explorer>(
     () => ({ available, open, drawer, toggle, setSuppressed }),
     [available, open, drawer, toggle],
@@ -190,7 +213,12 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
 
   return (
     <ExplorerContext.Provider value={value}>
-      <div className="viewer-shell" data-explorer={open ? (drawer ? "drawer" : "open") : "closed"}>
+      <div
+        className="viewer-shell"
+        data-explorer={open ? (drawer ? "drawer" : "open") : "closed"}
+        data-resizing={column && dragging ? "" : undefined}
+        style={column ? ({ "--explorer-width": `${width}px` } as CSSProperties) : undefined}
+      >
         {open ? (
           <ExplorerPanel
             id={EXPLORER_ID}
@@ -208,6 +236,18 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
             onClose={closeDrawer}
             focusWanted={focusWanted}
             onFocused={focused}
+            edge={
+              column ? (
+                <ExplorerResize
+                  controls={EXPLORER_ID}
+                  width={width}
+                  bounds={bounds}
+                  onLive={setLiveWidth}
+                  onCommit={commitWidth}
+                  onDragging={setDragging}
+                />
+              ) : null
+            }
           />
         ) : null}
         {open && drawer ? (

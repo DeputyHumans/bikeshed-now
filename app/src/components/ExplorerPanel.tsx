@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The explorer's lists: Recent, Shared with me, and every folder with its documents (SPEC §13 "The explorer").
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "./Icon";
 import { MoreItems } from "./MoreItems";
@@ -81,6 +81,7 @@ export function ExplorerPanel({
   onClose,
   focusWanted,
   onFocused,
+  edge = null,
 }: {
   id: string;
   docs: DocMeta[];
@@ -100,6 +101,8 @@ export function ExplorerPanel({
   /** Somebody opened the panel, as opposed to it opening because it was left open. */
   focusWanted: boolean;
   onFocused: () => void;
+  /** What sits on its right edge: the handle that resizes the column, where it is one. */
+  edge?: ReactNode;
 }) {
   const filter = useRef<HTMLInputElement | null>(null);
   const nav = useRef<HTMLElement | null>(null);
@@ -230,6 +233,7 @@ export function ExplorerPanel({
         </>
       )}
       </div>
+      {edge}
     </nav>
   );
 }

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CONDENSED_QUERY } from "../hooks/breakpoints";
+import { EXPLORER_MAX_SHARE, EXPLORER_WIDTH } from "../viewer/explorerWidth";
 
 const VIEWER_CSS = readFileSync(join(__dirname, "viewer.css"), "utf8");
 
@@ -37,8 +38,21 @@ function declaration(selector: string, property: string): string | null {
 }
 
 /** Top-level track list: splits on whitespace outside parentheses. */
+/** A grid template's tracks: split on spaces outside parentheses, so `clamp(…, min(…))` is one. */
 function tracks(value: string): string[] {
-  return value.match(/[^\s(]+(?:\([^)]*\))?/g) ?? [];
+  const out: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of value.trim()) {
+    if (ch === "(") depth += 1;
+    if (ch === ")") depth -= 1;
+    if (/\s/.test(ch) && depth === 0) {
+      if (current) out.push(current);
+      current = "";
+    } else current += ch;
+  }
+  if (current) out.push(current);
+  return out;
 }
 
 describe("the viewer grid", () => {
@@ -218,12 +232,20 @@ describe("the explorer column", () => {
   const value = (selector: string, property: string) =>
     exact(selector).match(new RegExp(`${property}\\s*:\\s*([^;]+);`))?.[1].trim() ?? null;
 
-  it("is a track only while the explorer is open", () => {
+  it("is a track only while the explorer is open, as wide as the reader made it within the handle's own bounds", () => {
     expect(tracks(value(".viewer-shell", "grid-template-columns") ?? "")).toEqual(["minmax(0, 1fr)"]);
+    // The handle's ARIA values come from EXPLORER_WIDTH: the stylesheet must
+    // draw the column with the same numbers, or the two disagree on a width.
+    const { min, max, initial } = EXPLORER_WIDTH;
     expect(tracks(value('.viewer-shell[data-explorer="open"]', "grid-template-columns") ?? "")).toEqual([
-      "260px",
+      `clamp(${min}px, var(--explorer-width, ${initial}px), min(${max}px, ${EXPLORER_MAX_SHARE * 100}vw))`,
       "minmax(0, 1fr)",
     ]);
+  });
+
+  it("while its edge is dragged, keeps the document's frame from taking the pointer and the page from selecting", () => {
+    expect(value(".viewer-shell[data-resizing] iframe", "pointer-events")).toBe("none");
+    expect(value(".viewer-shell[data-resizing]", "user-select")).toBe("none");
   });
 
   it("pins the viewer to the last track, so it never lands in the explorer's", () => {
