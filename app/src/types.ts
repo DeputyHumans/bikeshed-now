@@ -314,8 +314,23 @@ export interface UserRecord {
   defaultMarking?: Marking;
   /** The viewer's explorer column, open or closed, on every device this account uses (SPEC §13). */
   explorerOpen?: boolean;
+  /** The rest of the account's view choices (SPEC §13, ADR 0041). */
+  view?: AccountView;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+}
+
+/**
+ * How the account last left its pages: the workspace's sort, each kind of
+ * page's layout, Recent's filters and the explorer's width. Each value is
+ * checked where it is used (workspace/prefs.ts), so one an older or newer
+ * client wrote never breaks a page.
+ */
+export interface AccountView {
+  sort?: string;
+  layout?: { folders?: string; recent?: string; shared?: string };
+  recentFilters?: { opened?: boolean; shared?: boolean; unread?: boolean };
+  explorerWidth?: number;
 }
 
 /**

@@ -19,7 +19,7 @@ import { readConsent, writeConsent } from "../consent";
  * most likely way for them to go stale is somebody adding a third party.
  */
 
-const UPDATED = "19 November 2026";
+const UPDATED = "23 November 2026";
 
 function Contact() {
   if (!LEGAL_CONTACT) {
@@ -170,8 +170,10 @@ export function Privacy() {
         <li>
           <strong>Your account</strong> — the email address and display name
           your sign-in provider returns, which providers you have linked, and
-          the settings you choose in the app, such as whether your list of
-          documents stays open beside a document.
+          the settings you choose in the app, and your view choices: how you
+          last sorted and laid out your documents, which filters you left on,
+          and whether your list of documents stays open beside a document, and
+          how wide.
         </li>
         <li>
           <strong>What you publish</strong> — documents, their versions, and
@@ -223,10 +225,9 @@ export function Privacy() {
           measurement script is never loaded, rather than loaded and disabled.
         </li>
         <li>
-          <strong>Your view choices</strong> — how you last sorted and laid out
-          your documents, and which filters you left on. They are kept in this
-          browser so they are there when you come back, never leave it, and are
-          forgotten when you clear this site's data.
+          <strong>Your view choices</strong> — kept with your account, and
+          copied into this browser so a page shows them as soon as it opens.
+          Clearing this site's data removes the copy, not the choices.
         </li>
       </ul>
       {analyticsConfigured() ? (

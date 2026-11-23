@@ -27,7 +27,7 @@ import {
   type SortKey,
 } from "../workspace/tree";
 import { personName, usePeople } from "../people";
-import { PREF_KEYS, isLayout, useRemembered, type Layout, type PrefKey } from "../workspace/prefs";
+import { isLayout, useViewChoice, type Layout, type ViewChoice } from "../workspace/prefs";
 import {
   NO_FILTERS,
   RECENT_READS_LIMIT,
@@ -81,13 +81,13 @@ import type { DocMeta, FolderMeta, Marking, TeamMeta, UserRecord } from "../type
 export type WorkspaceView = "recent" | "everything" | "shared" | "folder";
 
 /** Each kind's own remembered layout, and where it starts before anyone chooses. */
-const LAYOUT: Record<WorkspaceView, { key: PrefKey; initial: Layout }> = {
+const LAYOUT: Record<WorkspaceView, { key: ViewChoice; initial: Layout }> = {
   // Recent and Shared span folders and are about time and people: rows.
-  recent: { key: PREF_KEYS.layoutRecent, initial: "list" },
-  shared: { key: PREF_KEYS.layoutShared, initial: "list" },
+  recent: { key: "layout.recent", initial: "list" },
+  shared: { key: "layout.shared", initial: "list" },
   // Everything and folders are for browsing, where a cover is recognisable.
-  everything: { key: PREF_KEYS.layoutFolders, initial: "grid" },
-  folder: { key: PREF_KEYS.layoutFolders, initial: "grid" },
+  everything: { key: "layout.folders", initial: "grid" },
+  folder: { key: "layout.folders", initial: "grid" },
 };
 
 /** Long enough for a cold function; past it, Recent stops waiting for your reads. */
@@ -287,11 +287,12 @@ export function DocList({ view: given = "everything" }: { view?: Exclude<Workspa
   const [foldersLoading, setFoldersLoading] = useState(true);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [search, setSearch] = useState("");
-  // Remembered in this browser, so opening a document and coming back finds
-  // the workspace as it was left.
-  const [sort, setSort] = useRemembered<SortKey>(PREF_KEYS.sort, "recent", isSortKey);
-  const [layout, setLayout] = useRemembered(LAYOUT[view].key, LAYOUT[view].initial, isLayout);
-  const [filters, setFilters] = useRemembered(PREF_KEYS.recentFilters, NO_FILTERS, isRecentFilters);
+  // Kept on the account and copied into this browser (ADR 0041), so opening a
+  // document and coming back, or signing in somewhere else, finds the
+  // workspace as it was left.
+  const [sort, setSort] = useViewChoice<SortKey>("sort", "recent", isSortKey);
+  const [layout, setLayout] = useViewChoice(LAYOUT[view].key, LAYOUT[view].initial, isLayout);
+  const [filters, setFilters] = useViewChoice("recentFilters", NO_FILTERS, isRecentFilters);
   // Your own reads, for Recent: kept between visits to it while this page
   // stays mounted, so coming back does not blank the list while they reload.
   const [reads, setReads] = useState<{ status: "loading" | "ready" | "failed"; map: Map<string, number> | null }>({

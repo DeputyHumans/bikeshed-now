@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Changed
+
+- **Your view choices follow your account to every device.** How you sorted and laid out each kind of page in the workspace, and which of Recent's filters you left on, were kept in the browser alone, so a new laptop or a second browser started from the defaults. They are now kept with your account, beside whether the list of your documents stays open, and this browser keeps a copy so a page draws right at once. A tab takes them from your account when it opens and keeps its own from then, so changing one in one tab changes no other page already open. What a browser had chosen before moves to your account the first time you sign in, unless your account already has a choice of its own. The privacy page says so (SPEC §13, ADR 0041).
+
 ### Fixed
 
 - **A printed or saved PDF has the pictures that sit beside the page as files.** Print waited a fixed quarter of a second, then printed whatever the print view had by then. The print view asks for every file beside the page again, and a member's SVGs are never cached, so on a real document 0 of 223 SVGs and 12 of 19 photos had arrived when the dialog opened, and the PDF showed blank boxes where they belonged. Print now waits until the page, every picture and its fonts have loaded, for at most 15 seconds. A picture marked to load lazily is fetched at once, because the print view has nothing to scroll it into. After a second you see *Preparing the print…* until the dialog opens, and pressing Print again meanwhile does nothing. If something still has not arrived at 15 seconds, it prints anyway and tells you how many pictures may be missing (SPEC §20).

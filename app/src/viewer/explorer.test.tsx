@@ -10,10 +10,10 @@ import type { DocMeta, FolderMeta, UserRecord } from "../types";
 const state = vi.hoisted(() => ({
   auth: { user: { uid: "u-me" } as { uid: string } | null, emailLower: "me@example.com", gate: "ready" },
   compact: false,
-  /** The account's answer to the tab's one read, and the reads it was asked for. */
+  /** The account's first answer to the tab, and every account the tab asked. */
   record: null as ((record: Partial<UserRecord> | null) => void) | null,
   reads: [] as string[],
-  /** Another tab or device changing the account, reaching any live listener on it. */
+  /** Another tab or device changing the account later, reaching the same listener. */
   snapshot: null as ((record: Partial<UserRecord> | null) => void) | null,
   /** Whether the viewer saw the explorer open on its very first render. */
   firstOpen: undefined as boolean | undefined,
@@ -31,13 +31,11 @@ vi.mock("../hooks/useMediaQuery", async () => ({
   useIsCompactToolbar: () => state.compact,
 }));
 vi.mock("../firestore", () => ({
-  readUser: (uid: string) => {
+  // The view choices take the account's record from its listener's first
+  // answer (workspace/prefs.ts); later ones are another tab or device.
+  watchUser: (uid: string, onData: (record: Partial<UserRecord> | null) => void) => {
     state.reads.push(uid);
-    return new Promise<Partial<UserRecord> | null>((resolve) => {
-      state.record = resolve;
-    });
-  },
-  watchUser: (_uid: string, onData: (record: Partial<UserRecord> | null) => void) => {
+    state.record = onData;
     state.snapshot = onData;
     return () => {};
   },
@@ -54,7 +52,8 @@ vi.mock("../firestore", () => ({
   listMyReading: (uid: string, max: number) => state.reading(uid, max),
 }));
 
-import { ExplorerShell, EXPLORER_ID, forgetTabChoice, useExplorer } from "./explorer";
+import { ExplorerShell, EXPLORER_ID, useExplorer } from "./explorer";
+import { cacheKey, forgetViewChoices } from "../workspace/prefs";
 
 function docMeta(overrides: Partial<DocMeta>): DocMeta {
   return {
@@ -154,7 +153,9 @@ beforeEach(() => {
   state.record = null;
   state.reads = [];
   state.snapshot = null;
-  forgetTabChoice();
+  // Every test is a new tab in a browser that has never chosen.
+  forgetViewChoices();
+  window.localStorage.clear();
   state.docs = null;
   state.folders = null;
   state.subscriptions = 0;
@@ -506,6 +507,24 @@ describe("each tab keeps its own, read from the account once", () => {
     expect(state.reads).toEqual(["u-me", "u-two"]);
     await answer({});
     expect(panel()).toBeNull();
+  });
+
+  it("draws the column on the first frame from this browser's copy, before the account answers", async () => {
+    window.localStorage.setItem(cacheKey("u-me"), JSON.stringify({ explorerOpen: true }));
+    mount();
+    expect(state.firstOpen).toBe(true);
+    expect(panel()).not.toBeNull();
+    // The account is still the one it follows: closed there, closed here.
+    await answer({ explorerOpen: false });
+    expect(panel()).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(cacheKey("u-me"))!)).toEqual({ explorerOpen: false });
+  });
+
+  it("keeps the choice for this account only: another one on the same browser starts from its own", async () => {
+    window.localStorage.setItem(cacheKey("u-me"), JSON.stringify({ explorerOpen: true }));
+    state.auth = { user: { uid: "u-two" }, emailLower: "two@example.com", gate: "ready" };
+    mount();
+    expect(state.firstOpen).toBe(false);
   });
 
   it("a refused write is undone in what the tab remembers too", async () => {

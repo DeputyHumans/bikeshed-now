@@ -1,6 +1,6 @@
 # 0039 — The viewer has an explorer, above the keyed viewer and remembered on the account
 
-**Status** Accepted · **Spec** §4, §7, §13 · **Builds on** [0027](0027-a-reader-lists-their-own-reading.md) (Recent)
+**Status** Accepted, amended by [0041](0041-view-choices-are-kept-on-the-account.md) (every view choice is now on the account, copied into the browser) · **Spec** §4, §7, §13 · **Builds on** [0027](0027-a-reader-lists-their-own-reading.md) (Recent)
 
 ## Context
 

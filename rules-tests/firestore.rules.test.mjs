@@ -1348,6 +1348,29 @@ describe("firestore rules", () => {
     );
   });
 
+  it("the account's view choices are its own to keep, on a new record or an old one", async () => {
+    // SPEC §13, ADR 0041: they follow the account to every device.
+    const view = { sort: "name", layout: { folders: "list" }, explorerWidth: 320 };
+    await assertSucceeds(updateDoc(doc(verified(env, OWNER).firestore(), "users/u-owner"), { "view.layout.recent": "grid" }));
+    // A record nobody has written yet, so this is a create and the allowlist
+    // decides it: the explorer's case above already made one for u-viewer.
+    const NEWCOMER = { uid: "u-view-newcomer", email: "newcomer@example.com" };
+    await assertSucceeds(
+      setDoc(doc(verified(env, NEWCOMER).firestore(), "users/u-view-newcomer"), { uid: NEWCOMER.uid, email: NEWCOMER.email, view }),
+    );
+    // Somebody else's, never.
+    await assertFails(updateDoc(doc(verified(env, VIEWER).firestore(), "users/u-owner"), { view }));
+    // The create allowlist still holds for anything it does not name.
+    await assertFails(
+      setDoc(doc(verified(env, STRANGER).firestore(), "users/u-stranger"), {
+        uid: STRANGER.uid,
+        email: STRANGER.email,
+        view,
+        emailCooldowns: {},
+      }),
+    );
+  });
+
   // --- Profiles (ADR 0040) --------------------------------------------------
 
   it("a profile is read by uid by anybody past the gate, and listed by nobody", async () => {

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// The explorer beside a document: open or closed on the account, a drawer when narrow, and the lists it reads (SPEC §13 "The explorer").
+// The explorer beside a document: open or closed on the account, a drawer when narrow, and the lists it reads (SPEC §13 "The explorer", ADR 0041).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
-import { listMyDocs, listMyFolders, listMyReading, readUser, saveUserProfile } from "../firestore";
+import { listMyDocs, listMyFolders, listMyReading } from "../firestore";
 import { useIsCompactToolbar } from "../hooks/useMediaQuery";
 import { pathToFolder } from "../workspace/tree";
 import { RECENT_READS_LIMIT } from "../workspace/recent";
+import { useViewChoice } from "../workspace/prefs";
 import { ExplorerPanel } from "../components/ExplorerPanel";
 import type { DocMeta, FolderMeta } from "../types";
 
@@ -39,18 +40,7 @@ export const useExplorer = () => useContext(ExplorerContext);
 /** The panel's id, which the toggle names in `aria-controls`. */
 export const EXPLORER_ID = "doc-explorer";
 
-/**
- * This tab's own open or closed, once it has one: read from the account the
- * first time the tab opens a document, then changed only by its own toggle,
- * until the tab is reloaded. Kept per account, for a tab somebody else signs in on.
- */
-let tabChoice: { uid: string; open: boolean } | null = null;
-const choiceFor = (uid: string | null) => (uid !== null && tabChoice?.uid === uid ? tabChoice.open : null);
-
-/** Every test is a new tab. */
-export function forgetTabChoice() {
-  tabChoice = null;
-}
+const isOpenChoice = (v: unknown): v is boolean => typeof v === "boolean";
 
 /**
  * Above the keyed viewer, deliberately.
@@ -62,12 +52,14 @@ export function forgetTabChoice() {
  * stays mounted for as long as the reader moves between documents.
  *
  * Open or closed is remembered on the account (`users/{uid}.explorerOpen`), so
- * it follows the reader to every device, and only where it is a column. A tab
- * reads it once and keeps its own from then on: pressing the toggle in one tab
- * changes no other page already open, here or on another device. At
- * 1100px and below it is a drawer over the document that starts closed every
- * time: opening one on a phone to jump somewhere is not a wish to have a column
- * on the desktop.
+ * it follows the reader to every device, and only where it is a column. It is
+ * one of the account's view choices (workspace/prefs.ts, ADR 0041): this
+ * browser's copy draws it on the first frame, a tab takes the account's once
+ * and keeps its own from then on, so pressing the toggle in one tab changes no
+ * other page already open, here or on another device, and a refused write puts
+ * it back. At 1100px and below it is a drawer over the document that starts
+ * closed every time: opening one on a phone to jump somewhere is not a wish to
+ * have a column on the desktop.
  */
 export function ExplorerShell({ children }: { children: ReactNode }) {
   const { user, gate, emailLower } = useAuth();
@@ -76,36 +68,13 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
   const drawer = useIsCompactToolbar();
   const uid = gate === "ready" && user ? user.uid : null;
 
-  const [remembered, setRemembered] = useState(() => choiceFor(uid) ?? false);
+  const [remembered, setRemembered] = useViewChoice("explorerOpen", false, isOpenChoice);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [suppressed, setSuppressed] = useState(false);
   // Set only when somebody opens it, so the filter takes focus then: not on a
   // page load, and not when it comes back after editing.
   const [focusWanted, setFocusWanted] = useState(false);
   const focused = useCallback(() => setFocusWanted(false), []);
-
-  useEffect(() => {
-    const mine = choiceFor(uid);
-    if (!uid || mine !== null) {
-      setRemembered(mine ?? false);
-      return;
-    }
-    setRemembered(false);
-    let live = true;
-    readUser(uid)
-      .then((record) => {
-        // A press of the toggle before the account answered stands.
-        if (!live || choiceFor(uid) !== null) return;
-        const open = record?.explorerOpen === true;
-        tabChoice = { uid, open };
-        setRemembered(open);
-      })
-      // Unreadable: closed, and asked again the next time a document opens.
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [uid]);
 
   // A drawer is opened to go somewhere, and once there it is in the way.
   useEffect(() => setDrawerOpen(false), [pathname, drawer]);
@@ -120,15 +89,9 @@ export function ExplorerShell({ children }: { children: ReactNode }) {
       return;
     }
     if (!uid) return;
-    const next = !remembered;
-    tabChoice = { uid, open: next };
-    setRemembered(next);
     // A refused write puts it back, here and in what the tab remembers.
-    void saveUserProfile(uid, emailLower, { explorerOpen: next }).catch(() => {
-      tabChoice = { uid, open: !next };
-      setRemembered(!next);
-    });
-  }, [open, drawer, uid, remembered, emailLower]);
+    void setRemembered(!remembered);
+  }, [open, drawer, uid, remembered, setRemembered]);
 
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false);

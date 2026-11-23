@@ -360,7 +360,8 @@ service cloud.firestore {
     }
 
     // --- Accounts (SPEC §14) ----------------------------------------------
-    // Self-only. The client may set its own profile and preferences; anything
+    // Self-only. The client may set its own profile and preferences, its view
+    // choices among them (`view`, ADR 0041); anything
     // that gates access — email cooldowns, personal access tokens — is
     // server-written and unwritable here, so a user cannot clear their own rate
     // limit. `verification` stays unwritable: it is where a code was kept
@@ -374,7 +375,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           'uid', 'email', 'displayName', 'photoURL', 'providers',
           'emailNotifications', 'analyticsOptOut', 'defaultMarking',
-          'explorerOpen', 'createdAt', 'updatedAt'
+          'explorerOpen', 'view', 'createdAt', 'updatedAt'
         ]);
       allow update: if isVerifiedUser()
         && request.auth.uid == uid

@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Thirty-seven decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Forty decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
 They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
@@ -45,8 +45,9 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0036](0036-a-version-lists-its-files-each-stored-once.md) | A version lists its files, and each file is stored once per document | Accepted |
 | [0037](0037-a-pages-files-sit-beside-it.md) | A page's files sit beside it; video and audio go by a short-lived Storage link | Accepted |
 | [0038](0038-large-media-go-straight-to-storage.md) | Large media go straight to Storage through a server-issued session | Accepted |
-| [0039](0039-the-viewer-has-an-explorer.md) | The viewer has an explorer, above the keyed viewer and remembered on the account | Accepted |
+| [0039](0039-the-viewer-has-an-explorer.md) | The viewer has an explorer, above the keyed viewer and remembered on the account | Amended by 0041 |
 | [0040](0040-a-person-is-shown-by-a-short-name.md) | A person is shown by a short name, looked up by uid | Accepted |
+| [0041](0041-view-choices-are-kept-on-the-account.md) | View choices are kept on the account, and copied into the browser | Accepted |
 
 ## Format
 

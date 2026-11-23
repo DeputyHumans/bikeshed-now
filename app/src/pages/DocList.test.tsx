@@ -26,7 +26,7 @@ const { listeners, createFolder, forkDoc, uploadDoc, reading } = vi.hoisted(() =
 
 vi.mock("../firebase", () => ({ auth: {}, db: {}, rtdb: null }));
 vi.mock("../auth", () => ({
-  useAuth: () => ({ user: { uid: "u1" }, emailLower: "me@example.com" }),
+  useAuth: () => ({ user: { uid: "u1" }, emailLower: "me@example.com", gate: "ready" }),
 }));
 vi.mock("../firestore", () => ({
   formatRelative: () => "just now",
@@ -42,6 +42,8 @@ vi.mock("../firestore", () => ({
   listMyTeams: () => () => {},
   listMyReading: (uid: string, max: number) => reading(uid, max),
   watchUser: () => () => {},
+  // View choices are written to the account (workspace/prefs.ts).
+  saveUserProfile: async () => {},
   // The new-version dialog reads what the current version holds.
   getVersion: async () => ({ versionId: "v4", entry: "index.html", format: "html", files: ["index.html"] }),
 }));
@@ -67,6 +69,7 @@ vi.mock("../hooks/useCoverBackfill", () => ({ useCoverBackfill: backfill }));
 vi.mock("./SharedFolder", () => ({ SharedFolder: () => <p>SHARED FOLDER</p> }));
 
 import { DocList } from "./DocList";
+import { forgetViewChoices } from "../workspace/prefs";
 import { ToastProvider } from "../components/Toast";
 
 function mount(view?: "recent" | "everything" | "shared") {
@@ -105,8 +108,9 @@ function folderMeta(overrides: Partial<FolderMeta> = {}): FolderMeta {
 const EMPTY = /Nothing here yet/;
 
 beforeEach(() => {
-  // The workspace remembers its sort and layout in this browser; each test
-  // starts from a browser that has never chosen.
+  // The workspace's sort and layout are the account's view choices, copied
+  // into this browser; each test is a new tab in a browser that never chose.
+  forgetViewChoices();
   window.localStorage.clear();
   // A list's place is kept per history entry; every test is a new visit.
   window.sessionStorage.clear();
