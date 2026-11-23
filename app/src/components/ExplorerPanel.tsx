@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // The explorer's lists: Recent, Shared with me, and every folder with its documents (SPEC §13 "The explorer").
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { CARD_DELAY_MS, EXPLORER_CARD_ID, ExplorerCard } from "./ExplorerCard";
 import { Icon } from "./Icon";
 import { MoreItems } from "./MoreItems";
 import { useIncremental } from "../hooks/useIncremental";
@@ -17,7 +18,33 @@ export const SHARED_SECTION = "section:shared";
 /** Recent and Shared with me draw this many before "Show more": the tree below them is the point. */
 export const SECTION_BATCH = 10;
 
-function DocLink({ doc, depth, current }: { doc: DocMeta; depth: number; current: boolean }) {
+/** How long a card waits for a pointer that left its row to arrive on it. */
+const CARD_LINGER_MS = 150;
+
+/** Whether a row's name is cut off where it is drawn: the one case its card is for. */
+function cutOff(link: HTMLElement): boolean {
+  const name = link.querySelector<HTMLElement>(".folder-name");
+  return !!name && name.scrollWidth > name.clientWidth;
+}
+
+/** Focus a keyboard gave, as opposed to the focus a click leaves behind. */
+function keyboardFocus(el: HTMLElement): boolean {
+  try {
+    return el.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+}
+
+interface Hover {
+  /** The row's link as it entered or was focused, and the card it may show. */
+  reveal: (doc: DocMeta, link: HTMLElement, now: boolean) => void;
+  conceal: () => void;
+}
+
+function DocLink({ doc, depth, current, hover }: { doc: DocMeta; depth: number; current: boolean; hover: Hover }) {
+  // No `title`: the card says the whole name where the row cannot, and two
+  // tooltips would cover each other.
   return (
     <li className="folder-item">
       <Link
@@ -25,7 +52,15 @@ function DocLink({ doc, depth, current }: { doc: DocMeta; depth: number; current
         className="folder-link explorer-doc"
         aria-current={current ? "page" : undefined}
         style={{ ["--folder-depth" as string]: depth }}
-        title={doc.title}
+        onPointerEnter={(event) => {
+          // A touch has no hover: its tap opens the document.
+          if (event.pointerType !== "touch") hover.reveal(doc, event.currentTarget, false);
+        }}
+        onPointerLeave={hover.conceal}
+        onFocus={(event) => {
+          if (keyboardFocus(event.currentTarget)) hover.reveal(doc, event.currentTarget, true);
+        }}
+        onBlur={hover.conceal}
       >
         <span className="folder-twisty" />
         <Icon name="doc" size={15} />
@@ -107,6 +142,59 @@ export function ExplorerPanel({
   const filter = useRef<HTMLInputElement | null>(null);
   const nav = useRef<HTMLElement | null>(null);
 
+  // One card for the panel, for the row whose name does not fit.
+  const [card, setCard] = useState<{ docId: string; doc: DocMeta; link: HTMLElement; rect: DOMRect } | null>(null);
+  const shown = useRef(card);
+  const timer = useRef<number | null>(null);
+  const stopTimer = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+  };
+  const hide = useCallback(() => {
+    stopTimer();
+    shown.current?.link.removeAttribute("aria-describedby");
+    shown.current = null;
+    setCard(null);
+  }, []);
+  const hover = useMemo<Hover>(
+    () => ({
+      reveal: (doc, link, now) => {
+        stopTimer();
+        const open = () => {
+          timer.current = null;
+          if (!link.isConnected || !cutOff(link)) return;
+          shown.current?.link.removeAttribute("aria-describedby");
+          link.setAttribute("aria-describedby", EXPLORER_CARD_ID);
+          const next = { docId: doc.docId, doc, link, rect: link.getBoundingClientRect() };
+          shown.current = next;
+          setCard(next);
+        };
+        if (now) open();
+        else timer.current = window.setTimeout(open, CARD_DELAY_MS);
+      },
+      // A moment's grace, so a pointer can cross from the row onto its card.
+      conceal: () => {
+        stopTimer();
+        if (shown.current) timer.current = window.setTimeout(hide, CARD_LINGER_MS);
+      },
+    }),
+    [hide],
+  );
+  // Gone with whatever moved the row: another document, a filter, a scroll, the panel itself.
+  useEffect(() => hide, [hide]);
+  useEffect(() => hide(), [currentDocId, query, hide]);
+  // Escape dismisses it wherever the focus is, before the drawer hears the key.
+  useEffect(() => {
+    if (!card) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      hide();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [card, hide]);
+
   const recent = useMemo(
     () => recentRows(docs, reads, me, Date.now()).map((row) => row.doc),
     [docs, reads, me],
@@ -143,7 +231,7 @@ export function ExplorerPanel({
   }, [landed, currentDocId]);
 
   const docRows = (list: readonly DocMeta[], depth: number) =>
-    list.map((doc) => <DocLink key={doc.docId} doc={doc} depth={depth} current={doc.docId === currentDocId} />);
+    list.map((doc) => <DocLink key={doc.docId} doc={doc} depth={depth} current={doc.docId === currentDocId} hover={hover} />);
 
   const folderRows = (nodes: readonly TreeNode[]): React.ReactNode[] =>
     nodes.map((node) => {
@@ -193,7 +281,7 @@ export function ExplorerPanel({
         ) : null}
       </div>
 
-      <div className="explorer-lists">
+      <div className="explorer-lists" onScroll={hide}>
       {loading ? (
         <p className="caption explorer-note" role="status">Loading your documents…</p>
       ) : query.trim() ? (
@@ -234,6 +322,16 @@ export function ExplorerPanel({
       )}
       </div>
       {edge}
+      {card ? (
+        <ExplorerCard
+          doc={docs.find((d) => d.docId === card.docId) ?? card.doc}
+          anchor={card.rect}
+          folders={folders}
+          me={me}
+          onPointerEnter={stopTimer}
+          onPointerLeave={hide}
+        />
+      ) : null}
     </nav>
   );
 }

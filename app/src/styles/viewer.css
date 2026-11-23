@@ -457,7 +457,8 @@
  * As a drawer (1100px and below, decided in JavaScript and said by
  * `data-drawer`) it lies over the document and the bars above it, so the frame
  * keeps its width. STACKING: 48, over the slide drawer (45) and the overview
- * (46), under the modal scrim and present-exit (50).
+ * (46), under the modal scrim and present-exit (50). The card beside a row
+ * whose name does not fit is 49: over the drawer it comes from, under a modal.
  */
 .viewer-shell {
   position: relative;
@@ -550,6 +551,49 @@
   height: auto;
   box-shadow: var(--shadow-xl);
 }
+/* The card beside a row whose name does not fit (components/ExplorerCard.tsx):
+   fixed, because the list it comes from scrolls and would clip it. */
+.explorer-card {
+  position: fixed;
+  z-index: 49;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  width: 280px;
+  max-width: calc(100vw - 2 * var(--s-2));
+  padding: var(--s-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-ink);
+  font-size: var(--fs-small);
+}
+.explorer-card-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.explorer-card-title {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.explorer-card-line {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--fs-caption);
+  color: var(--color-ink-muted);
+}
+
 /* A tap beside the drawer closes it, as the slide drawer's scrim does. */
 .explorer-scrim {
   position: absolute;
@@ -574,6 +618,7 @@
 .is-presenting .comments-panel,
 .is-presenting .explorer,
 .is-presenting .explorer-scrim,
+.is-presenting .explorer-card,
 .is-presenting .consent {
   display: none;
 }
@@ -599,6 +644,7 @@
   .comments-panel,
   .explorer,
   .explorer-scrim,
+  .explorer-card,
   .consent,
   .slide-rail,
   .slide-overview,

@@ -50,11 +50,16 @@ vi.mock("../firestore", () => ({
     return () => {};
   },
   listMyReading: (uid: string, max: number) => state.reading(uid, max),
+  // The hover card's line about the current version (components/UpdatedLine.tsx).
+  formatRelative: () => "2 h ago",
+  formatTimestamp: () => "23 Nov 2026, 12:00",
 }));
 
 import { ExplorerShell, EXPLORER_ID, useExplorer } from "./explorer";
 import { EXPLORER_WIDTH, widthBounds } from "./explorerWidth";
 import { RESIZE_SETTLE_MS, RESIZE_STEP, RESIZE_STEP_LARGE } from "../components/ExplorerResize";
+import { CARD_DELAY_MS, EXPLORER_CARD_ID } from "../components/ExplorerCard";
+import { personName } from "../people";
 import { cacheKey, forgetViewChoices } from "../workspace/prefs";
 
 function docMeta(overrides: Partial<DocMeta>): DocMeta {
@@ -543,22 +548,28 @@ describe("each tab keeps its own, read from the account once", () => {
   });
 });
 
-describe("the column's width", () => {
-  // jsdom has no PointerEvent; a MouseEvent that carries a pointer id is what React reads.
-  const Had = (window as { PointerEvent?: unknown }).PointerEvent;
+/** jsdom has no PointerEvent: a MouseEvent carrying a pointer's id and kind is what React reads. */
+function withPointerEvents() {
   beforeEach(() => {
+    const had = (window as { PointerEvent?: unknown }).PointerEvent;
     class TestPointerEvent extends MouseEvent {
       pointerId: number;
-      constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
+      pointerType: string;
+      constructor(type: string, init: MouseEventInit & { pointerId?: number; pointerType?: string } = {}) {
         super(type, init);
         this.pointerId = init.pointerId ?? 1;
+        this.pointerType = init.pointerType ?? "mouse";
       }
     }
     (window as { PointerEvent?: unknown }).PointerEvent = TestPointerEvent;
     onTestFinished(() => {
-      (window as { PointerEvent?: unknown }).PointerEvent = Had;
+      (window as { PointerEvent?: unknown }).PointerEvent = had;
     });
   });
+}
+
+describe("the column's width", () => {
+  withPointerEvents();
 
   const shell = () => document.querySelector<HTMLElement>(".viewer-shell")!;
   const drawn = () => shell().style.getPropertyValue("--explorer-width");
@@ -691,5 +702,184 @@ describe("the column's width", () => {
     rerender(tree(false));
     expect(panel()).not.toBeNull();
     expect(shell().hasAttribute("data-resizing")).toBe(false);
+  });
+});
+
+describe("the card for a name that does not fit", () => {
+  withPointerEvents();
+
+  const NOW = Date.now();
+  const card = () => document.getElementById(EXPLORER_CARD_ID);
+  const link = (name: string) => within(panel()!).getAllByRole("link", { name })[0];
+  /** The row's name drawn wider than its box, as an ellipsis draws it. */
+  const cutOff = (el: HTMLElement) => {
+    const name = el.querySelector(".folder-name")!;
+    Object.defineProperty(name, "scrollWidth", { configurable: true, value: 300 });
+    Object.defineProperty(name, "clientWidth", { configurable: true, value: 120 });
+  };
+
+  async function openWith(docs: DocMeta[], folders: FolderMeta[] = FOLDERS) {
+    vi.useFakeTimers();
+    mount();
+    await answer({ explorerOpen: true });
+    act(() => {
+      state.folders!(folders);
+      state.docs!(docs);
+    });
+  }
+  const rest = (ms = CARD_DELAY_MS) => act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+
+  const LONG = "Launch plan for the second half, with every market and its owner named";
+  const filed = (over: Partial<DocMeta> = {}) =>
+    docMeta({
+      docId: "here",
+      title: LONG,
+      folderId: "f-inner",
+      thumb: { versionId: "v1", cover: "k1" } as DocMeta["thumb"],
+      stats: { views: 12 } as DocMeta["stats"],
+      latest: { version: "v1", at: NOW - 7_200_000, words: 1200 } as unknown as DocMeta["latest"],
+      currentVersion: "v1",
+      ...over,
+    });
+
+  it("opens a moment after a pointer rests on a row whose name is cut off, with all a card says", async () => {
+    await openWith([filed()]);
+    const row = link(LONG);
+    cutOff(row);
+    fireEvent.pointerEnter(row, { pointerType: "mouse" });
+    await rest(CARD_DELAY_MS - 50);
+    expect(card()).toBeNull();
+    await rest(50);
+    const c = card()!;
+    expect(c.getAttribute("role")).toBe("tooltip");
+    expect(row.getAttribute("aria-describedby")).toBe(EXPLORER_CARD_ID);
+    // No native tooltip on the row as well, to cover this one.
+    expect(row.hasAttribute("title")).toBe(false);
+    expect(c.querySelector(".explorer-card-title")?.textContent).toBe(LONG);
+    expect(c.querySelector("img")?.getAttribute("src")).toContain("/thumb/here/v1/k1/cover.jpg");
+    const text = c.textContent ?? "";
+    expect(text).toContain("You");
+    expect(text).toContain("Projects / Launch");
+    expect(text).toContain("Private");
+    expect(text).toContain("min read");
+    expect(text).toContain("Updated 2 h ago");
+    expect(text).toContain("Read 12 times");
+  });
+
+  it("names another owner, the folder's reach and an unreadable folder as the workspace does", async () => {
+    const reaching = { ...folder("f-pub", "Press"), reach: [{ visibility: "public", expiresAt: null }] } as unknown as FolderMeta;
+    await openWith(
+      [
+        filed({ docId: "a", title: `${LONG} A`, ownerUid: "u-ana", ownerEmail: "ana@example.com", folderId: "f-pub" }),
+        filed({ docId: "b", title: `${LONG} B`, ownerUid: "u-ana", ownerEmail: "ana@example.com", folderId: "f-unseen", visibility: "unlisted" }),
+      ],
+      [reaching],
+    );
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Press" }));
+    cutOff(link(`${LONG} A`));
+    fireEvent.pointerEnter(link(`${LONG} A`));
+    await rest();
+    expect(card()!.textContent).toContain(personName({ uid: "u-ana", email: "ana@example.com" }));
+    expect(card()!.textContent).toContain("Press");
+    expect(card()!.textContent).toContain("Public");
+    expect(card()!.textContent).not.toContain("You");
+    fireEvent.pointerLeave(link(`${LONG} A`));
+    await rest(500);
+    cutOff(link(`${LONG} B`));
+    fireEvent.pointerEnter(link(`${LONG} B`));
+    await rest();
+    expect(card()!.textContent).toContain("A folder you can't open");
+    expect(card()!.textContent).toContain("Link");
+  });
+
+  it("says when an agent published the current version, as a word and not a button", async () => {
+    await openWith([filed({ latest: { version: "v1", at: NOW - 60_000, words: 300, channel: "mcp", via: "claude" } as unknown as DocMeta["latest"] })]);
+    cutOff(link(LONG));
+    fireEvent.pointerEnter(link(LONG));
+    await rest();
+    expect(card()!.querySelector(".badge-automated")?.textContent).toBe("agent");
+    // A tooltip holds nothing that takes a focus or a click.
+    expect(card()!.querySelectorAll("button, a, input, [tabindex]")).toHaveLength(0);
+  });
+
+  it("shows no cover for somebody else's document once it has expired", async () => {
+    await openWith([filed({ ownerUid: "u-ana", ownerEmail: "ana@example.com", expiresAt: NOW - 1000 as never })]);
+    cutOff(link(LONG));
+    fireEvent.pointerEnter(link(LONG));
+    await rest();
+    expect(card()).not.toBeNull();
+    expect(card()!.querySelector("img")).toBeNull();
+  });
+
+  it("does not open for a name that fits, nor for a touch", async () => {
+    await openWith([filed({ title: "Short" }), filed({ docId: "t", title: LONG, folderId: null })]);
+    fireEvent.pointerEnter(link("Short"));
+    await rest(2000);
+    expect(card()).toBeNull();
+    cutOff(link(LONG));
+    fireEvent.pointerEnter(link(LONG), { pointerType: "touch" });
+    await rest(2000);
+    expect(card()).toBeNull();
+  });
+
+  it("opens at once on keyboard focus, and goes on blur", async () => {
+    await openWith([filed()]);
+    cutOff(link(LONG));
+    act(() => link(LONG).focus());
+    expect(card()).not.toBeNull();
+    act(() => link(LONG).blur());
+    await rest(500);
+    expect(card()).toBeNull();
+    expect(link(LONG).hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  it("lets the pointer cross onto it, and goes once the pointer leaves both", async () => {
+    await openWith([filed()]);
+    cutOff(link(LONG));
+    fireEvent.pointerEnter(link(LONG));
+    await rest();
+    fireEvent.pointerLeave(link(LONG));
+    fireEvent.pointerEnter(card()!);
+    await rest(1000);
+    expect(card()).not.toBeNull();
+    fireEvent.pointerLeave(card()!);
+    expect(card()).toBeNull();
+  });
+
+  it("goes on Escape wherever the focus is, and a drawer it came from stays open", async () => {
+    vi.useFakeTimers();
+    state.compact = true;
+    mount();
+    fireEvent.click(toggle());
+    act(() => {
+      state.folders!(FOLDERS);
+      state.docs!([filed()]);
+    });
+    cutOff(link(LONG));
+    fireEvent.pointerEnter(link(LONG));
+    await rest();
+    expect(card()).not.toBeNull();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(card()).toBeNull();
+    expect(panel()).not.toBeNull();
+    // With no card up, Escape is the drawer's again.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(panel()).toBeNull();
+  });
+
+  it("goes when the list scrolls or another document opens", async () => {
+    await openWith([filed(), docMeta({ docId: "other", title: "Elsewhere doc", folderId: "f-away" })]);
+    cutOff(link(LONG));
+    fireEvent.pointerEnter(link(LONG));
+    await rest();
+    fireEvent.scroll(panel()!.querySelector(".explorer-lists")!);
+    expect(card()).toBeNull();
+    fireEvent.pointerEnter(link(LONG));
+    await rest();
+    expect(card()).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
+    expect(card()).toBeNull();
   });
 });
