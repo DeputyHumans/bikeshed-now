@@ -47,6 +47,7 @@ import { usePrinting } from "../viewer/usePrinting";
 import { useVersionDrop } from "../viewer/useVersionDrop";
 import { useExplorer } from "../viewer/explorer";
 import { useRailPeople } from "../viewer/railPeople";
+import { othersMenuEntry, useOthersShown } from "../viewer/othersShown";
 import { nameFromEmail, personName, shortName, usePeople } from "../people";
 import { baseFilesOf, combine, type Pick } from "../bundleInput";
 import { contentBase, readingSandboxed, readsDraft, type FrameMode } from "../viewer/frameMode";
@@ -191,6 +192,10 @@ export function DocViewer() {
   } = useCommentsOpen(docId);
   const [pane, setPane] = useState<"doc" | "comments">("doc");
   const { presenting, start: startPresenting, stop: stopPresenting } = usePresenting();
+  // Comments and others' activity over the document, for this tab: hidden by
+  // the reader's switch, and never drawn over a deck being presented (SPEC §6, §16).
+  const [othersShown, setOthersShown] = useOthersShown();
+  const othersDrawn = othersShown && !presenting;
   // Beside the document, above this component (viewer/explorer.tsx); told when to step aside.
   const explorer = useExplorer();
   // Closed to start with in one column, where it is a drawer over the slide it lists.
@@ -345,6 +350,8 @@ export function DocViewer() {
       setCommentsOpen(true);
       setPane("comments");
     },
+    shown: othersDrawn,
+    blinkSelected: !othersShown && !presenting,
   });
 
   const presence = usePeerPresence({
@@ -359,6 +366,7 @@ export function DocViewer() {
     mode: mode.kind === "editing" ? "edit" : "view",
     liveEpoch: mode.kind === "editing" ? mode.liveEpoch : currentLiveEpoch,
     enabled: signedIn && !throughFolder,
+    overlayShown: othersDrawn,
   });
 
   // Their names, for the upload dialog's "has it open in the editor". Reads
@@ -1071,6 +1079,9 @@ export function DocViewer() {
     // For every reader: how long it is and when it was updated is anyone's to
     // know; who did it and every version is a member's (DetailsPanel).
     entries.push({ id: "details", label: "Details…", onSelect: () => setDialog("details") });
+    // For every reader, alone or not: the eye beside the people is there only
+    // while somebody else is (SPEC §6, §16).
+    entries.push(othersMenuEntry(othersShown, setOthersShown));
     // For every reader, owner and anonymous alike — a reader who is not signed
     // in is sent to sign in and comes back to the fork (SPEC §21).
     entries.push({
@@ -1119,7 +1130,7 @@ export function DocViewer() {
       }
     }
     return entries;
-  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, condensed, printCurrent, trashed, trashThis, restoreTrashed, isDeck, deck.slides, deck.locate, copyLinkTo]);
+  }, [doc, docId, linkKey, isOwner, navigate, toast, fork, forking, forkVersion, offersUpload, openUpload, condensed, printCurrent, trashed, trashThis, restoreTrashed, isDeck, deck.slides, deck.locate, copyLinkTo, othersShown, setOthersShown]);
 
   const showComments = commentsOpen && Boolean(doc.currentVersion) && !throughFolder;
 
@@ -1257,6 +1268,8 @@ export function DocViewer() {
           peers={presence.peers}
           following={presence.following}
           onToggleFollow={presence.toggleFollow}
+          othersShown={othersShown}
+          onToggleOthers={() => setOthersShown(!othersShown)}
           commentsOpen={commentsOpen}
           onToggleComments={throughFolder ? undefined : () => setCommentsOpen((v) => !v)}
           canEdit={canEdit}

@@ -67,6 +67,34 @@ describe("PresenceBar", () => {
     });
   }
 
+  test("the eye after the chips switches comments and others' activity, pressed while they show", () => {
+    const onToggleOthers = vi.fn();
+    const { rerender } = render(<PresenceBar peers={PEERS} following={null} onToggleFollow={() => {}} othersShown onToggleOthers={onToggleOthers} />);
+    const eye = screen.getByRole("button", { name: "Show comments and others' activity" });
+    expect(eye.getAttribute("aria-pressed")).toBe("true");
+    expect(eye.title).toBe("Hide comments and others' activity");
+    fireEvent.click(eye);
+    expect(onToggleOthers).toHaveBeenCalledTimes(1);
+    rerender(<PresenceBar peers={PEERS} following={null} onToggleFollow={() => {}} othersShown={false} onToggleOthers={onToggleOthers} />);
+    expect(eye.getAttribute("aria-pressed")).toBe("false");
+    expect(eye.title).toBe("Show comments and others' activity");
+  });
+
+  test("the eye's room comes off before any chip's, so the fold counts it", () => {
+    // 4 chips of 120 need 480, which 520 holds with no eye. The eye (60 here)
+    // leaves 460: +N (44) and three chips (404) fit, a fourth (524) does not.
+    layOut(520);
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("presence-chip")) return 120;
+      if (this.classList.contains("presence-more")) return 44;
+      if (this.classList.contains("presence-others")) return 60;
+      return 0;
+    });
+    const { container } = render(<PresenceBar peers={PEERS} following={null} onToggleFollow={() => {}} othersShown onToggleOthers={() => {}} />);
+    const folded = Array.from(container.querySelectorAll(".presence-chip")).map((chip) => chip.hasAttribute("data-folded"));
+    expect(folded).toEqual([false, false, false, true]);
+  });
+
   test("nobody here: no bar", () => {
     const { container } = render(<PresenceBar peers={[]} following={null} onToggleFollow={() => {}} />);
     expect(container.querySelector(".presence-bar")).toBeNull();

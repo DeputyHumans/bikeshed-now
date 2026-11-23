@@ -29,8 +29,14 @@ export function usePeerPresence(options: {
   mode: PresenceMode;
   enabled: boolean;
   liveEpoch?: string;
+  /**
+   * False while the reader hides others' activity, or presents (SPEC §16): no
+   * cursor, selection or name of anybody else is drawn. Presence itself goes
+   * on, so this reader still shows up for others and following still moves them.
+   */
+  overlayShown?: boolean;
 }) {
-  const { docId, uid, emailLower, displayName, doc, epoch, mode, enabled, liveEpoch = "initial" } = options;
+  const { docId, uid, emailLower, displayName, doc, epoch, mode, enabled, liveEpoch = "initial", overlayShown = true } = options;
 
   const [peers, setPeers] = useState<Peer[]>([]);
   const [following, setFollowing] = useState<string | null>(null);
@@ -94,14 +100,19 @@ export function usePeerPresence(options: {
    * An OBSERVER is not editing: their frame mode is "reading", so they keep
    * every peer cursor, which is the whole point of observe mode.
    */
+  const peersRef = useRef(peers);
+  peersRef.current = peers;
   useEffect(() => {
-    if (!enabled || !doc || mode === "edit") return;
+    if (!enabled || !doc || mode === "edit" || !overlayShown) return;
     overlay.current = createPeerOverlay(doc);
+    // Drawn at once with whoever is here: an overlay made again when the
+    // reader shows others' activity must not wait for somebody to move.
+    overlay.current.render(peersRef.current);
     return () => {
       overlay.current?.destroy();
       overlay.current = null;
     };
-  }, [enabled, doc, epoch, mode]);
+  }, [enabled, doc, epoch, mode, overlayShown]);
 
   useEffect(() => {
     overlay.current?.render(peers);

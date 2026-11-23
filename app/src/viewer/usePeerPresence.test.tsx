@@ -8,6 +8,8 @@ import { usePeerPresence } from "./usePeerPresence";
 
 type Handle = Record<"setMode" | "setFocus" | "setView" | "setSlide" | "setFollowing" | "setComposing" | "leave", ReturnType<typeof vi.fn>>;
 const handles = vi.hoisted(() => [] as Handle[]);
+/** Who `watchPeers` reports as here; nobody unless a case says. */
+const present = vi.hoisted(() => ({ peers: [] as unknown[] }));
 
 vi.mock("../presence", async () => {
   const actual = await vi.importActual<typeof import("../presence")>("../presence");
@@ -18,7 +20,10 @@ vi.mock("../presence", async () => {
       handles.push(h);
       return h;
     }),
-    watchPeers: () => () => {},
+    watchPeers: (_doc: string, _uid: string, cb: (peers: unknown[]) => void) => {
+      cb(present.peers);
+      return () => {};
+    },
   };
 });
 
@@ -35,6 +40,7 @@ function frameDoc(): Document {
 
 beforeEach(() => {
   handles.length = 0;
+  present.peers = [];
 });
 afterEach(() => {
   document.body.innerHTML = "";
@@ -115,5 +121,43 @@ describe("whom a reader follows, for the person followed", () => {
     rerender({ doc, liveEpoch: "b" });
     expect(handles).toHaveLength(2);
     expect(handles[1].setFollowing).toHaveBeenCalledWith("leader");
+  });
+});
+
+describe("others' cursors, hidden by the reader or by presenting (SPEC §16)", () => {
+  it("draws no overlay while hidden, yet the reader is still present and still shares where they are", () => {
+    const doc = frameDoc();
+    renderHook(() =>
+      usePeerPresence({ docId: "d1", uid: "u1", emailLower: "me@example.com", displayName: "Me", doc, epoch: 1, mode: "view", enabled: true, overlayShown: false }),
+    );
+    expect(doc.getElementById("bshd-peers")).toBeNull();
+    expect(handles).toHaveLength(1);
+    expect(handles[0].setView).toHaveBeenCalled();
+  });
+
+  it("draws whoever is here as soon as it is shown again, without waiting for anybody to move", async () => {
+    const doc = frameDoc();
+    const proto = doc.defaultView!.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
+    proto.getClientRects = () => [new DOMRect(10, 10, 40, 16)];
+    present.peers = [{
+      uid: "u2", email: "dana.kim@example.com", name: "Dana Kim", mode: "view", lastChanged: 1, color: "#7c3aed",
+      focus: { elementId: "one", exact: "One", prefix: "", suffix: "", start: 0, end: 3 },
+    }];
+    const { rerender } = renderHook(
+      ({ overlayShown }: { overlayShown: boolean }) =>
+        usePeerPresence({ docId: "d1", uid: "u1", emailLower: "me@example.com", displayName: "Me", doc, epoch: 1, mode: "view", enabled: true, overlayShown }),
+      { initialProps: { overlayShown: false } },
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    });
+    expect(doc.querySelector(".bshd-peer-label")).toBeNull();
+    rerender({ overlayShown: true });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    });
+    expect(doc.querySelector(".bshd-peer-label")?.textContent).toBe("Dana K");
+    rerender({ overlayShown: false });
+    expect(doc.getElementById("bshd-peers")).toBeNull();
   });
 });

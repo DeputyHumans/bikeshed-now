@@ -3,7 +3,8 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useAnnotationLayer } from "./useAnnotationLayer";
+import { BLINK_MS, BLINK_STILL_MS, useAnnotationLayer } from "./useAnnotationLayer";
+import { allPainted, installHighlightApi, paintedTexts } from "../test/highlights";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -189,5 +190,98 @@ describe("a link out of the document", () => {
     } finally {
       open.mockRestore();
     }
+  });
+});
+
+describe("hiding comments, and presenting (SPEC §6)", () => {
+  interface ShowProps {
+    selectedId: string | null;
+    shown: boolean;
+    blinkSelected: boolean;
+  }
+
+  /** A frame with a browser's highlight registry, and the layer drawing two threads in it. */
+  function shownMount(initial: ShowProps) {
+    const doc = makeDoc();
+    const registry = installHighlightApi(doc.defaultView!);
+    const annotations = [annotation("a1", "s1", "first passage"), annotation("a2", "s2", "second passage")];
+    const hook = renderHook(
+      (props: ShowProps) =>
+        useAnnotationLayer({
+          mode: READING,
+          doc,
+          epoch: 1,
+          annotations,
+          selectedId: props.selectedId,
+          onSelect: vi.fn(),
+          shown: props.shown,
+          blinkSelected: props.blinkSelected,
+        }),
+      { initialProps: initial },
+    );
+    return { ...hook, registry };
+  }
+
+  const HIDDEN = { shown: false, blinkSelected: true };
+  const PRESENTING = { shown: false, blinkSelected: false };
+
+  it("paints nothing while hidden, and every thread again when shown", () => {
+    const { rerender, registry } = shownMount({ selectedId: null, ...HIDDEN });
+    expect(allPainted(registry)).toEqual([]);
+    rerender({ selectedId: null, shown: true, blinkSelected: false });
+    expect(allPainted(registry)).toEqual(["first passage", "second passage"]);
+  });
+
+  it("blinks a thread opened while hidden twice, then leaves nothing marked", () => {
+    vi.useFakeTimers();
+    const { rerender, registry } = shownMount({ selectedId: null, ...HIDDEN });
+    rerender({ selectedId: "a2", ...HIDDEN });
+    const seen = [allPainted(registry)];
+    for (let i = 0; i < 4; i += 1) {
+      act(() => vi.advanceTimersByTime(BLINK_MS));
+      seen.push(allPainted(registry));
+    }
+    expect(seen).toEqual([["second passage"], [], ["second passage"], [], []]);
+    act(() => vi.advanceTimersByTime(BLINK_MS * 8));
+    expect(allPainted(registry)).toEqual([]);
+  });
+
+  it("lights it once, without blinking, under reduced motion", () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) => ({ matches: query.includes("reduce"), media: query, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList,
+    );
+    const { rerender, registry } = shownMount({ selectedId: null, ...HIDDEN });
+    rerender({ selectedId: "a2", ...HIDDEN });
+    act(() => vi.advanceTimersByTime(BLINK_MS));
+    expect(allPainted(registry)).toEqual(["second passage"]);
+    act(() => vi.advanceTimersByTime(BLINK_STILL_MS));
+    expect(allPainted(registry)).toEqual([]);
+  });
+
+  it("blinks nothing when the switch goes off with a thread already open, or while presenting", () => {
+    vi.useFakeTimers();
+    const off = shownMount({ selectedId: "a1", shown: true, blinkSelected: false });
+    off.rerender({ selectedId: "a1", ...HIDDEN });
+    expect(allPainted(off.registry)).toEqual([]);
+    off.unmount();
+    const presenting = shownMount({ selectedId: null, ...PRESENTING });
+    presenting.rerender({ selectedId: "a2", ...PRESENTING });
+    expect(allPainted(presenting.registry)).toEqual([]);
+  });
+
+  it("goes off, opens a thread, and comes back on, in one page, as a reader does it", () => {
+    vi.useFakeTimers();
+    const { rerender, registry } = shownMount({ selectedId: null, shown: true, blinkSelected: false });
+    expect(allPainted(registry)).toHaveLength(2);
+    rerender({ selectedId: null, ...HIDDEN });
+    expect(allPainted(registry)).toEqual([]);
+    rerender({ selectedId: "a2", ...HIDDEN });
+    expect(allPainted(registry)).toEqual(["second passage"]);
+    act(() => vi.advanceTimersByTime(BLINK_MS * 4));
+    expect(allPainted(registry)).toEqual([]);
+    rerender({ selectedId: "a2", shown: true, blinkSelected: false });
+    // Both threads, and the open one painted heavier above them.
+    expect(paintedTexts(registry)).toEqual({ "bshd-hl-c0": ["first passage", "second passage"], "bshd-hl-selected": ["second passage"] });
   });
 });

@@ -48,6 +48,8 @@ const PATHS = {
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   stats: "M5 20V10M12 20V4M19 20v-7",
   eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+  // The same eye, struck through: what is hidden can be shown again.
+  "eye-off": "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 4l16 16",
   lock: "M6 11h12v9H6zM9 11V7a3 3 0 0 1 6 0v4",
   shield: "M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z",
   check: "m5 13 4.5 4.5L19 7",

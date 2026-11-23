@@ -133,6 +133,8 @@ export function ViewerToolbar({
   peers,
   following,
   onToggleFollow,
+  othersShown,
+  onToggleOthers,
   commentsOpen,
   onToggleComments,
   canEdit,
@@ -179,6 +181,9 @@ export function ViewerToolbar({
   peers: Peer[];
   following: string | null;
   onToggleFollow: (uid: string) => void;
+  /** Whether comments and others' activity are drawn, and the eye that switches it (PresenceBar). */
+  othersShown?: boolean;
+  onToggleOthers?: () => void;
   commentsOpen: boolean;
   /** Absent for a reader who came through a folder's link: they have no threads to open. */
   onToggleComments?: () => void;
@@ -339,7 +344,7 @@ export function ViewerToolbar({
         <div className="viewer-account">
           <AccountMenu extra={goTo} />
         </div>
-        <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} />
+        <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} othersShown={othersShown} onToggleOthers={onToggleOthers} />
         <div className="viewer-toolbar-actions">
           {paneToggle}
           {row.map((action) => (
@@ -387,7 +392,7 @@ export function ViewerToolbar({
         />
       ) : null}
 
-      <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} />
+      <PresenceBar peers={peers} following={following} onToggleFollow={onToggleFollow} othersShown={othersShown} onToggleOthers={onToggleOthers} />
 
       <div className="viewer-toolbar-actions">
         {paneToggle}

@@ -45,10 +45,19 @@ export function PresenceBar({
   peers: given,
   following,
   onToggleFollow,
+  othersShown,
+  onToggleOthers,
 }: {
   peers: Peer[];
   following: string | null;
   onToggleFollow: (uid: string) => void;
+  /**
+   * Whether comments and others' activity are drawn over the document (SPEC
+   * §6, §16), switched by the eye after the chips. The ⋮ menu has the same
+   * switch for a reader alone, when there are no chips to sit beside.
+   */
+  othersShown?: boolean;
+  onToggleOthers?: () => void;
 }) {
   // Each by their short name: the one their profile holds, or the one their
   // presence carries, or their address's.
@@ -70,12 +79,15 @@ export function PresenceBar({
     const measure = () => {
       const chips = Array.from(bar.querySelectorAll<HTMLElement>(":scope > .presence-chip"));
       const more = bar.querySelector<HTMLElement>(":scope > .presence-more");
+      const eye = bar.querySelector<HTMLElement>(":scope > .presence-others");
       const style = getComputedStyle(bar);
-      const inner = bar.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      const gap = parseFloat(style.columnGap) || 0;
+      // The eye is always shown, so its room comes off before any chip's.
+      const inner = bar.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0) - (eye ? eye.offsetWidth + gap : 0);
       setShown(
         chipsThatFit(
           chips.map((chip) => chip.offsetWidth),
-          parseFloat(style.columnGap) || 0,
+          gap,
           bar.clientWidth > 0 ? inner : 0,
           more?.offsetWidth ?? 0,
         ),
@@ -145,6 +157,18 @@ export function PresenceBar({
           </button>
         )}
       />
+      {onToggleOthers ? (
+        <button
+          type="button"
+          className="presence-others"
+          aria-pressed={othersShown !== false}
+          aria-label="Show comments and others' activity"
+          title={othersShown !== false ? "Hide comments and others' activity" : "Show comments and others' activity"}
+          onClick={onToggleOthers}
+        >
+          <Icon name={othersShown !== false ? "eye" : "eye-off"} size={14} />
+        </button>
+      ) : null}
     </div>
   );
 }

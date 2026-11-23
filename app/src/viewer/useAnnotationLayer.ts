@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Draws highlights, and stops the moment editing begins (SPEC §6, §6a).
+// Draws highlights, hides them on request, and stops the moment editing begins (SPEC §6, §6a).
 
 import { useEffect, useRef, useState } from "react";
 import { rangeFromAnchor } from "../annotation/anchor";
@@ -10,9 +10,12 @@ import {
   clearHighlights,
   ensureHighlightStyles,
   redrawHighlights,
+  lightHighlight,
   removeHighlightStyles,
+  setHighlightsShown,
   setSelectedHighlight,
 } from "../annotation/highlighter";
+import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 import { attachOutboundLinks, openBeside } from "./outboundLinks";
@@ -31,6 +34,11 @@ import { attachOutboundLinks, openBeside } from "./outboundLinks";
  * run by the time the editor attaches. Changing the declaration order in
  * DocViewer silently breaks that, which is why it is stated at both ends.
  */
+/** How long each light and each dark of the blink lasts. */
+export const BLINK_MS = 250;
+/** How long the passage stays lit, once, under reduced motion. */
+export const BLINK_STILL_MS = 1000;
+
 export function useAnnotationLayer(options: {
   mode: FrameMode;
   doc: Document | null;
@@ -38,8 +46,16 @@ export function useAnnotationLayer(options: {
   annotations: Annotation[];
   selectedId: string | null;
   onSelect: (annId: string) => void;
+  /** False while the reader hides comments, or presents: drawn, but not shown (SPEC §6). */
+  shown?: boolean;
+  /**
+   * While hidden by the reader's own switch, a thread they open has its
+   * passage blinked twice and then nothing marked, so they can see what it is
+   * about. Never while presenting, which passes false.
+   */
+  blinkSelected?: boolean;
 }): { orphaned: string[]; stale: string[] } {
-  const { mode, doc, epoch, annotations, selectedId, onSelect } = options;
+  const { mode, doc, epoch, annotations, selectedId, onSelect, shown = true, blinkSelected = false } = options;
   const enabled = mode.kind === "reading";
   const [orphaned, setOrphaned] = useState<string[]>([]);
   const [stale, setStale] = useState<string[]>([]);
@@ -103,6 +119,44 @@ export function useAnnotationLayer(options: {
     if (!enabled || !doc) return;
     setSelectedHighlight(doc, selectedId);
   }, [enabled, doc, epoch, selectedId, annotations]);
+
+  // After the draw, so a document that loads while hidden comes up hidden.
+  useEffect(() => {
+    if (!enabled || !doc) return;
+    setHighlightsShown(doc, shown);
+  }, [enabled, doc, epoch, shown, annotations]);
+
+  /**
+   * A thread opened while everything is hidden: its passage lights, goes out,
+   * lights and goes out, about a second in all, and nothing is left marked.
+   * Under reduced motion it lights once, for a second, without blinking. Only
+   * when the selection CHANGES: turning the switch off with a thread open
+   * blinks nothing.
+   */
+  const reduceMotion = usePrefersReducedMotion();
+  const lastSelected = useRef<string | null>(null);
+  useEffect(() => {
+    const changed = selectedId !== lastSelected.current;
+    lastSelected.current = selectedId;
+    if (!changed || !enabled || !doc || !blinkSelected || !selectedId) return;
+    const steps = reduceMotion ? [true] : [true, false, true];
+    const every = reduceMotion ? BLINK_STILL_MS : BLINK_MS;
+    let step = 0;
+    lightHighlight(doc, selectedId, steps[0]);
+    const timer = setInterval(() => {
+      step += 1;
+      if (step >= steps.length) {
+        clearInterval(timer);
+        lightHighlight(doc, null, false);
+        return;
+      }
+      lightHighlight(doc, selectedId, steps[step]);
+    }, every);
+    return () => {
+      clearInterval(timer);
+      lightHighlight(doc, null, false);
+    };
+  }, [enabled, doc, epoch, blinkSelected, selectedId, reduceMotion]);
 
   return { orphaned, stale };
 }

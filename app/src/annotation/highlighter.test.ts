@@ -327,6 +327,17 @@ describe("inside SVG text", () => {
     expect(seen).toEqual(["a1"]);
   });
 
+  it("hides with the rest while comments are hidden, and comes back", async () => {
+    const { setHighlightsShown } = await import("./highlighter");
+    const doc = makeDoc(figure);
+    highlightRange(doc, rangeOver(doc, "#lane"), "a1");
+    setHighlightsShown(doc, false);
+    expect(doc.querySelector("tspan")!.getAttribute("data-hidden")).toBe("true");
+    expect(doc.getElementById(HL_STYLE_ID)!.textContent).toMatch(/tspan\.bshd-hl\[data-hidden\]\s*\{[^}]*stroke:\s*none/);
+    setHighlightsShown(doc, true);
+    expect(doc.querySelector("tspan")!.hasAttribute("data-hidden")).toBe(false);
+  });
+
   it("is decoration the invariant assertion catches", () => {
     const doc = makeDoc(figure);
     highlightRange(doc, rangeOver(doc, "#lane"), "a1");

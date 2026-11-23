@@ -310,6 +310,26 @@
 /* Its slot is kept when nobody is folded, so the bar's width never depends on
    whether it is folding. */
 .presence-more[data-idle] { visibility: hidden; }
+/* Comments and others' activity, shown or hidden over the document: pressed while shown. */
+.presence-others {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  transition: none;
+}
+.presence-others[aria-pressed="false"] {
+  border-color: currentColor;
+  color: var(--color-ink);
+}
 /* The person being followed is folded: the button says so, in their colour. */
 .presence-more[data-following] {
   border-color: currentColor;
