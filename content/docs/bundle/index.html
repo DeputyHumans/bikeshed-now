@@ -261,10 +261,10 @@ figcaption {
 }
 .dogfood p { margin: 0; }
 .hl {
-  border: 1px solid var(--annotation);
-  border-radius: 2px;
-  background: transparent;
+  background: color-mix(in srgb, var(--annotation) 16%, transparent);
   color: inherit;
+  text-decoration: underline 2px var(--annotation);
+  text-underline-offset: 0.18em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
@@ -362,8 +362,8 @@ figcaption {
 .ways p { font-size: 0.86rem; margin: 0; }
 
 /* --- Comments: a still of the real interaction --------------------------
-   The highlight is an OUTLINE over a transparent background, the way the
-   viewer draws it. A fill would advertise something that does not exist. */
+   The highlight is a light tint and an underline in the author's colour,
+   the way the viewer paints it. A box would advertise one that is not there. */
 
 .mock {
   display: grid;
@@ -838,7 +838,7 @@ footer p { margin: 0 0 6px; }
   <p class="eyebrow">03</p>
   <h2>Comment on the exact words</h2>
   <p class="answer">Select a passage. A button appears. The comment stays attached to those words.</p>
-  <p>On a phone, press and hold to select. The buttons sit at the bottom of the screen, clear of the phone's own menu. Tap a highlighted passage to read its comments.</p>
+  <p>On a phone, press and hold to select. The buttons sit at the bottom of the screen, clear of the phone's own menu. Tap a highlighted passage, or open Comments, to read its comments.</p>
 
   <figure>
     <div class="panel mock">
@@ -969,7 +969,7 @@ footer p { margin: 0 0 6px; }
     <li><strong>Edit</strong> works on the document itself, not on a copy. Changes save to a draft as you type, and <strong>Done</strong> leaves the editor with the draft kept.</li>
     <li>Working on the files on your own computer instead? <strong>Upload a new version</strong>, in the document's menu or on its card in the workspace, publishes a page, a folder or a zip in the document's place, at the same address. Choose a few files instead, a new screenshot say, and each replaces the file of the same name while everything else stays. Dropping them onto the open document does the same, and the dialog lists what each file replaces, adds or removes before anything is published. It doesn't wait for comments, which stay with the version they were written about. It discards an unpublished draft, and it waits while somebody is in the editor.</li>
     <li>Publishing identical content changes nothing, so it is safe to repeat.</li>
-    <li>Other people in the document appear at the top by first name and last initial, Dana K say, each in a colour of their own. Point at a name to see their address. Click a name to follow where they are reading: their slide in a deck, and the same words on a screen of another size. Moving on your own stops following. The person you follow can see it, and anyone following you has an eye on their name, which comes first.</li>
+    <li>Other people in the document appear at the top by first name and last initial, Dana K say, each in a colour of their own. Point at a name to see their address. Click a name to follow where they are reading: their slide in a deck, and the same words on a screen of another size. Moving on your own stops following. The person you follow can see it, and anyone following you has an eye on their name, which comes first. In a deck, the slide list shows who is on each slide. The eye after the names, or <em>Hide comments and others' activity</em> in ⋮, hides every comment highlight and everybody's cursor for a clean page, until you show them again or reload.</li>
   </ul>
 </div>
 
@@ -1052,7 +1052,7 @@ footer p { margin: 0 0 6px; }
       <dt>Details</dt>
       <dd>Tap the version beside the title, such as <em>v7 · 6 min</em>, or choose <em>Details…</em> in the ⋮ menu, which is where a phone keeps it: how long the document takes to read, when it was made and last updated, by whom and through what, and every version. Cards in the workspace say the same in one line: <em>6 min read · Updated 2h ago</em>, with what an agent updated it through.</dd>
       <dt>Present</dt>
-      <dd>Full screen, without the app around it, with a slide counter.</dd>
+      <dd>Full screen, with a slide counter, and nothing but the deck: no app around it, and no comments or other people's cursors on it.</dd>
       <dt>Print</dt>
       <dd>Print the document or save it as a PDF, with the owner’s marking stamped on it. <kbd>Ctrl</kbd>+<kbd>P</kbd> or <kbd>⌘</kbd>+<kbd>P</kbd> does the same. On a phone it is in the ⋮ <em>More actions</em> menu, as <em>Print or save as PDF</em>.</dd>
       <dt>On a phone</dt>
