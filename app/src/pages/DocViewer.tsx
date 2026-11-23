@@ -13,7 +13,7 @@ import { applySuggestion, resolveSuggestion, trimToText } from "../annotation/ex
 import { Sidebar } from "../annotation/Sidebar";
 import { commitVersion, publishSaved, UnresolvedCommentsError, StaleVersionError } from "../edit";
 import { downloadEntry, downloadSource, downloadZip } from "../export/html";
-import { printDoc } from "../export/pdf";
+import { incompletePrintMessage, printDoc } from "../export/pdf";
 import { MARKING_OFF } from "../export/labels";
 import { useCoarsePointer, useIsCondensed, useIsSingleColumn } from "../hooks/useMediaQuery";
 
@@ -790,14 +790,22 @@ export function DocViewer() {
   /** The export: a scrubbed, stamped snapshot of what the frame shows (SPEC §20). */
   const printCurrent = useCallback(() => {
     if (!frame.doc) return;
+    // The export waits for the files beside the page, which can take a second
+    // or two: it says so while it does, and a press during the wait opens no
+    // second dialog (printDoc resolves false and nothing is counted).
     void printDoc(frame.doc, {
       baseHref: contentBase(docId, doc.currentVersion, linkKey || undefined),
       marking: doc.marking,
       title: doc.title,
       version: doc.currentVersion,
       user: emailLower,
-    }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Could not open a print view."));
-    logEvent({ name: "export", params: { kind: "pdf" } });
+      onSlow: (ready) => void toast.during("Preparing the print…", ready),
+      onIncomplete: (missing) => toast.error(incompletePrintMessage(missing)),
+    })
+      .then((printed) => {
+        if (printed) logEvent({ name: "export", params: { kind: "pdf" } });
+      })
+      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Could not open a print view."));
   }, [frame.doc, docId, doc.currentVersion, linkKey, doc.marking, doc.title, emailLower, toast]);
 
   // The owner stays on the page: it is theirs to read in the Trash, and the

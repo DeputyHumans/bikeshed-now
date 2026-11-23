@@ -1,0 +1,13 @@
+{
+  "oracle": "A17.7 a page whose pictures are files beside it prints with them: with every file's answer held 1.2 s, print() is called only once every picture has its pixels, a lazy one far down the page included, and the stylesheet's background has arrived; past a second the reader is told the print is being prepared, until it opens, and a second press opens no second print; a picture still not there at 15 s is printed without, and the reader is told 1 picture had not loaded",
+  "what": "print assets: lazy pictures left lazy in the snapshot",
+  "target": {
+    "spec": "e2e/specs/functional/a17-export.spec.mjs",
+    "case": "A17.7 a page whose pictures are files beside it prints with them: with every file's answer held 1.2 s, print() is called only once every picture has its pixels, a lazy one far down the page included, and the stylesheet's background has arrived; past a second the reader is told the print is being prepared, until it opens, and a second press opens no second print; a picture still not there at 15 s is printed without, and the reader is told 1 picture had not loaded",
+    "suite": "functional"
+  },
+  "stack": [],
+  "expect": {
+    "message": "no picture in the snapshot is lazy"
+  }
+}

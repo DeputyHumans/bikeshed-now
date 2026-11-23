@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **A printed or saved PDF has the pictures that sit beside the page as files.** Print waited a fixed quarter of a second, then printed whatever the print view had by then. The print view asks for every file beside the page again, and a member's SVGs are never cached, so on a real document 0 of 223 SVGs and 12 of 19 photos had arrived when the dialog opened, and the PDF showed blank boxes where they belonged. Print now waits until the page, every picture and its fonts have loaded, for at most 15 seconds. A picture marked to load lazily is fetched at once, because the print view has nothing to scroll it into. After a second you see *Preparing the print…* until the dialog opens, and pressing Print again meanwhile does nothing. If something still has not arrived at 15 seconds, it prints anyway and tells you how many pictures may be missing (SPEC §20).
+
 ## 0.41.2 — 2026-11-20
 
 ### Fixed

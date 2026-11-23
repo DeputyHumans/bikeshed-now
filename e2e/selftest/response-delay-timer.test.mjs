@@ -17,7 +17,7 @@ test('an early timer wake cannot release the backend response before its request
   runInNewContext(source.replace('export async function', 'async function') + '\nglobalThis.holdResponse = delayHostingResponse;', scope);
   const user = { target: { origin: 'http://127.0.0.1:1' }, page: { route: async (_match, callback) => { handler = callback; }, unroute: async () => {} } };
   const hold = await scope.holdResponse(user, '/commit', { delayMs: 500 });
-  const pending = handler({ request: () => ({ method: () => 'POST' }), fetch: async () => ({ status: () => 200, dispose: async () => {} }), fulfill: async () => { fulfilled = true; } });
+  const pending = handler({ request: () => ({ method: () => 'POST', url: () => 'http://127.0.0.1:1/commit' }), fetch: async () => ({ status: () => 200, dispose: async () => {} }), fulfill: async () => { fulfilled = true; } });
   await new Promise(setImmediate);
   assert.equal(timers[0].ms, 500);
   now = 499; timers.shift().callback();

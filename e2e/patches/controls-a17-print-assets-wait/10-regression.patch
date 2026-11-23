@@ -1,0 +1,11 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -344,7 +344,7 @@
+ 
+     // Printing before the files beside the page arrive prints blank pictures
+     // and unstyled text, which looks like a bug in the document.
+-    const waiting = waitForPrintAssets(fdoc);
++    const waiting: Promise<PrintAssets> = new Promise((r) => setTimeout(() => r({ settled: true, images: 0, other: false }), 250));
+     const slow = setTimeout(() => opts.onSlow?.(waiting.then(() => undefined)), PRINT_SLOW_MS);
+     const loaded = await waiting;
+     clearTimeout(slow);

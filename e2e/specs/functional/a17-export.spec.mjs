@@ -76,6 +76,13 @@
  *         content's full height for the print and the PDF paginates; it
  *         closes again with the reader's scroll position back; no stamp, no
  *         print frame; on paper the viewer's chrome is hidden
+ *   17.7  a page whose pictures are files beside it, every file's answer
+ *         held 1.2 s: print() is called only once every picture has its
+ *         pixels (a lazy one far down included) and the stylesheet's
+ *         background has arrived; "Preparing the print…" shows from the
+ *         first second until the print opens; a second press opens no
+ *         second print; one picture held past 15 s is printed without, and
+ *         the reader is told so
  *
  * Expected behaviour is SPEC §20 (the mechanism, the layers, "Safety"), §2
  * (POST /marking, GET /download, /content ~k), §6 (highlights are never
@@ -87,7 +94,8 @@
  * e2e/lib/ talks to the stack.
  *
  * How the print is observed. printDoc (app/src/export/pdf.ts) appends a
- * sandboxed iframe, writes the snapshot into it, waits 250 ms and calls
+ * sandboxed iframe, writes the snapshot into it, waits until its document,
+ * its pictures and its fonts have loaded (at most 15 s) and calls
  * contentWindow.print(). User.capturePrint (lib/browser.mjs) replaces that
  * frame's print() with a recorder, so what is captured is the document at
  * the moment print() is called, and no dialog opens; `printExtract` below
@@ -162,7 +170,8 @@ import { cliHome, runCli } from "../../lib/cli.mjs";
 import { createHttp } from "../../lib/http.mjs";
 import { colourPixels, pngSize } from "../../lib/png.mjs";
 import { holdListen } from "../../lib/sync.mjs";
-import { postThumb } from "../../lib/thumbs.mjs";
+import { postThumb, tinyPng } from "../../lib/thumbs.mjs";
+import { delayHostingResponse } from "../../lib/response-delay.mjs";
 import { patchCapability } from "../../lib/options.mjs";
 
 const target = currentTarget();
@@ -173,8 +182,9 @@ after(() => (target ? closeAdmin(target) : undefined));
  * minutes on the loaded shared stack, and the thirteen cases' own timeouts
  * sum to 110 minutes, past the 60 the scan caps a computed budget at; a stall
  * late in the file must end its own case, not cancel the cases after it.
+ * A17.7 added five minutes.
  */
-export const E2E_FILE_TIMEOUT_MS = 115 * 60_000;
+export const E2E_FILE_TIMEOUT_MS = 120 * 60_000;
 
 const BOTH = ["local", "prod"];
 const sha = (b) => createHash("sha256").update(b).digest("hex");
@@ -1801,5 +1811,153 @@ scenario("A17.6 File → Print (the browser's own print): the frame opens to its
   const chrome = await u.page.evaluate((selectors) => Object.fromEntries(selectors.map((s) => [s, document.querySelector(s) ? getComputedStyle(document.querySelector(s)).display : "absent"])), chromeSelectors);
   await u.page.emulateMedia({ media: null });
   assert.deepEqual(chrome, Object.fromEntries(chromeSelectors.map((s) => [s, chromeBefore[s] ? "none" : "absent"])), "all rendered viewer chrome is hidden in print media");
+  noPageErrors([u]);
+});
+
+/**
+ * A17.7's page: every picture a file beside it, as a deck built with its
+ * pictures in a folder is (ADR 0036). Forty SVGs, which the content proxy
+ * never lets a member's browser keep (SPEC §17), so the print frame asks for
+ * each again; two photos; a background from the stylesheet; one picture
+ * marked lazy far below the fold; and `last.svg`, which the ceiling step
+ * holds back. The harness routes every request, so no answer comes from the
+ * browser's cache, and every file costs the print frame a request.
+ */
+const ASSET_SVGS = 40;
+const ASSET_HOLD_MS = 1_200;
+const ASSETS_CSS = ".hero { height: 40px; background-image: url(bg.png); }\nimg { display: inline-block; }\n";
+function assetSvg(i) {
+  const fill = `#${(0x203040 + i * 0x030507).toString(16).padStart(6, "0").slice(-6)}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="24" fill="${fill}"/><text x="4" y="16" font-size="12" fill="#fff">${i}</text></svg>\n`;
+}
+function assetsEntries(title) {
+  const figures = Array.from({ length: ASSET_SVGS }, (_, i) => `<img src="art/s${i}.svg" alt="figure ${i}" width="48" height="24">`).join("\n");
+  const html = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>${esc(title)}</title>\n<link rel="stylesheet" href="style.css">\n</head>\n<body>\n<h1>${esc(title)}</h1>\n<div class="hero">A page whose pictures are files beside it.</div>\n${figures}\n<img src="photo-1.png" alt="a red photo" width="32" height="32">\n<img src="photo-2.png" alt="a green photo" width="32" height="32">\n<img src="last.svg" alt="the last figure" width="48" height="24">\n<div style="height: 4000px"></div>\n<img src="lazy.png" loading="lazy" alt="a picture far down" width="32" height="32">\n</body>\n</html>\n`;
+  return {
+    "index.html": html,
+    "style.css": ASSETS_CSS,
+    ...Object.fromEntries(Array.from({ length: ASSET_SVGS }, (_, i) => [`art/s${i}.svg`, assetSvg(i)])),
+    "photo-1.png": tinyPng({ width: 4, height: 4, rgb: [200, 30, 30] }),
+    "photo-2.png": tinyPng({ width: 4, height: 4, rgb: [30, 160, 60] }),
+    "lazy.png": tinyPng({ width: 4, height: 4, rgb: [30, 60, 200] }),
+    "bg.png": tinyPng({ width: 4, height: 4, rgb: [240, 200, 40] }),
+    "last.svg": assetSvg(99),
+  };
+}
+const ASSET_IMAGES = ASSET_SVGS + 4;
+
+/**
+ * User.capturePrint's `extract` for A17.7, at the print() call: each picture
+ * of the print frame's document, whether it had its pixels, and the
+ * stylesheet's background as the frame's own resource timing saw it. Sent as
+ * source, so it uses nothing but its argument.
+ */
+function assetsExtract(d) {
+  const imgs = Array.from(d.images);
+  const shown = (i) => i.complete && i.naturalWidth > 0;
+  const entries = d.defaultView?.performance?.getEntriesByType?.("resource") ?? [];
+  return {
+    readyState: d.readyState,
+    images: imgs.length,
+    notLoaded: imgs.filter((i) => !shown(i)).map((i) => i.getAttribute("src")),
+    lazy: imgs.filter((i) => (i.getAttribute("loading") ?? "").trim().toLowerCase() === "lazy").length,
+    resources: entries.length,
+    background: entries.filter((e) => new URL(e.name).pathname.endsWith("/bg.png")).map((e) => ({ initiator: e.initiatorType, responseEnd: e.responseEnd })),
+  };
+}
+
+scenario("A17.7 a page whose pictures are files beside it prints with them: with every file's answer held 1.2 s, print() is called only once every picture has its pixels, a lazy one far down the page included, and the stylesheet's background has arrived; past a second the reader is told the print is being prepared, until it opens, and a second press opens no second print; a picture still not there at 15 s is printed without, and the reader is told 1 picture had not loaded", { tiers: BOTH, inconclusiveOnCaseTimeout: true, timeoutMs: 300_000 }, async (ctx) => {
+  const { owner, accounts } = await ownerSession(ctx);
+  const title = `Print assets ${tag()}`;
+  const entries = assetsEntries(title);
+  const files = Object.keys(entries).length;
+  const up = await publishDoc(ctx, owner.http, { body: await zipBundle(entries, target), filename: "assets.zip", title, name: "a177-assets" });
+  precondition(up.versionId === "v1" && up.json?.fileCount === files, `the bundle published as ${files} files: ${JSON.stringify(up.json)}`);
+
+  const u = await signedIn(ctx, accounts[0], "owner");
+  await openDoc(ctx, u, up.docId);
+  ctx.step("the reading frame shows every picture above the fold: the files serve");
+  const reading = await eventually(
+    () => u.page.evaluate(() => {
+      const d = document.querySelector("iframe.doc-frame")?.contentDocument;
+      const imgs = Array.from(d?.images ?? []).filter((i) => i.getAttribute("loading") !== "lazy");
+      const missing = imgs.filter((i) => !(i.complete && i.naturalWidth > 0)).map((i) => i.getAttribute("src"));
+      return imgs.length > 0 && missing.length === 0 ? { shown: imgs.length } : false;
+    }),
+    { timeout: SLOW.timeout, interval: 250, message: "the reading frame showed every picture above the fold" },
+  );
+  precondition(reading.shown === ASSET_IMAGES - 1, `the reading frame showed ${reading.shown} pictures, not ${ASSET_IMAGES - 1}`);
+
+  const prefix = `/content/${up.docId}/v1/`;
+  ctx.step(`every answer under ${prefix} held ${ASSET_HOLD_MS} ms; Print, and Print again 300 ms later`);
+  const busy = await u.watchFor(".toast-busy", "Preparing the print…");
+  const hold = await delayHostingResponse(u, prefix, { delayMs: ASSET_HOLD_MS, method: "GET", prefix: true });
+  let pressed = 0;
+  let rec;
+  let rows;
+  try {
+    rec = await u.capturePrint(
+      async () => {
+        await printButton(u).click();
+        pressed = Date.now();
+        await u.page.waitForTimeout(300); // the second press is meant to land inside the wait
+        await printButton(u).click();
+      },
+      { extract: assetsExtract, match: PRINT_FRAME, timeout: 60_000 },
+    );
+  } finally {
+    rows = await hold.restore();
+  }
+  ctx.ev.json("held", rows);
+  precondition(rows.length >= files - 1, `the print frame's requests were held: ${rows.length} rows`);
+  // The first frame is judged first: with a short wait, the second press
+  // lands after its print and makes a frame of its own, which is a symptom
+  // of the same defect and asserted after it.
+  const [f] = rec.frames;
+  precondition(f.printed === 1 && f.snaps.length === 1 && f.snaps[0].extra, `print() called once and read: ${JSON.stringify({ printed: f.printed, error: f.snaps[0]?.error, extractError: f.snaps[0]?.extractError })}`);
+  const s = f.snaps[0];
+  ctx.ev.json("at-print", { t: s.t, pressed, ...s.extra });
+  ctx.step(`print() ${s.t - pressed} ms after the press: ${JSON.stringify(s.extra)}`);
+  assert.equal(s.extra.images, ASSET_IMAGES, "the snapshot holds every picture");
+  assert.equal(s.extra.lazy, 0, "no picture in the snapshot is lazy");
+  assert.deepEqual(s.extra.notLoaded, [], "every picture had loaded when print() was called");
+  assert.ok(s.extra.background.some((e) => e.responseEnd > 0), `the stylesheet's background had arrived when print() was called: ${JSON.stringify(s.extra.background)} of ${s.extra.resources} resources`);
+  assert.equal(rec.frames.length, 1, "a second press while the first print was being prepared opened no second print");
+
+  const sightings = await eventually(async () => {
+    const r = await busy.sightings();
+    return r.length > 0 && r.every((row) => row.gone !== null) ? r : false;
+  }, { timeout: 10_000, interval: 100, message: "the busy toast went once the print opened" });
+  await busy.stop();
+  ctx.ev.json("busy-toast", sightings);
+  assert.equal(sightings.length, 1, "one \"Preparing the print…\" for one print");
+  const [shown] = sightings;
+  assert.ok(shown.t - pressed >= 900, `"Preparing the print…" waited for the first second: shown ${shown.t - pressed} ms after the press`);
+  assert.ok(shown.t < s.t && shown.goneAt >= s.t - 100, `it stayed until the print opened: shown ${shown.t}, gone ${shown.goneAt}, print ${s.t}`);
+
+  ctx.step("last.svg's answer held 20 s, nothing else; Print");
+  const since = u.toastMark();
+  const stuck = await delayHostingResponse(u, `${prefix}last.svg`, { delayMs: 20_000, method: "GET" });
+  let pressedAgain = 0;
+  let late;
+  try {
+    late = await u.capturePrint(
+      async () => {
+        await printButton(u).click();
+        pressedAgain = Date.now();
+      },
+      { extract: assetsExtract, match: PRINT_FRAME, timeout: 60_000 },
+    );
+  } finally {
+    await stuck.restore();
+  }
+  precondition(late.frames.length === 1 && late.frames[0].snaps[0]?.extra, `one print frame, read: ${JSON.stringify(late.frames.map((x) => ({ printed: x.printed, hookError: x.hookError })))}`);
+  const s2 = late.frames[0].snaps[0];
+  ctx.ev.json("at-ceiling", { t: s2.t, pressed: pressedAgain, ...s2.extra });
+  assert.deepEqual(s2.extra.notLoaded, ["last.svg"], "at the ceiling, print() is called with only the held picture missing");
+  const waited = s2.t - pressedAgain;
+  assert.ok(waited >= 14_500 && waited < 20_000, `print() was called at the 15 s ceiling, before the held answer: ${waited} ms after the press`);
+  const warning = await u.waitForToast((t) => t.kind === "error" && t.text === "1 picture hadn't loaded after 15 seconds, so the PDF may be missing it.", { since, timeout: 10_000 });
+  ctx.ev.json("ceiling-toast", warning);
   noPageErrors([u]);
 });

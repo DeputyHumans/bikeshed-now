@@ -1,0 +1,10 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -321,7 +321,6 @@
+   sourceDoc: Document,
+   opts: PrintOptions & PrintHooks = {},
+ ): Promise<boolean> {
+-  if (preparing) return false;
+   preparing = true;
+   try {
+     const html = buildPrintHtml(sourceDoc, opts);

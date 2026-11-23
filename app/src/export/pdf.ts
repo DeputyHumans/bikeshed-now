@@ -29,7 +29,23 @@ import type { Marking } from "../types";
  * Residual risk, accepted: a document can blank its OWN entire body, yielding an
  * empty PDF. Self-defeating, and no content leaks. A cryptographic guarantee
  * would need server-side rendering; client-side print is the chosen trade.
+ *
+ * THE WAIT. The print frame fetches every file beside the page again, through
+ * the content proxy, and a member's SVGs are never cached (SPEC §17), so a
+ * page with hundreds of pictures needs a second or two. print() is called once
+ * the frame's document has loaded, every picture is complete and no font is
+ * loading, or at PRINT_CEILING_MS with what has arrived, after saying what has
+ * not. A fixed 250 ms used to stand here, and production printed 0 of 223
+ * SVGs. The wait polls from this window: WebKit never runs a parent's
+ * listener on a frame sandboxed without allow-scripts, so neither an event
+ * nor a promise of the frame's can be relied on to say it is done.
  */
+
+/** How long the export waits for the snapshot's files before it prints without them. */
+export const PRINT_CEILING_MS = 15_000;
+/** How long the wait runs before the reader is told the print is being prepared. */
+export const PRINT_SLOW_MS = 1_000;
+const PRINT_POLL_MS = 50;
 
 /**
  * Every property a document could otherwise use to hide the stamp.
@@ -147,6 +163,12 @@ export function buildPrintHtml(sourceDoc: Document, opts: PrintOptions = {}): st
 
   parsed.querySelectorAll("script").forEach((s) => s.remove());
   scrubActiveContent(parsed);
+  // The print frame is 0×0 and hidden, so a lazy picture or frame is never
+  // near its viewport: it would not be fetched, and the wait would run to its
+  // ceiling for it. The snapshot fetches everything at once.
+  for (const el of Array.from(parsed.querySelectorAll("img[loading], iframe[loading]"))) {
+    if (el.getAttribute("loading")?.trim().toLowerCase() === "lazy") el.setAttribute("loading", "eager");
+  }
 
   const head = parsed.head ?? parsed.documentElement;
   if (opts.baseHref) {
@@ -228,8 +250,67 @@ export function activatePrintMarks(doc: Document): void {
   }
 }
 
+/** What the print frame had not loaded: pictures not complete, and whether a stylesheet, a font or the document itself still was. */
+export interface PrintMissing {
+  images: number;
+  other: boolean;
+}
+
+export interface PrintAssets extends PrintMissing {
+  /** Whether everything loaded before the ceiling. */
+  settled: boolean;
+}
+
+function missingFrom(doc: Document): PrintMissing {
+  let images = 0;
+  for (const img of Array.from(doc.images)) if (!img.complete) images += 1;
+  // readyState is "complete" only after the load event, which waits for the
+  // stylesheets, pictures, objects and frames the parser found.
+  const other = doc.readyState !== "complete" || doc.fonts?.status === "loading";
+  return { images, other };
+}
+
 /**
- * Open the browser's print dialog for a stamped snapshot.
+ * Resolve once the print frame's document has everything it asked for, or at
+ * the ceiling with what it still lacked (see THE WAIT above).
+ *
+ * The first look is a timer away even when nothing is loading, so print() is
+ * never called in the task that wrote the frame.
+ */
+export function waitForPrintAssets(doc: Document, ceilingMs = PRINT_CEILING_MS): Promise<PrintAssets> {
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const look = () => {
+      const missing = missingFrom(doc);
+      if (missing.images === 0 && !missing.other) resolve({ settled: true, ...missing });
+      else if (Date.now() - started >= ceilingMs) resolve({ settled: false, ...missing });
+      else setTimeout(look, PRINT_POLL_MS);
+    };
+    setTimeout(look, PRINT_POLL_MS);
+  });
+}
+
+/** What the reader is told when the export prints without some of the document's files. */
+export function incompletePrintMessage(missing: PrintMissing): string {
+  const after = `after ${Math.round(PRINT_CEILING_MS / 1000)} seconds`;
+  if (missing.images === 1) return `1 picture hadn't loaded ${after}, so the PDF may be missing it.`;
+  if (missing.images > 1) return `${missing.images} pictures hadn't loaded ${after}, so the PDF may be missing them.`;
+  return `Some of this document's files hadn't loaded ${after}, so the PDF may be missing them.`;
+}
+
+export interface PrintHooks {
+  /** Called once if the wait passes PRINT_SLOW_MS, with a promise that settles when it ends. */
+  onSlow?: (ready: Promise<void>) => void;
+  /** Called just before print() when the ceiling came first. */
+  onIncomplete?: (missing: PrintMissing) => void;
+}
+
+/** A print being prepared: a second press during the wait would open a second dialog. */
+let preparing = false;
+
+/**
+ * Open the browser's print dialog for a stamped snapshot. Resolves `false`,
+ * having done nothing, while another print is still being prepared.
  *
  * When marking is disabled the stamp nodes are simply absent — and every other
  * property here stays unconditional. The sandbox, the script removal, the
@@ -238,34 +319,45 @@ export function activatePrintMarks(doc: Document): void {
  */
 export async function printDoc(
   sourceDoc: Document,
-  opts: PrintOptions = {},
-): Promise<void> {
-  const html = buildPrintHtml(sourceDoc, opts);
-
-  const frame = document.createElement("iframe");
-  frame.setAttribute("aria-hidden", "true");
-  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
-  frame.style.cssText =
-    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
-  document.body.appendChild(frame);
-
-  const fdoc = frame.contentDocument;
-  if (!fdoc) {
-    frame.remove();
-    throw new Error("Could not open a print view.");
-  }
-  fdoc.open();
-  fdoc.write(html);
-  fdoc.close();
-
-  // Give layout, images and fonts a moment to settle. Printing too early
-  // produces a page of unstyled text, which looks like a bug in the document.
-  await new Promise((r) => setTimeout(r, 250));
+  opts: PrintOptions & PrintHooks = {},
+): Promise<boolean> {
+  if (preparing) return false;
+  preparing = true;
   try {
-    activatePrintMarks(fdoc);
-    frame.contentWindow?.focus();
-    frame.contentWindow?.print();
+    const html = buildPrintHtml(sourceDoc, opts);
+
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+    frame.style.cssText =
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+    document.body.appendChild(frame);
+
+    const fdoc = frame.contentDocument;
+    if (!fdoc) {
+      frame.remove();
+      throw new Error("Could not open a print view.");
+    }
+    fdoc.open();
+    fdoc.write(html);
+    fdoc.close();
+
+    // Printing before the files beside the page arrive prints blank pictures
+    // and unstyled text, which looks like a bug in the document.
+    const waiting = waitForPrintAssets(fdoc);
+    const slow = setTimeout(() => opts.onSlow?.(waiting.then(() => undefined)), PRINT_SLOW_MS);
+    const loaded = await waiting;
+    clearTimeout(slow);
+    try {
+      if (!loaded.settled) opts.onIncomplete?.({ images: loaded.images, other: loaded.other });
+      activatePrintMarks(fdoc);
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+    } finally {
+      setTimeout(() => frame.remove(), 1500);
+    }
+    return true;
   } finally {
-    setTimeout(() => frame.remove(), 1500);
+    preparing = false;
   }
 }

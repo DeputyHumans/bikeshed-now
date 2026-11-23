@@ -4,21 +4,25 @@
 /**
  * The real request reaches hosting immediately. Only its response is held,
  * after the server finished handling it. One exact path on this user's own
- * hosting origin is intercepted; redirects are returned to the browser, whose
- * normal isolation route checks their destinations. Call restore in finally.
+ * hosting origin is intercepted, or with `prefix` every path under it (a
+ * version's files beside its page: `/content/{docId}/{versionId}/`, ending in
+ * a slash); redirects are returned to the browser, whose normal isolation
+ * route checks their destinations. Each row names its request's `path`. Call
+ * restore in finally.
  */
-export async function delayHostingResponse(user, path, { delayMs, method = 'POST' } = {}) {
+export async function delayHostingResponse(user, path, { delayMs, method = 'POST', prefix = false } = {}) {
   if (typeof path !== 'string' || !/^\/[^?#]*$/.test(path) || path.startsWith('//')) throw new Error('response delay needs an exact hosting pathname');
+  if (prefix && !path.endsWith('/')) throw new Error('a response delay prefix ends in a slash, so /content/d/v1/ never holds /content/d/v10/');
   if (!Number.isFinite(delayMs) || delayMs <= 0 || delayMs > 30_000) throw new Error('response delay must be in (0, 30000] ms');
   const origin = new URL(user.target.origin).origin;
-  const matches = (url) => url.origin === origin && url.pathname === path;
+  const matches = (url) => url.origin === origin && (prefix ? url.pathname.startsWith(path) : url.pathname === path);
   const rows = [];
   const waiting = new Set();
   let restored = false;
   const handle = async (route) => {
     const request = route.request();
     if (restored || request.method() !== method) return route.fallback();
-    const row = { requestedAt: Date.now(), backendAnsweredAt: null, status: null, releasedAt: null, release: null, error: null };
+    const row = { path: new URL(request.url()).pathname, requestedAt: Date.now(), backendAnsweredAt: null, status: null, releasedAt: null, release: null, error: null };
     rows.push(row);
     let response;
     try {

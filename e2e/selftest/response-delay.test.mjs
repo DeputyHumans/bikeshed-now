@@ -63,6 +63,20 @@ test('a redirected response is returned to the browser before its destination is
   } finally { await hold.restore(); }
 });
 
+test('a prefix holds every path under it, and only those', async () => {
+  const hold = await delayHostingResponse(user, '/files/', { delayMs: 500, method: 'GET', prefix: true });
+  try {
+    const started = Date.now();
+    const got = await user.page.evaluate(() => Promise.all(['/files/a.svg', '/files/b/c.png'].map((p) => fetch(p).then((r) => r.json()))));
+    assert.deepEqual(got, [{ path: '/files/a.svg' }, { path: '/files/b/c.png' }]);
+    assert.ok(Date.now() - started >= 500, 'both answers were held');
+    assert.deepEqual(hold.rows.map((r) => r.path).sort(), ['/files/a.svg', '/files/b/c.png'], 'each row names its own path');
+    assert.deepEqual(await user.page.evaluate(() => fetch('/filesx').then((r) => r.json())), { path: '/filesx' });
+    assert.equal(hold.rows.length, 2, 'a path beside the prefix is not held');
+  } finally { await hold.restore(); }
+  await assert.rejects(delayHostingResponse(user, '/files', { delayMs: 10, prefix: true }), /ends in a slash/);
+});
+
 test('invalid pathname and duration cannot install a route', async () => {
   for (const path of ['https://example.invalid/commit', '//example.invalid/commit', '/commit?x=1']) await assert.rejects(delayHostingResponse(user, path, { delayMs: 10 }), /exact hosting pathname/);
   for (const delayMs of [0, -1, Infinity, 30_001]) await assert.rejects(delayHostingResponse(user, '/commit', { delayMs }), /30000/);

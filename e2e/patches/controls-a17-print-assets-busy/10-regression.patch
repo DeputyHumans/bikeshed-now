@@ -1,0 +1,10 @@
+--- a/app/src/pages/DocViewer.tsx
++++ b/app/src/pages/DocViewer.tsx
+@@ -799,7 +799,6 @@
+       title: doc.title,
+       version: doc.currentVersion,
+       user: emailLower,
+-      onSlow: (ready) => void toast.during("Preparing the print…", ready),
+       onIncomplete: (missing) => toast.error(incompletePrintMessage(missing)),
+     })
+       .then((printed) => {

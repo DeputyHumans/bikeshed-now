@@ -1,0 +1,11 @@
+--- a/app/src/export/pdf.ts
++++ b/app/src/export/pdf.ts
+@@ -167,7 +167,7 @@
+   // near its viewport: it would not be fetched, and the wait would run to its
+   // ceiling for it. The snapshot fetches everything at once.
+   for (const el of Array.from(parsed.querySelectorAll("img[loading], iframe[loading]"))) {
+-    if (el.getAttribute("loading")?.trim().toLowerCase() === "lazy") el.setAttribute("loading", "eager");
++    void el;
+   }
+ 
+   const head = parsed.head ?? parsed.documentElement;
