@@ -8,6 +8,6 @@
   },
   "stack": [],
   "expect": {
-    "message": "1 picture hadn't loaded after 15 seconds"
+    "message": "no matching toast within \\d+ ms \\(seen: busy: Preparing the print…\\)$"
   }
 }
