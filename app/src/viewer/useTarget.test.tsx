@@ -384,6 +384,54 @@ describe("following a peer", () => {
     expect(showing()).toBe(3);
   });
 
+  it("goes to the slide holding the leader's place when their record carries no slide", () => {
+    // A leader whose own viewer did not page the deck shares a place in the
+    // text, and no scroll moves a deck that stacks its slides.
+    const { doc, showing } = stackedDeck();
+    const onNotice = vi.fn();
+    const { rerender } = mount(doc, { selectedId: null, annotations: [], follow: peer({ place: { a: "s3", at: 0 }, viewport: 0 }), onNotice });
+    expect(showing()).toBe(2);
+    // Before the first id, the place names only the one below it.
+    rerender({ selectedId: null, annotations: [], follow: peer({ place: { b: "s4", at: 0.3 }, viewport: 0 }), onNotice });
+    expect(showing()).toBe(3);
+    expect(onNotice).not.toHaveBeenCalled();
+  });
+
+  it("says once that the leader's tab shares no slide, and leaves the deck where it is", () => {
+    // A tab on an app from before slides were shared sends a fraction only,
+    // which on a deck that stacks its slides is always the top.
+    const { doc, showing } = stackedDeck();
+    const onNotice = vi.fn();
+    const { rerender } = mount(doc, { selectedId: null, annotations: [], follow: peer({ viewport: 0 }), onNotice });
+    expect(showing()).toBe(0);
+    expect(onNotice).toHaveBeenCalledTimes(1);
+    expect(onNotice).toHaveBeenLastCalledWith("follow-unshared");
+    rerender({ selectedId: null, annotations: [], follow: peer({ viewport: 0.4, lastChanged: 2 }), onNotice });
+    expect(onNotice).toHaveBeenCalledTimes(1);
+    // Letting go and following again is a new follow, and is told again.
+    rerender({ selectedId: null, annotations: [], follow: null, onNotice });
+    rerender({ selectedId: null, annotations: [], follow: peer({ viewport: 0 }), onNotice });
+    expect(onNotice).toHaveBeenCalledTimes(2);
+  });
+
+  it("takes a follower whose deck is not paged to the leader's slide, before their place", () => {
+    // The same deck laid out taller than the screen, as on a short window
+    // with scripts off: not paged here, while the leader's is.
+    const doc = frameDoc(
+      [1, 2, 3, 4].map((n) => `<section class="slide" id="s${n}"><h2>Slide ${n}</h2></section>`).join(""),
+    );
+    const tops: Record<string, number> = { s1: 0, s2: 2000, s3: 4000, s4: 6000 };
+    doc.defaultView!.Element.prototype.getBoundingClientRect = function (this: Element) {
+      const top = tops[this.id] ?? 0;
+      return { top, bottom: top + 2000, height: 2000, width: 1200, left: 0, right: 1200 } as DOMRect;
+    };
+    doc.defaultView!.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
+    const onNotice = vi.fn();
+    mount(doc, { selectedId: null, annotations: [], follow: peer({ slide: 2, place: { a: "s1", at: 0.9 }, viewport: 0.1 }), onNotice });
+    expect(scrolledTo()).toBe(doc.getElementById("s3"));
+    expect(onNotice).not.toHaveBeenCalled();
+  });
+
   it("does not count its own move as the reader's, which would let go of the follow", () => {
     const { doc, showing } = stackedDeck();
     const onReaderMove = vi.fn();

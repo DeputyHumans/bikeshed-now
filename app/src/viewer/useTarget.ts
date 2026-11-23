@@ -9,7 +9,7 @@ import { ANN_ATTR, HL_SELECTOR } from "../brand/dom";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import type { Peer } from "../presence";
 import type { Annotation } from "../types";
-import { slideOf } from "./deck";
+import { slideOf, slideOfPeer } from "./deck";
 import { formatTarget, parseTarget, slideOfTarget, slideTarget } from "./target";
 import type { FrameMode } from "./frameMode";
 import type { DeckControls } from "./useDeck";
@@ -47,13 +47,19 @@ import type { DeckControls } from "./useDeck";
  */
 
 /** Why a comment a link names is not shown, for the viewer to say. */
-export type TargetNotice = "comment-missing" | "comment-sign-in" | "comment-unreadable" | "comment-folder-link";
+export type TargetNotice =
+  | "comment-missing"
+  | "comment-sign-in"
+  | "comment-unreadable"
+  | "comment-folder-link"
+  /** The person followed shares no slide this paged deck can find, so following cannot move it. */
+  | "follow-unshared";
 
 /** Whether the threads of the version on screen can be looked in yet, and if not, why. */
 export interface ThreadsState {
   ready: boolean;
   /** Set once ready: why a reader cannot see them at all. */
-  refused?: Exclude<TargetNotice, "comment-missing">;
+  refused?: Exclude<TargetNotice, "comment-missing" | "follow-unshared">;
 }
 export function useTarget(options: {
   mode: FrameMode;
@@ -137,24 +143,48 @@ export function useTarget(options: {
    * Go where the followed peer is, whenever where they are changes — not on
    * every presence update, so another person's cursor moving does not pull
    * back a follower who has just let go.
+   *
+   * Their slide first, whenever this document has it, paged here or not: a
+   * deck that stacks its slides scrolls nothing, so it is the only way there,
+   * and on a deck laid out taller here it is still the top of where they are.
+   * Then, on a paged deck, the slide holding the place they share, which a
+   * leader whose own viewer did not page the deck sends instead. A paged deck
+   * that can find neither cannot be moved by a scroll, so the reader is told
+   * once, rather than left looking at a pressed chip and a deck that stays
+   * put; the place and the fraction are still tried, for a deck that scrolls.
    */
   const placeKey = follow?.place ? `${follow.place.a ?? ""}\n${follow.place.b ?? ""}\n${follow.place.at}` : "";
+  const followUid = follow?.uid ?? null;
   const followSlide = follow?.slide;
   const followViewport = follow?.viewport;
   const followPlace = follow?.place;
+  const onNoticeRef = useRef(onNotice);
+  onNoticeRef.current = onNotice;
+  /** Whom the reader was last told cannot be followed by slide, so it is said once per follow. */
+  const toldUnshared = useRef<string | null>(null);
   useEffect(() => {
+    if (!followUid) {
+      toldUnshared.current = null;
+      return;
+    }
     // Not before the deck has measured this document: until then whether it is
     // paged is not known, and a move made on a guess is made twice.
-    if (!doc || !measured || (followSlide === undefined && !placeKey && followViewport === undefined)) return;
-    if (followSlide !== undefined && paged) {
-      if (followSlide !== locate()) goTo(followSlide, { follow: true });
+    if (!doc || !measured) return;
+    const bySlide = followSlide !== undefined && followSlide < slides.length;
+    const at = slideOfPeer({ slide: followSlide, place: followPlace }, slides, doc);
+    if (at >= 0 && (bySlide || paged)) {
+      if (at !== locate()) goTo(at, { follow: true });
       return;
+    }
+    if (paged && toldUnshared.current !== followUid) {
+      toldUnshared.current = followUid;
+      onNoticeRef.current?.("follow-unshared");
     }
     if (followPlace && scrollToPlace(doc, followPlace)) return;
     if (followViewport !== undefined) scrollToFraction(doc, followViewport);
     // `followPlace` is read through `placeKey`, so a new object with the same
     // place does not move the reader again.
-  }, [doc, epoch, measured, paged, followSlide, placeKey, followViewport, locate, goTo]);
+  }, [doc, epoch, measured, paged, slides, followUid, followSlide, placeKey, followViewport, locate, goTo]);
 
   // --- An address that names a place ----------------------------------------
 

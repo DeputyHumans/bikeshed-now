@@ -3,6 +3,7 @@
 
 import { OWN_SELECTOR, PEER_LAYER_ID, PEER_STYLE_ID, markOwn } from "../brand/dom";
 import { rangeFromAnchor } from "./anchor";
+import { isVisible } from "./visible";
 import { PLACE_ID_MAX, type Peer, type ReadingPlace } from "../presence";
 import { personName } from "../people";
 
@@ -219,11 +220,13 @@ export function scrollToFraction(doc: Document, fraction: number): void {
  * id that a follower can find again by it and that moves with the text.
  *
  * Left out: our own nodes; an id another element took first, which
- * `getElementById` would never return; anything with no box; and anything
- * `fixed` or `sticky`, or inside something that is, because its top moves with
- * the scroll and would place the reader wherever they already were. An id too
- * long for the rules to carry is left out too, rather than refused with the
- * whole record. Sorted by top, DOM order breaking ties.
+ * `getElementById` would never return; anything with no box; anything the
+ * reader cannot see (`annotation/visible.ts`), which on a deck that stacks its
+ * slides is every slide but the one shown, all of them in the same box; and
+ * anything `fixed` or `sticky`, or inside something that is, because its top
+ * moves with the scroll and would place the reader wherever they already were.
+ * An id too long for the rules to carry is left out too, rather than refused
+ * with the whole record. Sorted by top, DOM order breaking ties.
  */
 function placeMarks(doc: Document): { id: string; top: number }[] {
   const view = doc.defaultView;
@@ -245,6 +248,7 @@ function placeMarks(doc: Document): { id: string; top: number }[] {
     if (el.closest(OWN_SELECTOR)) continue;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
+    if (!isVisible(el)) continue;
     if (isPinned(el)) continue;
     marks.push({ id, top: rect.top + view.scrollY });
   }

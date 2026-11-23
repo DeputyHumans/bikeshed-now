@@ -11,6 +11,7 @@ import {
   scanSlides,
   shownIndex,
   slideOf,
+  slideOfPeer,
   slideTitle,
   stageSize,
 } from "./deck";
@@ -270,6 +271,37 @@ describe("slideOf", () => {
     expect(slideOf(slides, doc.getElementById("after"))).toBe(-1);
     expect(slideOf(slides, null)).toBe(-1);
     expect(slideOf([], doc.getElementById("p1"))).toBe(-1);
+  });
+});
+
+describe("slideOfPeer", () => {
+  const doc = parse(`<header id="top">Before the deck.</header><main>
+    <section class="slide" id="one"><h2>One</h2><p id="p1">First words.</p></section>
+    <section class="slide"><h2>Two</h2><p>Second <em id="deep">words</em>.</p></section>
+    <section class="slide"><h2>Three</h2></section>
+  </main><footer id="after">Not a slide.</footer>`);
+  const scan = scanSlides(doc);
+  const slides = scan.kind === "slides" ? scan.slides : [];
+
+  it("is the slide they share when this document has it, before their place", () => {
+    expect(slideOfPeer({ slide: 2, place: { a: "p1", at: 0 } }, slides, doc)).toBe(2);
+    expect(slideOfPeer({ slide: 0 }, slides, doc)).toBe(0);
+  });
+
+  it("is the slide holding their place otherwise: the id above the top of their screen, then the one below", () => {
+    expect(slideOfPeer({ place: { a: "deep", at: 0.5 } }, slides, doc)).toBe(1);
+    expect(slideOfPeer({ slide: 7, place: { a: "p1", at: 0 } }, slides, doc)).toBe(0);
+    expect(slideOfPeer({ place: { a: "top", b: "deep", at: 0.9 } }, slides, doc)).toBe(1);
+    expect(slideOfPeer({ place: { b: "one", at: 0.2 } }, slides, doc)).toBe(0);
+  });
+
+  it("is -1 when the record says neither, or names nothing on a slide", () => {
+    expect(slideOfPeer({}, slides, doc)).toBe(-1);
+    expect(slideOfPeer({ slide: 3 }, slides, doc)).toBe(-1);
+    expect(slideOfPeer({ slide: 1.5 }, slides, doc)).toBe(-1);
+    expect(slideOfPeer({ place: { a: "after", at: 0 } }, slides, doc)).toBe(-1);
+    expect(slideOfPeer({ place: { a: "gone", at: 0 } }, slides, doc)).toBe(-1);
+    expect(slideOfPeer({ place: { a: "p1", at: 0 } }, slides, null)).toBe(-1);
   });
 });
 

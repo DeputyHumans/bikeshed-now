@@ -468,9 +468,18 @@ export function DocViewer() {
     },
     [annotations, setCommentsOpen],
   );
+  // Read when the notice is said, so the callback does not change with every presence update.
+  const followedName = useRef<string | null>(null);
+  followedName.current = presence.followed
+    ? personName({ uid: presence.followed.uid, email: presence.followed.email, known: presence.followed.name })
+    : null;
   const sayNotice = useCallback(
     (notice: TargetNotice) => {
-      if (notice === "comment-missing") toast.show("That comment isn't on this version of the document.");
+      if (notice === "follow-unshared") {
+        // Most often a tab left open from before slides were shared (SPEC §16).
+        const who = followedName.current;
+        toast.show(`${who ? `${who}'s` : "Their"} tab isn't sharing which slide they're on. Ask them to reload the page.`);
+      } else if (notice === "comment-missing") toast.show("That comment isn't on this version of the document.");
       else if (notice === "comment-folder-link") toast.show("Comments aren't shown to readers of a folder's link.");
       else if (notice === "comment-unreadable") toast.show("The comments on this document aren't shared with you.");
       else {

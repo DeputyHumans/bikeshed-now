@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // What counts as a slide, and where the reader is in one (SPEC §6d).
 
+import type { ReadingPlace } from "../presence";
+
 /**
  * There is still no slide MODEL, for the reason `SlidePanel` has always given:
  * a slide is a region the author already treated as one. This module only reads
@@ -230,6 +232,31 @@ export function scanSlides(doc: Document | null): SlideScan {
 export function slideOf(slides: readonly Slide[], node: Node | null): number {
   if (!node) return -1;
   for (const slide of slides) if (slide.outer.contains(node)) return slide.index;
+  return -1;
+}
+
+/**
+ * Which slide a person is on, from their presence record (SPEC §16): the slide
+ * they share, when this document has one by that number; else the slide that
+ * holds the element their reading place names — the last id above the top of
+ * their screen, then the next one below it; else -1, for a record that says
+ * neither, such as one from a tab on an app that shared no slide.
+ *
+ * One answer for following them and for the rail that shows where they are,
+ * so the two can never disagree about it.
+ */
+export function slideOfPeer(
+  peer: { slide?: number; place?: ReadingPlace },
+  slides: readonly Slide[],
+  doc: Document | null,
+): number {
+  if (peer.slide !== undefined && Number.isInteger(peer.slide) && peer.slide >= 0 && peer.slide < slides.length) return peer.slide;
+  if (!doc || !peer.place) return -1;
+  for (const id of [peer.place.a, peer.place.b]) {
+    if (!id) continue;
+    const at = slideOf(slides, doc.getElementById(id));
+    if (at >= 0) return at;
+  }
   return -1;
 }
 

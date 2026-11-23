@@ -97,6 +97,20 @@ describe("readingPlace", () => {
     expect(readingPlace(leader.doc)).toEqual({ a: "one", b: "two", at: 0.75 });
   });
 
+  it("on a deck that stacks its slides, names the slide on screen rather than the last one", () => {
+    // Every slide shares one box, and a hidden one still has it: by geometry
+    // alone the last slide's ids are the ones "at the top of the screen".
+    const ids = ["s1", "s2", "s3", "s4"];
+    const tops = Object.fromEntries(ids.flatMap((id) => [[id, 0], [`h-${id}`, 40]]));
+    for (const hide of ["visibility: hidden", "opacity: 0"]) {
+      const body = ids
+        .map((id) => `<section id="${id}" style="${id === "s3" ? "" : hide}"><h2 id="h-${id}">Slide</h2></section>`)
+        .join("");
+      const leader = page(body, { tops, height: 800, viewport: 800 });
+      expect(readingPlace(leader.doc), hide).toEqual({ a: "s3", b: "h-s3", at: 0 });
+    }
+  });
+
   it("is null for a document with no ids, which leaves the fraction", () => {
     const leader = page(`<h2>One</h2><p>Words.</p>`, { tops: {}, height: 4000, viewport: 800 });
     leader.at(900);
