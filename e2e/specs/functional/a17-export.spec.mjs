@@ -1818,14 +1818,19 @@ scenario("A17.6 File → Print (the browser's own print): the frame opens to its
  * A17.7's page: every picture a file beside it, as a deck built with its
  * pictures in a folder is (ADR 0036). Forty SVGs, which the content proxy
  * never lets a member's browser keep (SPEC §17), so the print frame asks for
- * each again; two photos; a background from the stylesheet; one picture
+ * each again; two photos; an SVG background from the stylesheet, which the
+ * frame asks for only once it has the stylesheet; one picture
  * marked lazy far below the fold; and `last.svg`, which the ceiling step
- * holds back. The harness routes every request, so no answer comes from the
- * browser's cache, and every file costs the print frame a request.
+ * holds back. The harness routes every request, which turns the HTTP cache
+ * off, but the renderer's memory cache still hands the print frame a
+ * picture or a stylesheet the reading frame already has (measured: the
+ * photos, the lazy picture and style.css never reached the network, nor a
+ * PNG background), as production's 12 of 19 photos were. The SVGs it never
+ * has, the background among them, so each is asked for again and held.
  */
 const ASSET_SVGS = 40;
 const ASSET_HOLD_MS = 1_200;
-const ASSETS_CSS = ".hero { height: 40px; background-image: url(bg.png); }\nimg { display: inline-block; }\n";
+const ASSETS_CSS = ".hero { height: 40px; background-image: url(bg.svg); }\nimg { display: inline-block; }\n";
 function assetSvg(i) {
   const fill = `#${(0x203040 + i * 0x030507).toString(16).padStart(6, "0").slice(-6)}`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24"><rect width="48" height="24" fill="${fill}"/><text x="4" y="16" font-size="12" fill="#fff">${i}</text></svg>\n`;
@@ -1840,7 +1845,7 @@ function assetsEntries(title) {
     "photo-1.png": tinyPng({ width: 4, height: 4, rgb: [200, 30, 30] }),
     "photo-2.png": tinyPng({ width: 4, height: 4, rgb: [30, 160, 60] }),
     "lazy.png": tinyPng({ width: 4, height: 4, rgb: [30, 60, 200] }),
-    "bg.png": tinyPng({ width: 4, height: 4, rgb: [240, 200, 40] }),
+    "bg.svg": assetSvg(98),
     "last.svg": assetSvg(99),
   };
 }
@@ -1862,7 +1867,7 @@ function assetsExtract(d) {
     notLoaded: imgs.filter((i) => !shown(i)).map((i) => i.getAttribute("src")),
     lazy: imgs.filter((i) => (i.getAttribute("loading") ?? "").trim().toLowerCase() === "lazy").length,
     resources: entries.length,
-    background: entries.filter((e) => new URL(e.name).pathname.endsWith("/bg.png")).map((e) => ({ initiator: e.initiatorType, responseEnd: e.responseEnd })),
+    background: entries.filter((e) => new URL(e.name).pathname.endsWith("/bg.svg")).map((e) => ({ initiator: e.initiatorType, responseEnd: e.responseEnd })),
   };
 }
 
@@ -1909,7 +1914,10 @@ scenario("A17.7 a page whose pictures are files beside it prints with them: with
     rows = await hold.restore();
   }
   ctx.ev.json("held", rows);
-  precondition(rows.length >= files - 1, `the print frame's requests were held: ${rows.length} rows`);
+  const held = new Set(rows.map((r) => r.path.slice(prefix.length)));
+  const svgs = Object.keys(entries).filter((name) => name.endsWith(".svg"));
+  const unheld = svgs.filter((name) => !held.has(name));
+  precondition(unheld.length === 0, `the print frame asked for every SVG again and each answer was held: not ${unheld.join(", ")} (${rows.length} rows)`);
   // The first frame is judged first: with a short wait, the second press
   // lands after its print and makes a frame of its own, which is a symptom
   // of the same defect and asserted after it.
