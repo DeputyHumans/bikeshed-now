@@ -9,113 +9,72 @@ import {
   HL_CLASS,
   HL_SELECTOR,
   HL_STYLE_ID,
-  INS_ATTR,
   OWN_ATTR,
   SUG_ATTR,
   isOwnMarker,
-  markOwn,
 } from "../brand/dom";
 import { refusesListeners, watchFocus } from "../viewer/frameWatch";
 import { hasRetargetedLinks, restoreLinks } from "../viewer/outboundLinks";
 import { TOKENS } from "../brand/tokens";
 import { peerColor } from "../brand/tokens";
 import type { Anchor, Annotation } from "../types";
+import { createSuggestionLabels, type SuggestionLabel, type SuggestionLabels } from "./labels";
+import {
+  hasPaint,
+  paint,
+  paintSelected,
+  paintedAt,
+  paintedItems,
+  setFlash,
+  setPaintHover,
+  setPaintShown,
+  unpaint,
+  type PaintItem,
+} from "./paint";
 
 /**
- * The document is same-origin, so the parent app mutates `contentDocument`
+ * The document is same-origin, so the parent app reaches into `contentDocument`
  * directly and the proxy injects NOTHING. Highlights are presentational and are
  * never persisted; `serializeCleanHtml` below is what guarantees that.
+ *
+ * HTML text is PAINTED, never wrapped (`paint.ts`, ADR 0043): a `<mark>` around
+ * part of a run of text in a flex or grid container made new items of it and
+ * rearranged the slide, for every reader of every comment. Only SVG text keeps
+ * a wrapper, a `<tspan>`, because one engine paints no highlight inside
+ * `<text>` and SVG text has no flex or grid to break.
  */
 
 /**
- * The highlight treatment, and why it is a border rather than a fill.
- *
- * A pale fill is invisible on a dark slide, and documents here are arbitrary
- * third-party HTML — a deck with a navy background is a normal case, not an
- * edge one. A 1px border plus a WHITE HALO survives any backdrop: against dark
- * content the halo reads, against light content the border does.
- *
- * A RESOLVED annotation is not drawn at all — see `redrawHighlights`. There is
- * therefore one treatment here, not two.
- *
- * A coarse pointer gets a tinted fill as well, because a 1px border is not
- * something a thumb can hit.
- *
- * Inside SVG text the wrapper is a `<tspan>` (see `wrapperFor`), and border,
- * background and box-shadow do not apply to SVG text at all, so it gets its
- * own treatment: a stroke in the author's colour painted BEHIND the glyph fill,
- * which leaves the author's own glyph colour intact — the same principle as
- * the border. Not an underline: SVG text decorations ignore
- * `text-decoration-color`, so an underline cannot carry the author's colour.
- * Measured, not assumed — it painted zero coloured pixels.
+ * The SVG wrapper's treatment. Border, background and box-shadow do not apply
+ * to SVG text at all, so it is a stroke in the author's colour painted BEHIND
+ * the glyph fill, which leaves the author's own glyph colour intact. Not an
+ * underline: SVG text decorations ignore `text-decoration-color`, so an
+ * underline cannot carry the author's colour. Measured, not assumed — it
+ * painted zero coloured pixels.
  */
+const TSPAN_CSS = `
+tspan.${HL_CLASS} {
+  paint-order: stroke fill;
+  stroke: var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  cursor: pointer;
+}
+tspan.${HL_CLASS}[data-selected="true"] { stroke-width: 4px; }
+tspan.${HL_CLASS}[data-hidden] { stroke: none; text-decoration: none; cursor: inherit; }
+tspan.${HL_CLASS}:focus { outline: none; }
+tspan.${HL_CLASS}[${SUG_ATTR}] {
+  text-decoration-line: line-through;
+  text-decoration-thickness: 2px;
+}
+`;
+
+/** Install the highlight stylesheet, adopted where the browser can, before anything is drawn. */
 export function ensureHighlightStyles(doc: Document): void {
-  if (doc.getElementById(HL_STYLE_ID)) return;
-  const style = doc.createElement("style");
-  style.id = HL_STYLE_ID;
-  markOwn(style, "hl-style");
-  style.textContent = `
-    .${HL_CLASS} {
-      background: transparent;
-      color: inherit;
-      border: 1px solid var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
-      border-radius: 2px;
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
-      cursor: pointer;
-      box-decoration-break: clone;
-      -webkit-box-decoration-break: clone;
-    }
-    .${HL_CLASS}[data-selected="true"] {
-      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8),
-                  0 0 0 3px var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
-    }
-    /* Focusable only where a tap is how a highlight is heard (attachHighlightClick),
-       and focused only for the moment it opens its thread. */
-    .${HL_CLASS}:focus {
-      outline: none;
-    }
-    @media (hover: none), (pointer: coarse) {
-      .${HL_CLASS} {
-        background: color-mix(in srgb, var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation}) 16%, transparent);
-        padding: 0 1px;
-        margin: 0 -1px;
-        touch-action: manipulation;
-      }
-    }
-    tspan.${HL_CLASS} {
-      paint-order: stroke fill;
-      stroke: var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
-      stroke-width: 2px;
-      stroke-linejoin: round;
-    }
-    tspan.${HL_CLASS}[data-selected="true"] {
-      stroke-width: 4px;
-    }
-    .${HL_CLASS}[${SUG_ATTR}] {
-      text-decoration-line: line-through;
-      text-decoration-color: var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
-      text-decoration-thickness: 2px;
-    }
-    mark.${HL_CLASS}[${INS_ATTR}]::after {
-      content: attr(${INS_ATTR});
-      /* inline-block, because a line-through propagates into every inline
-         descendant and cannot be undone there — only an atomic inline is
-         spared it. */
-      display: inline-block;
-      max-width: 100%;
-      margin-left: 0.25em;
-      padding: 0 2px;
-      border-radius: 2px;
-      white-space: pre-wrap;
-      color: inherit;
-      text-decoration: underline 2px var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation});
-      background: color-mix(in srgb, var(${AUTHOR_COLOR_VAR}, ${TOKENS.annotation}) 14%, transparent);
-    }
-  `;
-  (doc.head ?? doc.documentElement).appendChild(style);
+  paint(doc, paintedItems(doc), TSPAN_CSS);
 }
 
-/** Open every <details> ancestor so a wrapped range is actually visible. */
+/** Open every <details> ancestor so a highlighted range is actually visible. */
 function openDetailsAround(node: Node | null): void {
   let el: Element | null =
     node && node.nodeType === Node.ELEMENT_NODE
@@ -145,49 +104,50 @@ function intersectingTextNodes(doc: Document, range: Range): Text[] {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/**
- * The element to wrap one text node in.
- *
- * SVG renders no foreign child of a text content element: an HTML `<mark>`
- * inside `<text>` paints nothing, and the passage disappears — which is how a
- * comment on a label in a figure made the label vanish. A `<tspan>` is what
- * SVG has for a styled run, and it renders inline exactly where the mark would.
- *
- * Decided per text node, by the parent's namespace, so a range that runs from
- * prose into a figure gets the right wrapper for each part.
- */
-function wrapperFor(doc: Document, text: Text): HTMLElement | SVGElement {
-  const wrapper =
-    text.parentElement?.namespaceURI === SVG_NS
-      ? doc.createElementNS(SVG_NS, "tspan")
-      : doc.createElement("mark");
+/** The one wrapper left: SVG text, which one engine will not paint a highlight in. */
+function tspanFor(doc: Document): SVGElement {
+  const wrapper = doc.createElementNS(SVG_NS, "tspan");
   // Where no click is delivered, a tap is heard as focus (attachHighlightFocus).
   if (refusesListeners(doc)) wrapper.setAttribute("tabindex", "-1");
   return wrapper;
 }
 
+/** Each document's suggestion labels, made when the first one is drawn. */
+const labelLayers = new WeakMap<Document, SuggestionLabels>();
+const labelsDrawn = new WeakMap<Document, SuggestionLabel[]>();
+const shownIn = new WeakMap<Document, boolean>();
+
+function labelsOf(doc: Document): SuggestionLabels {
+  let labels = labelLayers.get(doc);
+  if (!labels) {
+    labels = createSuggestionLabels(doc);
+    labels.setShown(shownIn.get(doc) ?? true);
+    labelLayers.set(doc, labels);
+  }
+  return labels;
+}
+
 /**
- * Wrap a Range in highlight nodes, one per text node.
- *
- * Per-text-node rather than one surroundContents over the whole range: a range
- * that crosses an element boundary cannot be surrounded at all, and splitting
- * it into per-node sub-ranges means existing element nodes are never destroyed
- * or re-parented. A highlight must not change the document's structure.
+ * One thread's passage, made ready to draw: the HTML text runs of it as
+ * ranges to paint, the SVG text runs of it wrapped. Per text node, so a range
+ * that crosses an element boundary is never surrounded whole, and existing
+ * element nodes are never destroyed or re-parented. A highlight must not
+ * change the document's structure — and in HTML now changes nothing at all.
  */
-export function highlightRange(
+function collect(
   doc: Document,
   range: Range,
   annId: string,
-  options: { authorEmail?: string; suggestion?: { replacement: string } } = {},
-): void {
-  if (range.collapsed) return;
-  let lastHtmlMark: Element | null = null;
-
+  options: { authorEmail?: string; suggestion?: { replacement: string } },
+): { item: PaintItem; label: SuggestionLabel | null } | null {
+  if (range.collapsed) return null;
   openDetailsAround(range.startContainer);
   openDetailsAround(range.endContainer);
 
   const { startContainer, startOffset, endContainer, endOffset } = range;
   const color = options.authorEmail ? peerColor(options.authorEmail) : TOKENS.annotation;
+  const ranges: Range[] = [];
+  let last: Range | null = null;
 
   for (const node of intersectingTextNodes(doc, range)) {
     const from = node === startContainer ? startOffset : 0;
@@ -198,28 +158,52 @@ export function highlightRange(
     sub.setStart(node, from);
     sub.setEnd(node, to);
 
-    const mark = wrapperFor(doc, node);
+    if (node.parentElement?.namespaceURI !== SVG_NS) {
+      ranges.push(sub);
+      last = sub;
+      continue;
+    }
+    const wrapper = tspanFor(doc);
     // setAttribute, not `.className =`: on an SVG element `className` is an
     // SVGAnimatedString and the assignment is silently ignored.
-    mark.setAttribute("class", HL_CLASS);
-    mark.setAttribute(ANN_ATTR, annId);
+    wrapper.setAttribute("class", HL_CLASS);
+    wrapper.setAttribute(ANN_ATTR, annId);
     // The author's colour, so a highlight can be traced to a person without
     // opening the panel — the same value the chip, caret and rail marker use.
-    mark.style.setProperty(AUTHOR_COLOR_VAR, color);
-    // A suggestion's text is struck through, segment by segment.
-    if (options.suggestion) mark.setAttribute(SUG_ATTR, annId);
+    wrapper.style.setProperty(AUTHOR_COLOR_VAR, color);
+    if (options.suggestion) wrapper.setAttribute(SUG_ATTR, annId);
     try {
-      sub.surroundContents(mark);
-      if (mark.namespaceURI !== SVG_NS) lastHtmlMark = mark;
+      sub.surroundContents(wrapper);
+      const inside = doc.createRange();
+      inside.selectNodeContents(wrapper);
+      last = inside;
     } catch {
       // A boundary this sub-range cannot cleanly wrap. Skipping the fragment
       // loses part of one highlight; throwing would lose the whole document.
     }
   }
-  // …and what it would become follows its last segment, as generated content
-  // read from an attribute (see INS_ATTR). Nothing for a deletion.
-  if (options.suggestion?.replacement && lastHtmlMark) {
-    lastHtmlMark.setAttribute(INS_ATTR, options.suggestion.replacement);
+  const replacement = options.suggestion?.replacement;
+  return {
+    item: { annId, ranges, color, suggestion: Boolean(options.suggestion) },
+    // …and what it would become is shown beside its last segment. Nothing for a deletion.
+    label: replacement && last ? { annId, range: last, color, text: replacement } : null,
+  };
+}
+
+/** Draw one thread's passage, beside whatever this document already shows. */
+export function highlightRange(
+  doc: Document,
+  range: Range,
+  annId: string,
+  options: { authorEmail?: string; suggestion?: { replacement: string } } = {},
+): void {
+  const made = collect(doc, range, annId, options);
+  if (!made) return;
+  paint(doc, [...paintedItems(doc).filter((item) => item.annId !== annId), made.item], TSPAN_CSS);
+  if (made.label) {
+    const labels = [...(labelsDrawn.get(doc) ?? []).filter((l) => l.annId !== annId), made.label];
+    labelsDrawn.set(doc, labels);
+    labelsOf(doc).render(labels);
   }
 }
 
@@ -231,15 +215,23 @@ function unwrapMark(mark: Element): void {
   (parent as Element | Document).normalize?.();
 }
 
+/** Undraw every thread. The stylesheet stays, for the next draw; `removeHighlightStyles` takes it. */
 export function clearHighlights(doc: Document): void {
   for (const mark of Array.from(doc.querySelectorAll(HL_SELECTOR))) {
     unwrapMark(mark);
   }
+  if (paintedItems(doc).length > 0) paint(doc, [], TSPAN_CSS);
+  labelsDrawn.delete(doc);
+  labelLayers.get(doc)?.render([]);
 }
 
-/** Remove the injected stylesheet. clearHighlights deliberately does NOT. */
+/** Remove the stylesheet, every painted highlight and the suggestion labels. clearHighlights deliberately does NOT. */
 export function removeHighlightStyles(doc: Document): void {
-  doc.getElementById(HL_STYLE_ID)?.remove();
+  unpaint(doc);
+  labelLayers.get(doc)?.destroy();
+  labelLayers.delete(doc);
+  labelsDrawn.delete(doc);
+  shownIn.delete(doc);
 }
 
 /** Mark one thread as selected, and clear the rest. */
@@ -249,6 +241,27 @@ export function setSelectedHighlight(doc: Document, annId: string | null): void 
     if (isSelected) mark.setAttribute("data-selected", "true");
     else mark.removeAttribute("data-selected");
   }
+  paintSelected(doc, annId);
+}
+
+/**
+ * Show or hide every thread's passage and every suggestion's label, keeping
+ * what they are, while the reader hides comments or presents (SPEC §6). The
+ * SVG wrappers stay in the text, unstyled while hidden.
+ */
+export function setHighlightsShown(doc: Document, shown: boolean): void {
+  shownIn.set(doc, shown);
+  setPaintShown(doc, shown);
+  labelLayers.get(doc)?.setShown(shown);
+  for (const mark of Array.from(doc.querySelectorAll(HL_SELECTOR))) {
+    if (shown) mark.removeAttribute("data-hidden");
+    else mark.setAttribute("data-hidden", "true");
+  }
+}
+
+/** Light one thread's passage on its own while the rest are hidden, or put it out. */
+export function lightHighlight(doc: Document, annId: string | null, lit: boolean): void {
+  setFlash(doc, annId, lit);
 }
 
 // --- Serialization ---------------------------------------------------------
@@ -399,8 +412,9 @@ export function assertNoDecoration(doc: Document, context: string): void {
   if (!import.meta.env.DEV) return;
   const found: string[] = [];
   if (doc.querySelector(HL_SELECTOR)) found.push("highlight mark");
-  if (doc.querySelector(`[${SUG_ATTR}], [${INS_ATTR}]`)) found.push("suggestion mark");
+  if (doc.querySelector(`[${SUG_ATTR}]`)) found.push("suggestion mark");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
+  if (hasPaint(doc)) found.push("painted highlight");
   if (hasRetargetedLinks(doc)) found.push("retargeted link");
   for (const el of Array.from(doc.querySelectorAll(`[${OWN_ATTR}]`))) {
     if (isOwnMarker(el)) found.push(`injected ${el.getAttribute(OWN_ATTR)}`);
@@ -445,6 +459,8 @@ export function redrawHighlights(
   const drawn: string[] = [];
   const orphaned: string[] = [];
   const stale: string[] = [];
+  const items: PaintItem[] = [];
+  const labels: SuggestionLabel[] = [];
   for (const ann of annotations) {
     if (ann.resolved) continue;
     const suggestion = ann.suggestion?.state === "pending" ? ann.suggestion : null;
@@ -453,10 +469,14 @@ export function redrawHighlights(
     const strict = suggestion !== null || ann.anchor.strict === true;
     const range = strict ? resolveExact(ann.anchor) : resolve(ann.anchor);
     if (range) {
-      highlightRange(doc, range, ann.annId, {
+      const made = collect(doc, range, ann.annId, {
         authorEmail: ann.authorEmail,
         ...(suggestion ? { suggestion: { replacement: suggestion.replacement } } : {}),
       });
+      if (made) {
+        items.push(made.item);
+        if (made.label) labels.push(made.label);
+      }
       drawn.push(ann.annId);
     } else if (suggestion) {
       stale.push(ann.annId);
@@ -466,10 +486,20 @@ export function redrawHighlights(
       orphaned.push(ann.annId);
     }
   }
+  paint(doc, items, TSPAN_CSS);
+  labelsDrawn.set(doc, labels);
+  if (labels.length > 0 || labelLayers.has(doc)) labelsOf(doc).render(labels);
   return { drawn, orphaned, stale };
 }
 
-/** Listen for clicks on a highlight. Returns a cleanup function. */
+/**
+ * Listen for clicks on a highlight. Returns a cleanup function.
+ *
+ * A painted passage is no element (`paint.ts`), so a click is matched to one
+ * by where it lands, `paintedAt`; an SVG wrapper is still found by the click's
+ * target. While the pointer is over a painted passage the hand shows, set by
+ * the stylesheet alone, so hovering writes nothing to the document.
+ */
 export function attachHighlightClick(
   doc: Document,
   onClick: (annId: string) => void,
@@ -478,17 +508,36 @@ export function attachHighlightClick(
   const handler = (e: Event) => {
     const target = e.target as Element | null;
     const mark = target?.closest?.(HL_SELECTOR) as Element | null;
-    const id = mark?.getAttribute(ANN_ATTR);
+    const pointer = e as MouseEvent;
+    const id = mark?.getAttribute(ANN_ATTR) ?? paintedAt(doc, pointer.clientX, pointer.clientY);
     if (!id) return;
     onClick(id);
     // And it stops here: the click is the thread's. A deck that advances on
     // click would otherwise move off the passage the reader just opened.
     e.stopPropagation();
   };
+  let frame = 0;
+  let at: { x: number; y: number } | null = null;
+  const view = doc.defaultView;
+  const hover = (e: Event) => {
+    const pointer = e as PointerEvent;
+    at = { x: pointer.clientX, y: pointer.clientY };
+    if (frame || !view) return;
+    frame = view.requestAnimationFrame(() => {
+      frame = 0;
+      if (at) setPaintHover(doc, paintedAt(doc, at.x, at.y) !== null);
+    });
+  };
   // Capture phase, so a document that stops propagation on its own click
   // handlers cannot make its highlights unclickable.
   doc.addEventListener("click", handler, true);
-  return () => doc.removeEventListener("click", handler, true);
+  doc.addEventListener("pointermove", hover, { capture: true, passive: true });
+  return () => {
+    doc.removeEventListener("click", handler, true);
+    doc.removeEventListener("pointermove", hover, { capture: true });
+    if (frame && view) view.cancelAnimationFrame(frame);
+    setPaintHover(doc, false);
+  };
 }
 
 /**
@@ -501,7 +550,7 @@ export function attachHighlightClick(
  */
 function attachHighlightFocus(doc: Document, onClick: (annId: string) => void): () => void {
   // Highlights drawn from now on are made focusable as they are made
-  // (wrapperFor); any already drawn, here.
+  // (tspanFor); any already drawn, here.
   for (const mark of Array.from(doc.querySelectorAll(HL_SELECTOR))) {
     if (!mark.hasAttribute("tabindex")) mark.setAttribute("tabindex", "-1");
   }

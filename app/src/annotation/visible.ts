@@ -35,3 +35,32 @@ export function isVisible(el: Element): boolean {
   }
   return true;
 }
+
+/** The attributes a deck changes to show another slide, which is all it changes. */
+const SHOWN_BY = ["class", "style", "hidden", "aria-hidden"];
+
+/**
+ * Call `onChange` whenever what the reader can see may have changed without a
+ * scroll or a resize: a deck that stacks its slides changes slide by changing
+ * an attribute, and finishes by ending a transition or an animation. These are
+ * the signals `useDeck` reads its position from. Observation only, from the
+ * frame's own realm. A change inside one of our own nodes (`ownSelector`) is
+ * ours — an overlay redrawing — and acting on it would draw forever. Returns
+ * the stop.
+ */
+export function watchShown(doc: Document, ownSelector: string, onChange: () => void): () => void {
+  const view = doc.defaultView;
+  const Observer = view?.MutationObserver;
+  const observer = Observer && doc.body
+    ? new Observer((records) => {
+        if (records.some((record) => !(record.target as Element).closest?.(ownSelector))) onChange();
+      })
+    : null;
+  if (observer && doc.body) observer.observe(doc.body, { attributes: true, subtree: true, attributeFilter: SHOWN_BY });
+  const ends = ["transitionend", "animationend"];
+  for (const type of ends) doc.addEventListener(type, onChange, true);
+  return () => {
+    observer?.disconnect();
+    for (const type of ends) doc.removeEventListener(type, onChange, true);
+  };
+}

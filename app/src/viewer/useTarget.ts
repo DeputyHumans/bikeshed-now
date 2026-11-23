@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { rangeFromAnchor } from "../annotation/anchor";
 import { exactRangeFromAnchor } from "../annotation/exact";
+import { paintedRange } from "../annotation/paint";
 import { scrollToFraction, scrollToPlace } from "../annotation/peers";
 import { ANN_ATTR, HL_SELECTOR } from "../brand/dom";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
@@ -129,7 +130,7 @@ export function useTarget(options: {
       goTo(slide);
       return;
     }
-    if (inView(node)) return;
+    if (inView(node, paintedRange(doc, selectedId))) return;
     node.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
   }, [enabled, doc, frameShown, epoch, measuredEpoch, selectedId, annotations, reduceMotion, paged, slides, locate, goTo]);
 
@@ -307,11 +308,18 @@ export function useTarget(options: {
 
 
 /**
- * Where a thread's passage is: its highlight, or for a resolved thread, which
- * has none, the element its anchor resolves in — strictly when it would be
- * drawn strictly, exactly as `redrawHighlights` decides.
+ * Where a thread's passage is: where its painted highlight starts, or its SVG
+ * wrapper, or for a resolved thread, which has neither, the element its anchor
+ * resolves in — strictly when it would be drawn strictly, exactly as
+ * `redrawHighlights` decides.
  */
 function passageOf(doc: Document, annotations: readonly Annotation[], annId: string): Element | null {
+  const painted = paintedRange(doc, annId);
+  if (painted) {
+    const start = painted.startContainer;
+    const el = start.nodeType === 1 ? (start as Element) : start.parentElement;
+    if (el) return el;
+  }
   const mark = Array.from(doc.querySelectorAll(HL_SELECTOR)).find((el) => el.getAttribute(ANN_ATTR) === annId);
   if (mark) return mark;
   const annotation = annotations.find((a) => a.annId === annId) ?? null;
@@ -328,10 +336,14 @@ function passageOf(doc: Document, annotations: readonly Annotation[], annId: str
   return start.nodeType === 1 ? (start as Element) : start.parentElement;
 }
 
-/** Whether the whole of an element sits inside its frame's viewport. */
-function inView(el: Element): boolean {
+/**
+ * Whether the whole of a passage sits inside its frame's viewport: its painted
+ * range where it has one, which a long paragraph's own box would misreport,
+ * else the element.
+ */
+function inView(el: Element, painted: Range | null = null): boolean {
   const view = el.ownerDocument.defaultView;
   if (!view) return false;
-  const rect = el.getBoundingClientRect();
+  const rect = painted && typeof painted.getBoundingClientRect === "function" ? painted.getBoundingClientRect() : el.getBoundingClientRect();
   return rect.top >= 0 && rect.bottom <= view.innerHeight;
 }

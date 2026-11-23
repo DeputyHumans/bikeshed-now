@@ -119,6 +119,11 @@ function mount(doc: Document, initialProps: Props) {
   );
 }
 
+/** The element whose text holds a section's passage. */
+function holding(doc: Document, sectionId: string): HTMLElement {
+  return doc.querySelector<HTMLElement>(`#${sectionId} p`)!;
+}
+
 /** The element a scroll call was made on. */
 function scrolledTo(): Element | undefined {
   return scrollIntoView.mock.contexts.at(-1) as Element | undefined;
@@ -144,7 +149,8 @@ describe("selecting a thread in a document without pages", () => {
 
     rerender({ selectedId: "a2", annotations });
 
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a2");
+    // The element holding the passage: a painted highlight is no element of its own.
+    expect(scrolledTo()).toBe(holding(doc, "s2"));
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
   });
 
@@ -172,7 +178,7 @@ describe("selecting a thread in a document without pages", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
 
     rerender({ selectedId: "a3", annotations: [...annotations, annotation("a3", "s2", "further down")] });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a3");
+    expect(scrolledTo()).toBe(holding(doc, "s2"));
   });
 
   it("waits for a hidden frame to come back, rather than using the jump up on nothing", () => {
@@ -186,7 +192,7 @@ describe("selecting a thread in a document without pages", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
 
     rerender({ selectedId: "a2", annotations, frameShown: true });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a2");
+    expect(scrolledTo()).toBe(holding(doc, "s2"));
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
@@ -198,22 +204,22 @@ describe("selecting a thread in a document without pages", () => {
     const doc = prose();
     const annotations = threads();
     const { rerender } = mount(doc, { selectedId: null, annotations });
-    doc.querySelector(`[${ANN_ATTR}="a2"]`)!.getBoundingClientRect = () => rectAt(doc.defaultView!.innerHeight / 2);
+    holding(doc, "s2").getBoundingClientRect = () => rectAt(doc.defaultView!.innerHeight / 2);
     rerender({ selectedId: "a2", annotations });
     expect(scrollIntoView).not.toHaveBeenCalled();
 
     // The next selection, below the fold, scrolls as usual.
     rerender({ selectedId: "a1", annotations });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a1");
+    expect(scrolledTo()).toBe(holding(doc, "s1"));
   });
 
   it("brings a passage that is only partly in view fully in", () => {
     const doc = prose();
     const annotations = threads();
     const { rerender } = mount(doc, { selectedId: null, annotations });
-    doc.querySelector(`[${ANN_ATTR}="a2"]`)!.getBoundingClientRect = () => rectAt(doc.defaultView!.innerHeight - 10);
+    holding(doc, "s2").getBoundingClientRect = () => rectAt(doc.defaultView!.innerHeight - 10);
     rerender({ selectedId: "a2", annotations });
-    expect(scrolledTo()?.getAttribute(ANN_ATTR)).toBe("a2");
+    expect(scrolledTo()).toBe(holding(doc, "s2"));
   });
 
   it("scrolls to the same thread again once it has been deselected in between", () => {

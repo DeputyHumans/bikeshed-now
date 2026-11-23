@@ -37,6 +37,8 @@ export const OWN_MARKERS = [
   "edit-fonts",
   "peers",
   "peer-style",
+  "sug-labels",
+  "sug-label-style",
 ] as const;
 
 export type OwnMarker = (typeof OWN_MARKERS)[number];
@@ -66,6 +68,9 @@ export const EDIT_FONTS_ID = "bshd-edit-fonts";
 export const EDIT_PLACEHOLDERS_ID = "bshd-edit-placeholders";
 export const PEER_STYLE_ID = "bshd-peer-style";
 export const PEER_LAYER_ID = "bshd-peers";
+/** The layer a suggestion's replacement is shown in, beside its passage (annotation/labels.ts). */
+export const SUG_LAYER_ID = "bshd-sug-labels";
+export const SUG_LABEL_STYLE_ID = "bshd-sug-label-style";
 
 // --- Classes and attributes inside the document ----------------------------
 
@@ -103,8 +108,9 @@ export function isHighlightWrapper(el: Element): boolean {
 export const ANN_ATTR = "data-bshd-ann";
 
 /**
- * Marks a highlight that belongs to a SUGGESTED EDIT, whose text it strikes
- * through (SPEC §22). The value is the annotation id.
+ * Marks an SVG highlight wrapper that belongs to a SUGGESTED EDIT, whose text
+ * it strikes through (SPEC §22). The value is the annotation id. HTML text is
+ * painted (ADR 0043) and carries nothing.
  *
  * Deliberately NOT in `OWN_MARKERS`: it sits on a highlight wrapper, which the
  * strip legs UNWRAP through `HL_SELECTOR` — keeping the author's text — rather
@@ -113,15 +119,6 @@ export const ANN_ATTR = "data-bshd-ann";
  */
 export const SUG_ATTR = "data-bshd-sug";
 
-/**
- * The proposed replacement, as an ATTRIBUTE on the last wrapper of a
- * suggestion, shown by the injected stylesheet as generated content
- * (`content: attr(…)`). Never as a text node: a node would add to the
- * document's `textContent`, which every anchor is measured against, so every
- * comment and peer selection made while it was shown would be anchored to text
- * that is not in the document. Outside `OWN_MARKERS` for the reason above.
- */
-export const INS_ATTR = "data-bshd-ins";
 
 /** The author-colour custom property a highlight reads (SPEC §16). */
 export const AUTHOR_COLOR_VAR = "--bshd-author";

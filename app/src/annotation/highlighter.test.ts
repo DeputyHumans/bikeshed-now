@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The serializer is the single most valuable test in this app (SPEC §6a).
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   captureAssetTags,
   clearHighlights,
@@ -11,7 +11,37 @@ import {
   assertNoDecoration,
 } from "./highlighter";
 import * as textPosition from "dom-anchor-text-position";
-import { ANN_ATTR, EMPTY_ATTR, HL_CLASS, HL_STYLE_ID, OWN_ATTR } from "../brand/dom";
+import { ANN_ATTR, EMPTY_ATTR, HL_CLASS, HL_STYLE_ID, OWN_ATTR, SUG_LAYER_ID } from "../brand/dom";
+import { peerColor } from "../brand/tokens";
+import { paintedItems } from "./paint";
+
+/** The text each painted thread covers, by thread, joined. */
+function paintedText(doc: Document): Record<string, string> {
+  return Object.fromEntries(paintedItems(doc).map((item) => [item.annId, item.ranges.map((r) => r.toString()).join("")]));
+}
+
+/**
+ * jsdom gives a Range no geometry at all. A click on a painted passage is
+ * matched by where it lands, so each case states it: the passages whose text
+ * is listed have one line box at the given rect, the rest have none.
+ */
+function layOut(boxes: Record<string, DOMRect>): void {
+  const proto = Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
+  const had = proto.getClientRects;
+  beforeEach(() => {
+    proto.getClientRects = function (this: Range) {
+      const box = boxes[this.toString()];
+      return box ? [box] : [];
+    };
+  });
+  afterEach(() => {
+    proto.getClientRects = had;
+  });
+}
+
+function clickAt(doc: Document, x: number, y: number, on: Element = doc.body): void {
+  on.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+}
 
 /**
  * Everything this app injects passes through serializeCleanHtml on its way to a
@@ -48,10 +78,12 @@ describe("serializeCleanHtml", () => {
     expect(serializeCleanHtml(doc)).toMatch(/^<!DOCTYPE html>\n<html/);
   });
 
-  it("unwraps highlights, keeping their text and their structure", () => {
-    const doc = makeDoc("<section id=s1><p>alpha <b>beta</b> gamma</p></section>");
-    highlightRange(doc, rangeOver(doc, "p"), "a1");
-    expect(doc.querySelectorAll(`mark.${HL_CLASS}`).length).toBeGreaterThan(0);
+  it("unwraps any highlight wrapper that reaches it, keeping its text and its structure", () => {
+    // A painted highlight adds no node (ADR 0043), but an SVG wrapper does, and
+    // a frame from before painting could still hand over a <mark>.
+    const doc = makeDoc(
+      `<section id=s1><p>alpha <mark class="${HL_CLASS}" ${ANN_ATTR}="a1"><b>beta</b></mark> gamma</p></section>`,
+    );
 
     const out = serializeCleanHtml(doc);
     expect(out).not.toContain(HL_CLASS);
@@ -213,8 +245,22 @@ describe("highlightRange", () => {
     highlightRange(doc, rangeOver(doc, "p"), "a1", {
       authorEmail: "ana@example.com",
     });
-    const mark = doc.querySelector("mark") as HTMLElement;
-    expect(mark.style.cssText).toContain("--bshd-author");
+    expect(paintedItems(doc).map((item) => [item.annId, item.color])).toEqual([["a1", peerColor("ana@example.com")]]);
+  });
+
+  it("paints HTML text and adds nothing to the document, which a layout could trip on", () => {
+    // A <mark> around part of a run of text in a flex or grid container made
+    // three items of one, and the slide rearranged itself for every reader.
+    const body = `<section id=s1><div style="display:flex;gap:1rem">alpha <b>beta</b> gamma delta</div></section>`;
+    const doc = makeDoc(body);
+    const before = doc.body.innerHTML;
+    const div = doc.querySelector("div")!;
+    const range = doc.createRange();
+    range.setStart(div.firstChild!, 2);
+    range.setEnd(div.lastChild!, 6);
+    highlightRange(doc, range, "a1");
+    expect(doc.body.innerHTML).toBe(before);
+    expect(paintedText(doc)).toEqual({ a1: "pha beta gamma" });
   });
 });
 
@@ -242,12 +288,14 @@ describe("inside SVG text", () => {
     expect(wrapper.textContent).toBe("LINEAR");
   });
 
-  it("gives each text node the wrapper its own namespace needs", () => {
+  it("paints the HTML text of a passage and wraps only its SVG text", () => {
+    // Measured: WebKit paints no highlight inside SVG <text>, so there alone a
+    // wrapper stays; Chromium and Firefox would have painted both.
     const doc = makeDoc(figure);
     highlightRange(doc, rangeOver(doc, "section"), "a1");
-    expect(doc.querySelector(`p > mark.${HL_CLASS}`)).not.toBeNull();
+    expect(doc.querySelector("mark")).toBeNull();
     expect(doc.querySelector(`text > tspan.${HL_CLASS}`)).not.toBeNull();
-    expect(doc.querySelector("text mark")).toBeNull();
+    expect(paintedText(doc)).toEqual({ a1: "prose" });
   });
 
   it("unwraps a tspan on clear and on serialize, leaving the <text> as authored", () => {
@@ -298,6 +346,12 @@ describe("inside SVG text", () => {
 });
 
 describe("selection and clicks", () => {
+  layOut({
+    alpha: new DOMRect(0, 0, 100, 20),
+    beta: new DOMRect(0, 40, 100, 20),
+    "alpha beta": new DOMRect(0, 0, 300, 20),
+  });
+
   it("marks exactly one thread as selected", async () => {
     const { setSelectedHighlight } = await import("./highlighter");
     const doc = makeDoc("<section id=s1><p>alpha</p><p>beta</p></section>");
@@ -305,34 +359,39 @@ describe("selection and clicks", () => {
     highlightRange(doc, rangeOver(doc, "p:last-child"), "a2");
 
     setSelectedHighlight(doc, "a2");
-    expect(doc.querySelector(`[${ANN_ATTR}="a1"]`)?.getAttribute("data-selected")).toBeNull();
-    expect(doc.querySelector(`[${ANN_ATTR}="a2"]`)?.getAttribute("data-selected")).toBe("true");
+    const css = doc.getElementById(HL_STYLE_ID)!.textContent!;
+    // One heavier rule, in the selected thread's colour; the painter keeps one.
+    expect(css.match(/::highlight\(bshd-hl-selected\)/g)).toHaveLength(1);
 
     setSelectedHighlight(doc, null);
+    expect(doc.getElementById(HL_STYLE_ID)!.textContent).not.toContain("bshd-hl-selected)");
     expect(doc.querySelector("[data-selected]")).toBeNull();
   });
 
-  it("reports a click on a highlight, and detaches cleanly", async () => {
+  it("reports a click on a painted passage, by where it lands, and detaches cleanly", async () => {
     const { attachHighlightClick } = await import("./highlighter");
     const doc = makeDoc("<section id=s1><p>alpha</p></section>");
     highlightRange(doc, rangeOver(doc, "p"), "a1");
 
     const seen: string[] = [];
     const detach = attachHighlightClick(doc, (id) => seen.push(id));
-    doc.querySelector("mark")!.dispatchEvent(new Event("click", { bubbles: true }));
+    clickAt(doc, 10, 10);
     expect(seen).toEqual(["a1"]);
 
     detach();
-    doc.querySelector("mark")!.dispatchEvent(new Event("click", { bubbles: true }));
+    clickAt(doc, 10, 10);
     expect(seen).toEqual(["a1"]);
   });
 
   it("ignores a click that is not on a highlight", async () => {
     const { attachHighlightClick } = await import("./highlighter");
-    const doc = makeDoc("<section id=s1><p>alpha</p></section>");
+    const doc = makeDoc("<section id=s1><p>alpha</p><p>beta</p></section>");
+    highlightRange(doc, rangeOver(doc, "p:first-child"), "a1");
     const seen: string[] = [];
     attachHighlightClick(doc, (id) => seen.push(id));
-    doc.querySelector("p")!.dispatchEvent(new Event("click", { bubbles: true }));
+    // Beside the line box, and on another paragraph's.
+    clickAt(doc, 150, 10);
+    clickAt(doc, 10, 50, doc.querySelector("p:last-child")!);
     expect(seen).toEqual([]);
   });
 
@@ -346,12 +405,52 @@ describe("selection and clicks", () => {
     doc.addEventListener("click", advance);
     attachHighlightClick(doc, () => {});
 
-    doc.querySelector("mark")!.dispatchEvent(new Event("click", { bubbles: true }));
+    clickAt(doc, 10, 10, doc.querySelector("p")!);
     expect(advance).not.toHaveBeenCalled();
 
     // Plain text is still the document's to answer.
-    doc.querySelector("p:last-child")!.dispatchEvent(new Event("click", { bubbles: true }));
+    clickAt(doc, 10, 50, doc.querySelector("p:last-child")!);
     expect(advance).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the innermost of two passages that overlap, as the innermost mark did", async () => {
+    const { attachHighlightClick } = await import("./highlighter");
+    const doc = makeDoc("<section id=s1><p>alpha beta</p></section>");
+    const p = doc.querySelector("p")!;
+    const word = doc.createRange();
+    word.setStart(p.firstChild!, 0);
+    word.setEnd(p.firstChild!, 5);
+    highlightRange(doc, rangeOver(doc, "p"), "wide");
+    highlightRange(doc, word, "word");
+    const seen: string[] = [];
+    attachHighlightClick(doc, (id) => seen.push(id));
+    clickAt(doc, 10, 10);
+    clickAt(doc, 250, 10);
+    expect(seen).toEqual(["word", "wide"]);
+  });
+
+  it("does not open a passage the reader cannot see, or one something of the page covers", async () => {
+    const { attachHighlightClick } = await import("./highlighter");
+    // A hidden slide's line boxes sit exactly under the shown slide's.
+    const frame = document.createElement("iframe");
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument!;
+    doc.body.innerHTML = `<section id=s1 style="visibility: hidden"><p>alpha</p></section><section id=s2><p>beta</p></section><div id=cover></div>`;
+    const proto = frame.contentWindow!.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
+    proto.getClientRects = function (this: Range) {
+      return [new DOMRect(0, 0, 100, 20)];
+    };
+    highlightRange(doc, rangeOver(doc, "#s1 p"), "hidden");
+    highlightRange(doc, rangeOver(doc, "#s2 p"), "shown");
+    const seen: string[] = [];
+    attachHighlightClick(doc, (id) => seen.push(id));
+    clickAt(doc, 10, 10);
+    expect(seen).toEqual(["shown"]);
+    // A cover over the passage takes the click, as it takes the pointer.
+    (doc as Document & { elementFromPoint: (x: number, y: number) => Element | null }).elementFromPoint = () => doc.getElementById("cover");
+    clickAt(doc, 10, 10);
+    expect(seen).toEqual(["shown"]);
+    frame.remove();
   });
 
   it("leaves a resolved annotation undrawn, and does not call it orphaned", async () => {
@@ -374,7 +473,7 @@ describe("selection and clicks", () => {
     // Resolving a comment has to make the document visibly cleaner, or there
     // is no reason to do it.
     expect(result.drawn).toEqual(["open"]);
-    expect(doc.querySelectorAll(`mark.${HL_CLASS}`)).toHaveLength(1);
+    expect(Object.keys(paintedText(doc))).toEqual(["open"]);
     // Skipped BEFORE the anchor is resolved: whether a settled comment's
     // passage still matches is not a question worth answering.
     expect(resolverCalls).toBe(1);
@@ -438,11 +537,7 @@ describe("selection and clicks", () => {
         (a) => exactRangeFromAnchor(doc, a),
       );
     };
-    const drawnText = (doc: Document) =>
-      Array.from(doc.querySelectorAll(`mark.${HL_CLASS}`))
-        .map((m) => m.textContent)
-        .join("")
-        .replace(/\s+/g, " ");
+    const drawnText = (doc: Document) => (paintedText(doc).agent ?? "").replace(/\s+/g, " ");
 
     it("highlights exactly the quoted words where the source wraps the line", async () => {
       const doc = wrapped();
@@ -456,7 +551,7 @@ describe("selection and clicks", () => {
       const result = await draw(doc, agentAnchor("Finance moves first", "", "", 11));
       expect(result.orphaned).toEqual(["agent"]);
       expect(result.drawn).toEqual([]);
-      expect(doc.querySelectorAll(`mark.${HL_CLASS}`)).toHaveLength(0);
+      expect(paintedItems(doc)).toHaveLength(0);
     });
   });
 
@@ -479,16 +574,18 @@ describe("suggestion marks (SPEC §22)", () => {
     return textPosition.toRange(p, { start, end: start + text.length })!;
   };
 
-  it("strikes every segment and hangs the replacement on the last one only", async () => {
-    const { SUG_ATTR, INS_ATTR } = await import("../brand/dom");
+  it("strikes the passage and shows the replacement in a label of ours, outside the text", () => {
     const doc = sugDoc();
     highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", {
       suggestion: { replacement: "two weekends" },
     });
-    const marks = Array.from(doc.querySelectorAll(`.${HL_CLASS}`));
-    expect(marks.length).toBe(3); // "a ", "single" inside <em>, " weekend"
-    expect(marks.every((m) => m.getAttribute(SUG_ATTR) === "s1x")).toBe(true);
-    expect(marks.map((m) => m.getAttribute(INS_ATTR))).toEqual([null, null, "two weekends"]);
+    // Struck through: painted, three runs ("a ", "single" inside <em>, " weekend"), no wrapper.
+    const [item] = paintedItems(doc);
+    expect(item).toMatchObject({ annId: "s1x", suggestion: true });
+    expect(item.ranges.map((r) => r.toString())).toEqual(["a ", "single", " weekend"]);
+    expect(doc.querySelector(`.${HL_CLASS}`)).toBeNull();
+    // The label layer is ours, marked so the strip removes it whole.
+    expect(doc.getElementById(SUG_LAYER_ID)?.getAttribute(OWN_ATTR)).toBe("sug-labels");
   });
 
   it("adds nothing to the document's text, which every anchor is measured against", () => {
@@ -500,11 +597,11 @@ describe("suggestion marks (SPEC §22)", () => {
     expect(doc.body.textContent).toBe(before);
   });
 
-  it("hangs nothing on a deletion", async () => {
-    const { INS_ATTR } = await import("../brand/dom");
+  it("shows no label for a deletion", () => {
     const doc = sugDoc();
     highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", { suggestion: { replacement: "" } });
-    expect(doc.querySelector(`[${INS_ATTR}]`)).toBeNull();
+    expect(doc.getElementById(SUG_LAYER_ID)).toBeNull();
+    expect(paintedItems(doc)).toHaveLength(1);
   });
 
   it("is stripped from published bytes, with the author's words kept and the replacement nowhere", () => {
@@ -525,7 +622,7 @@ describe("suggestion marks (SPEC §22)", () => {
     highlightRange(doc, rangeOverText(doc, "a single weekend"), "s1x", {
       suggestion: { replacement: "two weekends" },
     });
-    expect(() => assertNoDecoration(doc, "the test")).toThrow(/suggestion mark/);
+    expect(() => assertNoDecoration(doc, "the test")).toThrow(/painted highlight.*injected sug-labels|injected sug-labels.*painted highlight/);
   });
 
   it("a pending suggestion that no longer resolves is stale, not orphaned; a decided one is not drawn", async () => {

@@ -3,7 +3,7 @@
 
 import { OWN_SELECTOR, PEER_LAYER_ID, PEER_STYLE_ID, markOwn } from "../brand/dom";
 import { rangeFromAnchor } from "./anchor";
-import { isVisible } from "./visible";
+import { isVisible, watchShown } from "./visible";
 import { PLACE_ID_MAX, type Peer, type ReadingPlace } from "../presence";
 import { personName } from "../people";
 
@@ -127,9 +127,6 @@ function passageVisible(range: Range): boolean {
   return el ? isVisible(el) : false;
 }
 
-/** The attributes a deck changes to show another slide, which is all it changes. */
-const SHOWN_BY = ["class", "style", "hidden", "aria-hidden"];
-
 export function createPeerOverlay(doc: Document): PeerOverlay {
   ensureStyles(doc);
   const layer = ensureLayer(doc);
@@ -201,25 +198,12 @@ export function createPeerOverlay(doc: Document): PeerOverlay {
   /**
    * A deck that stacks its slides changes slide by changing an attribute, and
    * nothing scrolls or resizes, so neither of those tells the overlay that a
-   * passage came into view or left it. The deck's own signals do, the ones
-   * `useDeck` reads its position from: an attribute that shows a slide, and the
-   * end of the fade or animation it shows it with. Observation only, from the
-   * frame's own realm; records inside our own layer are its redraws, and
-   * acting on them would draw forever.
+   * passage came into view or left it (`watchShown`).
    */
   const view = doc.defaultView;
-  const settle = () => {
+  const stopWatching = watchShown(doc, OWN_SELECTOR, () => {
     if (current.some((peer) => peer.focus)) schedule();
-  };
-  const Observer = view?.MutationObserver;
-  const observer = Observer && doc.body
-    ? new Observer((records) => {
-        if (records.some((record) => !(record.target as Element).closest?.(OWN_SELECTOR))) settle();
-      })
-    : null;
-  if (observer && doc.body) observer.observe(doc.body, { attributes: true, subtree: true, attributeFilter: SHOWN_BY });
-  const motionEnds = ["transitionend", "animationend"];
-  for (const type of motionEnds) doc.addEventListener(type, settle, true);
+  });
 
   return {
     render(peers) {
@@ -228,8 +212,7 @@ export function createPeerOverlay(doc: Document): PeerOverlay {
     },
     reflow: schedule,
     destroy() {
-      observer?.disconnect();
-      for (const type of motionEnds) doc.removeEventListener(type, settle, true);
+      stopWatching();
       if (frame && view) view.cancelAnimationFrame(frame);
       layer.remove();
       doc.getElementById(PEER_STYLE_ID)?.remove();

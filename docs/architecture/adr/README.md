@@ -49,6 +49,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0040](0040-a-person-is-shown-by-a-short-name.md) | A person is shown by a short name, looked up by uid | Accepted |
 | [0041](0041-view-choices-are-kept-on-the-account.md) | View choices are kept on the account, and copied into the browser | Accepted |
 | [0042](0042-a-markdown-documents-address-answers-its-markdown.md) | A Markdown document's `.md` address answers its own Markdown | Accepted |
+| [0043](0043-a-highlight-is-painted-not-wrapped.md) | A highlight is painted, not wrapped | Accepted |
 
 ## Format
 

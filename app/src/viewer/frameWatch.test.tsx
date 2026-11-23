@@ -148,16 +148,18 @@ describe("the selection controls", () => {
 });
 
 describe("a highlight, tapped where no click arrives", () => {
-  it("is focusable, never in the tab order, and opens its thread when it takes focus", () => {
-    const doc = frameDoc(`<p id="p">We can cut over in a single weekend.</p>`, { deaf: true });
+  it("in SVG text, is focusable, never in the tab order, and opens its thread when it takes focus", () => {
+    // HTML text is painted, with no element to focus (ADR 0043); only SVG text
+    // keeps a wrapper, and so the tap.
+    const doc = frameDoc(`<svg viewBox="0 0 100 20"><text id="t" x="0" y="10">We can cut over in a single weekend.</text></svg>`, { deaf: true });
     const range = doc.createRange();
-    range.setStart(doc.querySelector("#p")!.firstChild!, 7);
-    range.setEnd(doc.querySelector("#p")!.firstChild!, 14);
+    range.setStart(doc.querySelector("#t")!.firstChild!, 7);
+    range.setEnd(doc.querySelector("#t")!.firstChild!, 14);
     highlightRange(doc, range, "ann-1", { authorEmail: "a@example.com" });
     const text = doc.body.textContent;
     const opened = vi.fn();
     const detach = attachHighlightClick(doc, opened);
-    const mark = doc.querySelector("mark")!;
+    const mark = doc.querySelector("tspan")! as unknown as HTMLElement;
     expect(mark.getAttribute("tabindex")).toBe("-1");
     // A tap focuses it; that is all WebKit lets the viewer see.
     mark.focus();
@@ -168,6 +170,19 @@ describe("a highlight, tapped where no click arrives", () => {
     expect(doc.body.textContent).toBe(text);
     detach();
     expect(mark.hasAttribute("tabindex")).toBe(false);
+  });
+
+  it("in HTML text, adds nothing focusable at all: the panel opens its thread", () => {
+    const doc = frameDoc(`<p id="p">We can cut over in a single weekend.</p>`, { deaf: true });
+    const range = doc.createRange();
+    range.setStart(doc.querySelector("#p")!.firstChild!, 7);
+    range.setEnd(doc.querySelector("#p")!.firstChild!, 14);
+    const before = doc.body.innerHTML;
+    highlightRange(doc, range, "ann-1", { authorEmail: "a@example.com" });
+    const detach = attachHighlightClick(doc, vi.fn());
+    expect(doc.body.innerHTML).toBe(before);
+    expect(doc.querySelector("[tabindex]")).toBeNull();
+    detach();
   });
 });
 

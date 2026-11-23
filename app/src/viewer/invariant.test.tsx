@@ -10,7 +10,8 @@ import { useInlineEditor } from "./useInlineEditor";
 import { useSharedDocument } from "./useSharedDocument";
 import { usePeerPresence } from "./usePeerPresence";
 import { useSuggestionReview } from "./useSuggestionReview";
-import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, INS_ATTR, LINK_ATTR, OWN_ATTR, SUG_ATTR } from "../brand/dom";
+import { ANN_ATTR, HL_CLASS, HL_SELECTOR, HL_STYLE_ID, LINK_ATTR, OWN_ATTR, SUG_ATTR, SUG_LAYER_ID } from "../brand/dom";
+import { hasPaint } from "../annotation/paint";
 import type { Annotation } from "../types";
 import type { FrameMode } from "./frameMode";
 
@@ -221,7 +222,8 @@ function Harness({ doc, mode, reviewing = SUGGESTION.annId }: { doc: Document; m
 function decorationIn(doc: Document): string[] {
   const found: string[] = [];
   if (doc.querySelector(HL_SELECTOR)) found.push("highlight mark");
-  if (doc.querySelector(`[${SUG_ATTR}], [${INS_ATTR}]`)) found.push("suggestion mark");
+  if (doc.querySelector(`[${SUG_ATTR}]`)) found.push("suggestion mark");
+  if (hasPaint(doc)) found.push("painted highlight");
   if (doc.body.textContent?.includes(REPLACEMENT)) found.push("suggested text in the document");
   if (doc.getElementById(HL_STYLE_ID)) found.push("highlight stylesheet");
   if (doc.querySelector(`[${LINK_ATTR}]`)) found.push("retargeted link");
@@ -248,10 +250,12 @@ describe("the decoration invariant", () => {
         mode={{ kind: "reading", versionId: "v1", draft: false, sandboxed: true }}
       />,
     );
-    expect(doc.querySelectorAll(HL_SELECTOR).length).toBeGreaterThan(0);
+    // Painted, so no wrapper is in the text at all (ADR 0043).
+    expect(hasPaint(doc)).toBe(true);
+    expect(doc.querySelector(HL_SELECTOR)).toBeNull();
     expect(doc.getElementById(HL_STYLE_ID)).not.toBeNull();
-    // The suggestion is drawn too, its replacement as an attribute only.
-    expect(doc.querySelector(`[${INS_ATTR}]`)?.getAttribute(INS_ATTR)).toBe(REPLACEMENT);
+    // The suggestion is drawn too, its replacement in a label layer of ours, never as text.
+    expect(doc.getElementById(SUG_LAYER_ID)?.getAttribute(OWN_ATTR)).toBe("sug-labels");
     expect(doc.body.textContent).not.toContain(REPLACEMENT);
   });
 
@@ -276,8 +280,9 @@ describe("the decoration invariant", () => {
 
   it("leaves nothing behind either where the document delivers no events: no retargeted link, no focusable highlight", () => {
     // WebKit delivers the viewer no events from a sandboxed frame, so there
-    // the annotation layer also points a leaving link at a new tab and makes
-    // highlights focusable (viewer/frameWatch.ts). Both are decoration.
+    // the annotation layer also points a leaving link at a new tab
+    // (viewer/frameWatch.ts), which is decoration. Painted highlights make
+    // nothing focusable: there is no element to focus (ADR 0043).
     const doc = makeDoc();
     doc.body.insertAdjacentHTML("beforeend", `<p><a id="out" href="https://example.com/x" rel="author">out</a></p>`);
     Object.defineProperty(doc, "addEventListener", { configurable: true, value: () => {} });
@@ -289,7 +294,8 @@ describe("the decoration invariant", () => {
     );
     const out = doc.getElementById("out")!;
     expect(out.getAttribute("target")).toBe("_blank");
-    expect(doc.querySelector(HL_SELECTOR)?.getAttribute("tabindex")).toBe("-1");
+    expect(hasPaint(doc)).toBe(true);
+    expect(doc.querySelector("[tabindex]")).toBeNull();
 
     act(() => {
       rerender(<Harness doc={doc} mode={{ kind: "editing", baseVersion: "v1" }} />);
@@ -381,7 +387,7 @@ describe("the decoration invariant", () => {
 
     expect(saveDraft).toHaveBeenCalled();
     const html = saveDraft.mock.calls[0][2];
-    for (const artifact of [HL_CLASS, HL_STYLE_ID, ANN_ATTR, OWN_ATTR, SUG_ATTR, INS_ATTR, REPLACEMENT, "contenteditable", "spellcheck"]) {
+    for (const artifact of [HL_CLASS, HL_STYLE_ID, ANN_ATTR, OWN_ATTR, SUG_ATTR, SUG_LAYER_ID, "data-bshd-ins", REPLACEMENT, "contenteditable", "spellcheck"]) {
       expect(html, `the draft payload contains ${artifact}`).not.toContain(artifact);
     }
     // The text the suggestion would replace is the author's, and stays.
@@ -436,7 +442,7 @@ describe("the decoration invariant", () => {
         />,
       );
     });
-    expect(doc.querySelectorAll(HL_SELECTOR).length).toBeGreaterThan(0);
+    expect(hasPaint(doc)).toBe(true);
     expect(doc.body.getAttribute("contenteditable")).toBeNull();
   });
 
