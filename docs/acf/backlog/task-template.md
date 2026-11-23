@@ -1,4 +1,4 @@
-<!-- acf-whip-artifact: content/backlog/task-template.md v3.7.0 -->
+<!-- acf-whip-artifact: content/backlog/task-template.md v3.7.1 -->
 # Task Template
 
 ## Use this exact format for every task file
@@ -255,11 +255,8 @@ task-engineer must:
 
 An implementation agent must:
 
-- invoke `clean-checkout-before-task` as Step 0, with `TASK_FILE` set to the **root** path the
-  orchestrator passed. The skill creates the worktree, validates the branch and appends the OK token
-  to the root file.
-- do every code read, edit and commit inside the worktree on `worktree/<slug>`, never on the trunk
-  branch
+- invoke `clean-checkout-before-task` as Step 0, with `TASK_FILE` set to the **root** path the orchestrator passed. The skill creates the worktree, validates the branch and appends the OK token to the root file.
+- do every code read, edit and commit inside the worktree on `worktree/<slug>`, never on the trunk branch
 - never move a task file between `.backlog/<state>/` folders; the orchestrator does that at the root
 - never commit `.backlog/` changes on `worktree/<slug>`
 - add evidence of completion to the root task file, writing the file directly at its root path
@@ -279,10 +276,8 @@ An implementation agent must:
 
 quality-reviewer must:
 
-- invoke `clean-checkout-before-task` as Step 0 (idempotent; it validates the worktree the
-  implementer used)
-- verify that the transition log contains at least one `clean-checkout | ok` line, and emit
-  `transition: rejected` with `rejection_increment: 1` if it does not
+- invoke `clean-checkout-before-task` as Step 0 (idempotent; it validates the worktree the implementer used)
+- verify that the transition log contains at least one `clean-checkout | ok` line, and emit `transition: rejected` with `rejection_increment: 1` if it does not
 - add review comments in the designated section of the root task file
 - end its response with the ACFW-RESULT marker (`transition: accepted | rejected`)
 - never move the task file; the orchestrator performs the in-review→accepted/rejected move at the root
