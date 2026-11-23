@@ -436,7 +436,7 @@ describe("selection and clicks", () => {
     document.body.appendChild(frame);
     const doc = frame.contentDocument!;
     doc.body.innerHTML = `<section id=s1 style="visibility: hidden"><p>alpha</p></section><section id=s2><p>beta</p></section><div id=cover></div>`;
-    const proto = frame.contentWindow!.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
+    const proto = doc.defaultView!.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
     proto.getClientRects = function (this: Range) {
       return [new DOMRect(0, 0, 100, 20)];
     };

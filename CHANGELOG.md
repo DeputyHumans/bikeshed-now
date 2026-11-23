@@ -12,6 +12,7 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ### Added
 
+- **The slide list shows who is on each slide.** Everybody else in a deck is a dot in their colour on the slide they are on, round while they read and a diamond while they edit, up to three and then a count, and the slide's name says who is there, "Slide 7: Pricing, with Dana K". A dot moves as its person moves. Somebody whose tab shares no slide is not shown on one, and is still among the people at the top (SPEC §6d).
 - **The list of your documents beside a document can be made wider or narrower.** Drag its right edge, or focus the edge and use the arrow keys (Shift for bigger steps, Home and End for the narrowest and widest). Enter or a double click puts it back to where it starts. It stays between 200 px and the lesser of 480 px and a little over a third of the window, so the document always keeps the rest, and your account remembers the width on every device. On a narrow window, where the list opens over the document, it keeps its own width (SPEC §13).
 
 - **A document's name that does not fit in that list is shown in full when you rest the pointer on it,** or when you reach it with the keyboard. A card beside the row shows the whole name, its cover, who owns it, where it is filed, whether it is private or shared by link or in public, how long it takes to read, when it was last updated and how many times people read it. A name that fits shows nothing, and a touch opens the document as before (SPEC §13).

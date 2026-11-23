@@ -130,7 +130,7 @@ describe("painting", () => {
 describe("finding a painted passage under a point", () => {
   function laidOut(boxes: Record<string, DOMRect>) {
     const made = framed(`<p id="a">alpha</p><p id="b" style="opacity: 0">beta</p>`);
-    const proto = made.win.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
+    const proto = made.doc.defaultView!.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
     proto.getClientRects = function (this: Range) {
       const box = boxes[this.toString()];
       return box ? [box] : [];

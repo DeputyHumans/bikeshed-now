@@ -138,6 +138,28 @@
   -webkit-box-orient: vertical;
 }
 
+/* Who else is on this slide: a dot each, as in the presence bar, opposite the
+   number. Below the edit actions while editing, which take this corner. */
+.slide-thumb-people {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+}
+.slide-rail .slide-thumb[draggable="true"] .slide-thumb-people { top: 26px; }
+.slide-thumb-people-more {
+  color: var(--color-ink-muted);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .slide-thumb-actions {
   position: absolute;
   right: 3px;

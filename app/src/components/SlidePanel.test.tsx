@@ -47,6 +47,7 @@ function panel(props: Partial<Parameters<typeof SlidePanel>[0]> = {}) {
       onGoTo={props.onGoTo ?? vi.fn()}
       onChanged={props.onChanged ?? vi.fn()}
       images={props.images}
+      people={props.people}
     />,
   );
 }
@@ -163,6 +164,53 @@ describe("SlidePanel", () => {
 
     expect(Array.from(parent.children).indexOf(list[0].outer)).toBe(2);
     expect(onChanged).toHaveBeenCalled();
+  });
+});
+
+describe("SlidePanel: who is on which slide", () => {
+  const person = (uid: string, name: string, color: string, mode: "view" | "edit" = "view") => ({ uid, name, color, mode });
+
+  it("puts a dot in each person's colour on their slide, its shape saying whether they edit", () => {
+    const people = new Map([[1, [person("u1", "Dana K", "#7c3aed"), person("u2", "Sam P", "#00769b", "edit")]]]);
+    const { container } = panel({ people });
+    const thumbs = container.querySelectorAll(".slide-thumb");
+    expect(thumbs[0].querySelector(".slide-thumb-people")).toBeNull();
+    const cluster = thumbs[1].querySelector(".slide-thumb-people")!;
+    const dots = Array.from(cluster.querySelectorAll<HTMLElement>(".presence-dot"));
+    expect(dots.map((dot) => [dot.style.color, dot.getAttribute("data-mode")])).toEqual([
+      ["rgb(124, 58, 237)", "view"],
+      ["rgb(0, 118, 155)", "edit"],
+    ]);
+    // Read aloud through the slide's own name, so the cluster itself is not.
+    expect(cluster.getAttribute("aria-hidden")).toBe("true");
+    expect(cluster.getAttribute("title")).toBe("Dana K and Sam P");
+  });
+
+  it("names one or two people on the slide, and counts more", () => {
+    const many = [person("u1", "Dana K", "#111111"), person("u2", "Sam P", "#222222"), person("u3", "Lee T", "#333333"), person("u4", "Ana R", "#444444")];
+    const people = new Map([
+      [0, [person("u1", "Dana K", "#111111")]],
+      [1, many.slice(0, 2)],
+      [2, many],
+    ]);
+    const { container } = panel({ people });
+    const labels = Array.from(container.querySelectorAll(".slide-thumb")).map((thumb) => thumb.getAttribute("aria-label"));
+    expect(labels).toEqual([
+      "Slide 1: Slide 1 title, with Dana K",
+      "Slide 2: Slide 2 title, with Dana K and Sam P",
+      "Slide 3: Slide 3 title, with 4 people",
+    ]);
+    // Three dots, then the rest as a count.
+    const cluster = container.querySelectorAll(".slide-thumb")[2].querySelector(".slide-thumb-people")!;
+    expect(cluster.querySelectorAll(".presence-dot")).toHaveLength(3);
+    expect(cluster.textContent).toBe("+1");
+    expect(cluster.getAttribute("title")).toBe("Dana K, Sam P, Lee T and Ana R");
+  });
+
+  it("shows nobody when nobody else is on a slide", () => {
+    const { container } = panel({ people: new Map() });
+    expect(container.querySelector(".slide-thumb-people")).toBeNull();
+    expect(container.querySelectorAll(".slide-thumb")[0].getAttribute("aria-label")).toBe("Slide 1: Slide 1 title");
   });
 });
 

@@ -46,6 +46,7 @@ import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
 import { useVersionDrop } from "../viewer/useVersionDrop";
 import { useExplorer } from "../viewer/explorer";
+import { useRailPeople } from "../viewer/railPeople";
 import { nameFromEmail, personName, shortName, usePeople } from "../people";
 import { baseFilesOf, combine, type Pick } from "../bundleInput";
 import { contentBase, readingSandboxed, readsDraft, type FrameMode } from "../viewer/frameMode";
@@ -515,6 +516,9 @@ export function DocViewer() {
     // the person they follow would pull them back (SPEC §16).
     onReaderMove: presence.release,
   });
+
+  // Who else is on which slide, for the rail, by the same answer following uses.
+  const railPeople = useRailPeople(presence.peers, deck.slides, frame.doc);
 
   // After the deck, which it pages: a thread's passage, or the person being
   // followed, may be on another slide.
@@ -1343,6 +1347,7 @@ export function DocViewer() {
               baseHref={baseHref}
               stage={deck.stage}
               images={railImages}
+              people={railPeople}
               onGoTo={(index) => {
                 deck.goTo(index);
                 // A drawer over the slide just chosen is in the way of looking at it.

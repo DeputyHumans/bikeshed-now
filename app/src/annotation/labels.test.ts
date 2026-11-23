@@ -17,7 +17,7 @@ function deck() {
   frames.push(frame);
   const doc = frame.contentDocument!;
   doc.body.innerHTML = `<section id="s1"><p id="p1">We can cut over in a weekend.</p></section><section id="s2" style="visibility: hidden"><p id="p2">Two weeks.</p></section>`;
-  const view = frame.contentWindow!;
+  const view = doc.defaultView!;
   const proto = view.Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
   proto.getClientRects = () => [new DOMRect(10, 40, 120, 18)];
   Object.defineProperty(view, "innerWidth", { value: 1000, configurable: true });
