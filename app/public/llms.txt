@@ -190,7 +190,7 @@ Every command takes `--json`. `login` signs in through the browser and waits for
 - **A long document comes in pages.** `truncated` says there is more and `total` how much. Call again with `offset` set to `nextOffset` and the same `version`, so every page comes from one version even if somebody publishes in between. `bikeshed get` reads every page for you.
 - **With only an address,** add `.md`: `https://<deployment>/d/<id>.md`, or `/d/<id>/<version>.md`, with `?k=` for an unlisted document, answers the same reading as `text/markdown`, behind the same access as the page itself. A document's page names that address in `<link rel="alternate" type="text/markdown">`.
 
-A Markdown document is not converted: `get_document` returns the Markdown that was published, which is also what you revise.
+A Markdown document is not converted: `get_document` returns the Markdown that was published, which is also what you revise. Its `.md` address answers that Markdown too, byte for byte, under front matter that names it the `source` and gives its `title`, `document`, `version` and `original` addresses. The front matter is not part of the document: to revise, send only what follows it. `update_document` refuses Markdown that opens with it, or with a reading's. Its relative links resolve against `original`.
 
 ## Skills
 

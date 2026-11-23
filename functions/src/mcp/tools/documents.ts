@@ -30,6 +30,7 @@ import {
   readerAddress,
   readingPreamble,
 } from "../../lib/markdown/reading";
+import { opensWithOwnFrontMatter } from "../../lib/markdown/source";
 import { storedReading } from "../../lib/markdown/stored";
 import { commitDraft } from "../../lib/draft";
 import { editorsRefusal } from "../../lib/presence";
@@ -601,6 +602,16 @@ export const DOCUMENT_TOOLS: ToolDefinition[] = [
         throw new Error(
           "this is an HTML document and that content has no HTML in it, so it looks like the Markdown reading get_document returns, which is not the source. " +
             'Read the source with get_document and as: "source" (or bikeshed get --source), revise that, and send it back',
+        );
+      }
+      // A Markdown document's `.md` address answers its Markdown under front
+      // matter that is not part of it, and a reading opens with front matter
+      // too. Sent back whole, either would become the document's first lines
+      // (ADR 0042). An author's own front matter is not ours and passes.
+      if (content !== null && format === "markdown" && opensWithOwnFrontMatter(content)) {
+        throw new Error(
+          "that content opens with the front matter Bikeshed puts on a document's .md address, which is not part of the document. " +
+            "Send only the Markdown that follows it, or read the source with get_document (or bikeshed get), revise that, and send it back",
         );
       }
 

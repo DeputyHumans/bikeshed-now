@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Forty decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
+Forty-one decisions that a newcomer would otherwise re-argue in a pull request, each about thirty lines: what was decided, what it costs, and what would make it wrong. An ADR is cheap. Re-arguing a decision without one is not.
 
 They are **historical records, not documentation**. `docs/architecture/spec.md` is normative and wins over anything here. When a decision is reversed, the ADR is marked superseded rather than edited — the point is to preserve the reasoning that was actually available at the time.
 
@@ -36,7 +36,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0027](0027-a-reader-lists-their-own-reading.md) | A reader lists their own reading, across documents | Accepted |
 | [0028](0028-what-a-crawler-can-read.md) | What a crawler can read | Accepted |
 | [0029](0029-expiry-makes-it-private-on-an-hourly-job.md) | Expiry makes it private, on an hourly job | Accepted |
-| [0030](0030-agents-read-a-markdown-reading.md) | Agents read an HTML document as a Markdown reading made on read | Accepted |
+| [0030](0030-agents-read-a-markdown-reading.md) | Agents read an HTML document as a Markdown reading made on read | Amended by 0042 |
 | [0031](0031-a-document-can-be-embedded-in-another-site.md) | A document can be embedded in another site | Accepted |
 | [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) | A reading separates text that touches, and a quote may carry the space | Accepted |
 | [0033](0033-a-reading-is-kept-once-made.md) | A version's reading is kept once made, named by its bytes | Amended by 0036 |
@@ -48,6 +48,7 @@ Number 0022 is unused: it was set aside for a decision that has not been made.
 | [0039](0039-the-viewer-has-an-explorer.md) | The viewer has an explorer, above the keyed viewer and remembered on the account | Amended by 0041 |
 | [0040](0040-a-person-is-shown-by-a-short-name.md) | A person is shown by a short name, looked up by uid | Accepted |
 | [0041](0041-view-choices-are-kept-on-the-account.md) | View choices are kept on the account, and copied into the browser | Accepted |
+| [0042](0042-a-markdown-documents-address-answers-its-markdown.md) | A Markdown document's `.md` address answers its own Markdown | Accepted |
 
 ## Format
 

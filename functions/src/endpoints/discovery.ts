@@ -14,6 +14,7 @@ import {
   readerAddress,
   readingPreamble,
 } from "../lib/markdown/reading";
+import { composeSource, sourcePreamble } from "../lib/markdown/source";
 import { storedReading } from "../lib/markdown/stored";
 import { HEAD_SCAN_BYTES, readHead } from "../lib/head";
 import {
@@ -366,8 +367,10 @@ export const docShell = onRequest(WARM, async (req, res) => {
 
 /**
  * GET /d/:docId.md, GET /d/:docId/:versionId.md — the document as an agent
- * reads it: a Markdown reading made from the entry, opening with the front
- * matter that says it is one and where the original is (SPEC §2, §19, ADR 0030).
+ * reads it: an HTML document as a Markdown reading made from the entry, a
+ * Markdown document as its own Markdown, each opening with the front matter
+ * that says which it is and where the original is (SPEC §2, §19, ADR 0030,
+ * ADR 0042).
  *
  * For an agent that has only an address. Unlike the shell beside it, this
  * path authenticates and refuses, because its body IS the document's
@@ -409,12 +412,15 @@ export const docMarkdown = onRequest({ ...PLAIN, ...READS_PAGES }, async (req, r
       res.status(404).end();
       return;
     }
-    // A Markdown document's original is its Markdown; the reading is made
-    // from the HTML either way, so its addresses are absolute.
+    // A Markdown document's original is its Markdown, and that is what this
+    // address answers (ADR 0042). Anything else, an HTML document or a
+    // Markdown version that names no source, answers a reading of the HTML.
     const sourceRel = typeof v.sourceEntry === "string" && safeRelPath(v.sourceEntry) ? v.sourceEntry : entry;
+    const sourceKey =
+      v.format === "markdown" && sourceRel !== entry ? versionObjectKey(docId, versionId, v, sourceRel) : null;
     const storagePrefix = versionStorageIdentity(docId, versionId, v);
     const entryKey = versionObjectKey(docId, versionId, v, entry);
-    if (!entryKey) {
+    if (!entryKey && !sourceKey) {
       res.status(404).end();
       return;
     }
@@ -422,39 +428,48 @@ export const docMarkdown = onRequest({ ...PLAIN, ...READS_PAGES }, async (req, r
     const keyed = gate.basis === "link" || gate.basis === "folder-link" ? k : null;
     const origin = publicOrigin();
     const place = { origin, docId, versionId, entry, k: keyed };
-    // Made once for this version's bytes and kept (ADR 0033).
-    const reading = await storedReading({
-      store: bucket(),
-      place,
-      version: v,
-      storagePrefix,
-      source: async () => {
-        const [bytes] = await bucket().file(entryKey).download();
-        return bytes.toString("utf8");
-      },
-    });
     const documentUrl = readerAddress(origin, docId, pinned, keyed);
     const original = contentAddress(place, sourceRel);
-    const text = composeReading(
-      readingPreamble({
-        title: String((gate.docData as { title?: unknown }).title ?? docId),
-        document: documentUrl,
-        version: versionId,
-        original,
-        leftOut: reading.leftOut,
-        warnings: reading.warnings,
-      }),
-      reading,
-    );
+    const title = String((gate.docData as { title?: unknown }).title ?? docId);
+    let text: string;
+    let cut = false;
+    if (sourceKey) {
+      const [bytes] = await bucket().file(sourceKey).download();
+      text = composeSource(sourcePreamble({ title, document: documentUrl, version: versionId, original }), bytes.toString("utf8"));
+    } else {
+      // Made once for this version's bytes and kept (ADR 0033).
+      const reading = await storedReading({
+        store: bucket(),
+        place,
+        version: v,
+        storagePrefix,
+        source: async () => {
+          const [bytes] = await bucket().file(entryKey!).download();
+          return bytes.toString("utf8");
+        },
+      });
+      text = composeReading(
+        readingPreamble({
+          title,
+          document: documentUrl,
+          version: versionId,
+          original,
+          leftOut: reading.leftOut,
+          warnings: reading.warnings,
+        }),
+        reading,
+      );
+      cut = reading.cut;
+    }
 
-    // ONLY NOW: the reading exists, so this URL may be cached with it.
+    // ONLY NOW: the text exists, so this URL may be cached with it.
     setContentCache(res, gate);
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
     res.setHeader(
       "Link",
       `<${documentUrl}>; rel="canonical", <${original}>; rel="alternate"; type="${contentTypeOf(sourceRel).split(";")[0]}"`,
     );
-    if (reading.cut) res.setHeader("Bikeshed-Cut", "1");
+    if (cut) res.setHeader("Bikeshed-Cut", "1");
     res.status(200);
     if (req.method === "HEAD") res.end();
     else res.send(text);

@@ -1,6 +1,6 @@
 # 0030 — Agents read an HTML document as a Markdown reading made on read
 
-**Status** Accepted, amended by [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) (§4: a space where elements touch, and a quote that carries it), [0033](0033-a-reading-is-kept-once-made.md) (§1: a version's reading is kept once made) and [0034](0034-a-reading-is-made-within-a-budget.md) (the bound: a reading is made in a worker within a time and memory budget, and parses up to 8M characters) · **Spec** §2, §17, §19
+**Status** Accepted, amended by [0032](0032-a-quote-may-carry-a-space-where-elements-touch.md) (§4: a space where elements touch, and a quote that carries it), [0033](0033-a-reading-is-kept-once-made.md) (§1: a version's reading is kept once made) [0034](0034-a-reading-is-made-within-a-budget.md) (the bound: a reading is made in a worker within a time and memory budget, and parses up to 8M characters) and [0042](0042-a-markdown-documents-address-answers-its-markdown.md) (§3, §7: a Markdown document's `.md` address answers its own Markdown under front matter that says so) · **Spec** §2, §17, §19
 
 ## Context
 

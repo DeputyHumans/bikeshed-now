@@ -8,6 +8,8 @@ const admin = require("firebase-admin");
 const { fakeFirestore, withFakeAdmin, invoke } = require("./fakes.js");
 const { TOOLS } = require("../lib/mcp/tools.js");
 const { LOOKS_LIKE_HTML } = require("../lib/mcp/tools/shared.js");
+const { composeSource, sourcePreamble } = require("../lib/lib/markdown/source.js");
+const { noneLeftOut, readingPreamble } = require("../lib/lib/markdown/reading.js");
 
 const tool = (name) => TOOLS.find((t) => t.name === name);
 
@@ -27,7 +29,7 @@ const PENDING = {
  * live node. `rtdb` is what the Realtime Database holds, `false` for a
  * deployment without one, or `"broken"` for one whose reads fail.
  */
-function world({ rtdb = false, anns = {}, caller = OWNER, doc = {} } = {}) {
+function world({ rtdb = false, anns = {}, caller = OWNER, doc = {}, markdown = null } = {}) {
   const { db, store } = fakeFirestore({
     "docs/d1": {
       docId: "d1",
@@ -42,13 +44,17 @@ function world({ rtdb = false, anns = {}, caller = OWNER, doc = {} } = {}) {
       draft: { baseVersion: "v1", entry: "index.html", bytes: 70, updatedByEmail: OWNER.emailLower },
       ...doc,
     },
-    "docs/d1/versions/v1": { versionId: "v1", entry: "index.html", format: "html", contentHash: "h1" },
+    "docs/d1/versions/v1": markdown === null
+      ? { versionId: "v1", entry: "index.html", format: "html", contentHash: "h1" }
+      : { versionId: "v1", entry: "index.html", sourceEntry: "index.md", format: "markdown", contentHash: "h1" },
     ...Object.fromEntries(Object.entries(anns).map(([id, a]) => [`docs/d1/versions/v1/annotations/${id}`, a])),
   });
   const objects = new Map(
     Object.entries({
       "docs/d1/v1/index.html": HTML,
       "docs/d1/draft/index.html": HTML.replace("two", "DRAFTMARK two"),
+      // A Markdown document's source, beside the HTML compiled from it.
+      ...(markdown === null ? {} : { "docs/d1/v1/index.md": markdown }),
     }).map(([k, v]) => [k, Buffer.from(v)]),
   );
   const ctx = {
@@ -305,6 +311,46 @@ test("a reading sent back as an update is refused, and the source it names is wh
   await w.update(source.source.replace("two weekends", "one weekend"), { baseVersion: "v1" });
   assert.equal(w.doc().currentVersion, "v2");
 });
+
+test("a Markdown document's .md text sent back whole is refused, and what follows its front matter revises", async () => {
+  /**
+   * The sequence an agent with only a link performs (ADR 0042): it fetches
+   * /d/<id>.md, which answers the Markdown under front matter that is not
+   * part of it, and sends back what it fetched. Taken, that front matter
+   * would become the document's first lines. The Markdown after it is the
+   * source and revises as it always has; an author's own front matter is
+   * not ours and is published like any other text.
+   */
+  const SOURCE = "# Memo\n\nCut over in two weekends.\n";
+  const w = world({ markdown: SOURCE });
+  const fetched = composeSource(
+    sourcePreamble({ title: "Memo", document: "https://bikeshed.example/d/d1", version: "v1", original: "https://bikeshed.example/content/d1/v1/index.md" }),
+    SOURCE,
+  );
+
+  await assert.rejects(w.update(fetched, { baseVersion: "v1" }), /front matter Bikeshed puts on a document's \.md address[\s\S]*only the Markdown that follows it/);
+  assert.equal(w.doc().currentVersion, "v1", "nothing was published");
+  const reading = readingPreamble({ title: "Memo", document: "d", version: "v1", original: "o", leftOut: noneLeftOut(), warnings: [] }) + "\n" + SOURCE;
+  await assert.rejects(w.update(reading, { baseVersion: "v1" }), /front matter Bikeshed puts/, "a reading's front matter is ours too");
+  assert.equal(w.doc().currentVersion, "v1", "nothing was published");
+
+  const revised = fetched.slice(fetched.indexOf("\n---\n") + 6).replace("two weekends", "one weekend");
+  await w.update(revised, { baseVersion: "v1" });
+  assert.equal(w.doc().currentVersion, "v2");
+  assert.equal(findSource(w, "v2"), "# Memo\n\nCut over in one weekend.\n", "the Markdown, and only the Markdown, is the source");
+
+  const authored = "---\ntitle: Memo\n---\n\n# Memo\n\nCut over in one weekend.\n";
+  await w.update(authored, { baseVersion: "v2" });
+  assert.equal(w.doc().currentVersion, "v3", "an author's own front matter publishes");
+});
+
+/** A new version's stored source: each file is a blob named by its hash (ADR 0036). */
+function findSource(w, versionId) {
+  const v = w.store.get(`docs/d1/versions/${versionId}`) ?? {};
+  const at = (v.files ?? []).indexOf("index.md");
+  assert.ok(at >= 0 && Array.isArray(v.hashes), `${versionId} lists index.md and its hash`);
+  return w.objects.get(`docs/d1/blobs/${v.hashes[at]}`)?.toString("utf8");
+}
 
 test("a picture sent as the page's text is refused, as bikeshed-now 0.23.0 sends one", async () => {
   /**
