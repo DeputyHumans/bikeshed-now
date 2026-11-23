@@ -95,6 +95,7 @@ export function ExplorerCard({
         {/* UpdatedLine's words, without its badge: that is a button, and a
             tooltip holds nothing that takes a click. */}
         {reading ? <span>{reading}</span> : null}
+        {reading && s.at != null ? <span aria-hidden="true">·</span> : null}
         {s.at != null ? <span title={formatTimestamp(s.at)}>Updated {formatRelative(s.at)}</span> : null}
         {via ? <span className="chip badge-automated">agent</span> : null}
       </p>

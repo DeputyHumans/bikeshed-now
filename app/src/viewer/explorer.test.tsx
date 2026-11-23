@@ -763,8 +763,8 @@ describe("the card for a name that does not fit", () => {
     expect(text).toContain("You");
     expect(text).toContain("Projects / Launch");
     expect(text).toContain("Private");
-    expect(text).toContain("min read");
-    expect(text).toContain("Updated 2 h ago");
+    // The workspace card's words, kept apart as it keeps them: "6 min read · Updated 2 h ago".
+    expect(text).toMatch(/\d+ min read·Updated 2 h ago/);
     expect(text).toContain("Read 12 times");
   });
 
