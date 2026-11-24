@@ -1,11 +1,13 @@
+diff --git a/app/src/export/pdf.ts b/app/src/export/pdf.ts
+index bd86c6e6..73e575f6 100644
 --- a/app/src/export/pdf.ts
 +++ b/app/src/export/pdf.ts
-@@ -262,7 +262,7 @@
-   // produces a page of unstyled text, which looks like a bug in the document.
-   await new Promise((r) => setTimeout(r, 250));
-   try {
--    activatePrintMarks(fdoc);
-+    // regression: marks remain descendants of authored containing blocks.
-     frame.contentWindow?.focus();
-     frame.contentWindow?.print();
-   } finally {
+@@ -350,7 +350,7 @@ export async function printDoc(
+     clearTimeout(slow);
+     try {
+       if (!loaded.settled) opts.onIncomplete?.({ images: loaded.images, other: loaded.other });
+-      activatePrintMarks(fdoc);
++      // regression: marks remain descendants of authored containing blocks.
+       frame.contentWindow?.focus();
+       frame.contentWindow?.print();
+     } finally {

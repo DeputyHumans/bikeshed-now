@@ -1,13 +1,13 @@
 diff --git a/app/src/viewer/useTarget.ts b/app/src/viewer/useTarget.ts
-index 5543dd0a..b8dece5c 100644
+index 4c463762..ebab8845 100644
 --- a/app/src/viewer/useTarget.ts
 +++ b/app/src/viewer/useTarget.ts
-@@ -131,7 +131,7 @@ export function useTarget(options: {
-       return;
+@@ -132,7 +132,7 @@ export function useTarget(options: {
      }
-     if (inView(node, paintedRange(doc, selectedId))) return;
--    node.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
-+    node.scrollIntoView({ block: "center", behavior: "smooth" });
+     const painted = paintedRange(doc, selectedId);
+     if (inView(node, painted)) return;
+-    revealPassage(node, painted, !reduceMotion);
++    revealPassage(node, painted, true);
    }, [enabled, doc, frameShown, epoch, measuredEpoch, selectedId, annotations, reduceMotion, paged, slides, locate, goTo]);
  
    // This reader's slide, for whoever follows them. Sent as it changes, because

@@ -407,16 +407,25 @@ async function texts(frame, rootSel) {
  * struck (`bshd-hl-s-<id>`), whether any wrapper is in its HTML text, and the
  * replacement labels drawn in our own layer.
  */
-function sugMarks(frame, annId) {
+function sugDrawing(frame, annId) {
   return frame.evaluate((id) => {
     const runs = [];
     for (const range of globalThis.CSS?.highlights?.get("bshd-hl-s-" + id.replace(/[^A-Za-z0-9_-]/g, "_")) ?? []) runs.push(range.toString());
     return {
       runs,
       wrappers: document.querySelectorAll("mark.bshd-hl").length,
-      labels: Array.from(document.querySelectorAll("#bshd-sug-labels .bshd-sug-label")).map((l) => ({ text: l.getAttribute("data-text"), words: l.textContent })),
+      labels: Array.from(document.querySelectorAll("#bshd-sug-labels .bshd-sug-label"))
+        .filter((l) => l.getAttribute("data-ann") === id)
+        .map((l) => ({ text: l.getAttribute("data-text"), words: l.textContent })),
     };
   }, annId);
+}
+
+/** The suggestion's drawn runs in order, the replacement against the last, as the wrappers once carried it. */
+async function sugMarks(frame, annId) {
+  const d = await sugDrawing(frame, annId);
+  const ins = d.labels[0]?.text ?? null;
+  return d.runs.map((text, i) => ({ text, ins: i === d.runs.length - 1 ? ins : null }));
 }
 
 function noPageErrors(users) {
@@ -496,7 +505,7 @@ scenario("A7.1 Suggest edit is offered to the suggester and the owner, not the v
   for (const u of [s, v, o]) {
     const frame = await u.frame();
     const marks = await eventually(async () => {
-      const m = await sugMarks(frame, annId);
+      const m = await sugDrawing(frame, annId);
       return m.runs.length > 0 && m.labels.length > 0 ? m : false;
     }, { timeout: SLOW, message: `${u.name}: the suggestion is drawn` });
     ctx.ev.json(`marks-${u.name}`, marks);
