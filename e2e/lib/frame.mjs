@@ -713,10 +713,9 @@ export async function paintedHighlights(frame) {
   });
 }
 
-/** The text painted for comments in a frame, every range joined in order, whitespace collapsed. */
+/** The text painted for comments in a frame, every passage in document order, joined, whitespace collapsed. */
 export async function paintedText(frame) {
-  const rows = await paintedHighlights(frame);
-  return rows.filter((r) => !r.name.endsWith("-selected") && !r.name.endsWith("-flash")).map((r) => r.text).join("").replace(/\s+/g, " ");
+  return (await paintedInOrder(frame)).map((r) => r.text).join("").replace(/\s+/g, " ");
 }
 
 /**
