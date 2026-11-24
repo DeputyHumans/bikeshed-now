@@ -6,12 +6,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { SlideThumb } from "./SlideThumb";
+import { SlideThumb, thumbTransform } from "./SlideThumb";
 import { scanSlides, type Slide } from "../viewer/deck";
 import { HL_STYLE_ID, OWN_ATTR, PREVIEW_ATTR, REVEAL_ATTR } from "../brand/dom";
 
 const BASE = "/content/doc1/v3/";
-const STAGE = { width: 1280, height: 720 };
+const RATIO = 16 / 9;
 
 function deck(head = "") {
   return new DOMParser().parseFromString(
@@ -32,7 +32,7 @@ function firstSlide(doc: Document): Slide {
 
 function thumbFrame(head = "") {
   const { container } = render(
-    <SlideThumb slide={firstSlide(deck(head))} baseHref={BASE} stage={STAGE} />,
+    <SlideThumb slide={firstSlide(deck(head))} baseHref={BASE} ratio={RATIO} />,
   );
   return container.querySelector("iframe")!;
 }
@@ -96,7 +96,7 @@ describe("SlideThumb", () => {
       "text/html",
     );
     const { container } = render(
-      <SlideThumb slide={firstSlide(doc)} baseHref={BASE} stage={STAGE} />,
+      <SlideThumb slide={firstSlide(doc)} baseHref={BASE} ratio={RATIO} />,
     );
     const html = container.querySelector("iframe")!.srcdoc;
     const out = new DOMParser().parseFromString(html, "text/html");
@@ -119,7 +119,7 @@ describe("SlideThumb", () => {
     const doc = deck();
     const slide = firstSlide(doc);
     const { container } = render(
-      <SlideThumb slide={slide} baseHref={BASE} stage={STAGE} state="active is-shown" />,
+      <SlideThumb slide={slide} baseHref={BASE} ratio={RATIO} state="active is-shown" />,
     );
     const out = new DOMParser().parseFromString(
       container.querySelector("iframe")!.srcdoc,
@@ -194,7 +194,7 @@ describe("SlideThumb", () => {
     const slide = firstSlide(doc);
     const before = doc.documentElement.outerHTML;
 
-    render(<SlideThumb slide={slide} baseHref={BASE} stage={STAGE} />);
+    render(<SlideThumb slide={slide} baseHref={BASE} ratio={RATIO} />);
 
     expect(slide.outer.hasAttribute(PREVIEW_ATTR)).toBe(false);
     expect(doc.head.querySelector("style#author")).not.toBeNull();
@@ -213,8 +213,8 @@ describe("SlideThumb", () => {
     one.outer.getBoundingClientRect = () => ({ width: 900, height: 200 }) as DOMRect;
     two.outer.getBoundingClientRect = () => ({ width: 400, height: 3000 }) as DOMRect;
 
-    const a = render(<SlideThumb slide={one} baseHref={BASE} stage={STAGE} />);
-    const b = render(<SlideThumb slide={two} baseHref={BASE} stage={STAGE} />);
+    const a = render(<SlideThumb slide={one} baseHref={BASE} ratio={RATIO} />);
+    const b = render(<SlideThumb slide={two} baseHref={BASE} ratio={RATIO} />);
     const frameA = a.container.querySelector("iframe")!;
     const frameB = b.container.querySelector("iframe")!;
 
@@ -257,6 +257,41 @@ describe("SlideThumb while its preview loads", () => {
     expect(frame.hasAttribute("data-painted")).toBe(true);
   });
 
+  /** The loaded preview stands in for one that laid out: the boxes stated, by id. */
+  function laidOutPreview(frame: HTMLIFrameElement, inner: string, boxes: Record<string, [number, number, number, number]>) {
+    const loaded = frame.contentDocument!;
+    loaded.body.innerHTML = `<section ${PREVIEW_ATTR}="" id="slide">${inner}</section>`;
+    loaded.defaultView!.Element.prototype.getBoundingClientRect = function (this: Element) {
+      const [left, top, width, height] = boxes[this.id] ?? [0, 0, 0, 0];
+      return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top } as DOMRect;
+    };
+  }
+
+  it("shows the slide's content, contained and centred in the deck's shape, not the whole screen it is laid out on", () => {
+    // A letterboxed 4:3 stage, as tall as the 1280×720 screen, between bands.
+    const frame = render(<SlideThumb slide={firstSlide(deck())} baseHref={BASE} ratio={4 / 3} />).container.querySelector("iframe")!;
+    laidOutPreview(frame, `<div id="stage"><h2 id="h">T</h2><p id="p">W</p></div>`, {
+      slide: [0, 0, 1280, 720], stage: [160, 0, 960, 720], h: [180, 100, 100, 20], p: [180, 140, 100, 20],
+    });
+    fireEvent.load(frame);
+    // jsdom measures no box, so the thumbnail is 240 wide, 180 tall at 4:3: the stage fills it.
+    expect(frame.style.transform).toBe("translate(-40px, 0px) scale(0.25)");
+    expect([frame.style.width, frame.style.height]).toEqual(["1280px", "720px"]);
+    expect(frame.hasAttribute("data-painted")).toBe(true);
+  });
+
+  it("grows its layout for a page that runs past the screen, then shows the page, portrait", () => {
+    const frame = render(<SlideThumb slide={firstSlide(deck())} baseHref={BASE} ratio={794 / 1123} />).container.querySelector("iframe")!;
+    laidOutPreview(frame, `<h2 id="h">Name</h2>`, { slide: [243, 8, 794, 1123], h: [263, 28, 300, 40] });
+    fireEvent.load(frame);
+    expect([frame.style.width, frame.style.height]).toEqual(["1280px", `${720 + (1131 - 720) + 32}px`]);
+    const [x, y, scale] = (/translate\((-?[\d.e-]+)px, (-?[\d.e-]+)px\) scale\(([\d.e-]+)\)/.exec(frame.style.transform) ?? []).slice(1).map(Number);
+    expect(scale).toBeCloseTo(240 / 794, 6);
+    expect(x).toBeCloseTo(-243 * (240 / 794), 6);
+    expect(y).toBeCloseTo(-8 * (240 / 794), 6);
+    expect(frame.hasAttribute("data-painted")).toBe(true);
+  });
+
   it("reveals inside the preview, never inside the document being read", () => {
     // The live deck has to be in a document with a window, or a reveal aimed at
     // it would find no computed style and silently do nothing — and this test
@@ -270,7 +305,7 @@ describe("SlideThumb while its preview loads", () => {
     try {
       const before = host.innerHTML;
       const { container } = render(
-        <SlideThumb slide={firstSlide(document)} baseHref={BASE} stage={STAGE} />,
+        <SlideThumb slide={firstSlide(document)} baseHref={BASE} ratio={RATIO} />,
       );
       fireEvent.load(container.querySelector("iframe")!);
 
@@ -284,13 +319,13 @@ describe("SlideThumb while its preview loads", () => {
   it("keeps the mark through an edit, so typing does not flash it back", () => {
     const doc = deck();
     const { container, rerender } = render(
-      <SlideThumb slide={firstSlide(doc)} baseHref={BASE} stage={STAGE} />,
+      <SlideThumb slide={firstSlide(doc)} baseHref={BASE} ratio={RATIO} />,
     );
     const frame = container.querySelector("iframe")!;
     fireEvent.load(frame);
 
     doc.querySelector("h2")!.textContent = "One, edited";
-    rerender(<SlideThumb slide={firstSlide(doc)} baseHref={BASE} stage={STAGE} />);
+    rerender(<SlideThumb slide={firstSlide(doc)} baseHref={BASE} ratio={RATIO} />);
 
     expect(container.querySelector("iframe")).toBe(frame);
     expect(frame.hasAttribute("data-painted")).toBe(true);
@@ -305,7 +340,7 @@ describe("SlideThumb with a stored image", () => {
     // No preview means no srcDoc and none of the slide's assets fetched
     // through the proxy: the image is one request, and the browser keeps it.
     const { container } = render(
-      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} stage={STAGE} image={IMAGE} />,
+      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} ratio={RATIO} image={IMAGE} />,
     );
     const img = container.querySelector("img.slide-thumb-image")!;
     expect(img.getAttribute("src")).toBe(IMAGE);
@@ -316,7 +351,7 @@ describe("SlideThumb with a stored image", () => {
 
   it("falls back to the live preview when the stored image will not load", () => {
     const { container } = render(
-      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} stage={STAGE} image={IMAGE} />,
+      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} ratio={RATIO} image={IMAGE} />,
     );
     fireEvent.error(container.querySelector("img.slide-thumb-image")!);
 
@@ -326,7 +361,7 @@ describe("SlideThumb with a stored image", () => {
 
   it("drops its skeleton once the image has loaded", () => {
     const { container } = render(
-      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} stage={STAGE} image={IMAGE} />,
+      <SlideThumb slide={firstSlide(deck())} baseHref={BASE} ratio={RATIO} image={IMAGE} />,
     );
     const img = container.querySelector("img.slide-thumb-image")!;
     expect(img.nextElementSibling?.classList.contains("slide-thumb-skeleton")).toBe(true);
@@ -335,5 +370,20 @@ describe("SlideThumb with a stored image", () => {
     expect(SLIDES_CSS).toMatch(
       /\.slide-thumb-image\[data-painted\]\s*\+\s*\.slide-thumb-skeleton\s*\{\s*display:\s*none;/,
     );
+  });
+});
+
+describe("thumbTransform", () => {
+  it("fills the box with content of its shape, and centres content of another", () => {
+    expect(thumbTransform({ left: 160, top: 90, width: 960, height: 540 }, { width: 240, height: 135 })).toEqual({ x: -40, y: -22.5, scale: 0.25 });
+    // A portrait page in a landscape box: as tall as the box, centred across it.
+    const t = thumbTransform({ left: 0, top: 0, width: 800, height: 1200 }, { width: 240, height: 135 });
+    expect(t.scale).toBeCloseTo(135 / 1200, 10);
+    expect(t.x).toBeCloseTo((240 - 800 * (135 / 1200)) / 2, 10);
+    expect(t.y).toBe(0);
+  });
+
+  it("is the identity for a box or a crop with nothing in it", () => {
+    expect(thumbTransform({ left: 0, top: 0, width: 0, height: 0 }, { width: 240, height: 135 })).toEqual({ x: 0, y: 0, scale: 1 });
   });
 });

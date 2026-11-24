@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { embedFontCss, inlineSvgStyles, isUniform, lightColorScheme } from "./capture";
+import { cropOnCanvas, embedFontCss, inlineSvgStyles, isUniform, lightColorScheme } from "./capture";
 
 /** An RGBA buffer of `n` pixels, each from `colour(i)`. */
 function pixels(n: number, colour: (i: number) => [number, number, number]): Uint8ClampedArray {
@@ -182,5 +182,19 @@ describe("lightColorScheme", () => {
     document.head.innerHTML = `<style>@media (max-width: 600px){.a{color:red}} @media print{.b{color:black}}</style>`;
     lightColorScheme(document);
     expect(media()).toEqual(["(max-width: 600px)", "print"]);
+  });
+});
+
+describe("cropOnCanvas", () => {
+  it("is the content box in the canvas's own pixels", () => {
+    // A 4:3 stage between bands on a 1280×720 screen, drawn at half size.
+    expect(cropOnCanvas({ left: 160, top: 0, width: 960, height: 720 }, 0.5, { width: 640, height: 360 })).toEqual({ sx: 80, sy: 0, sw: 480, sh: 360 });
+    // A CV's page on a screen grown to hold it.
+    expect(cropOnCanvas({ left: 243, top: 8, width: 794, height: 1123 }, 0.5, { width: 640, height: 582 })).toEqual({ sx: 122, sy: 4, sw: 397, sh: 562 });
+  });
+
+  it("stays inside the canvas, and is never empty", () => {
+    expect(cropOnCanvas({ left: -40, top: 700, width: 2000, height: 50 }, 0.5, { width: 640, height: 360 })).toEqual({ sx: 0, sy: 350, sw: 640, sh: 10 });
+    expect(cropOnCanvas({ left: 0, top: 0, width: 0, height: 0 }, 0.5, { width: 640, height: 360 })).toEqual({ sx: 0, sy: 0, sw: 1, sh: 1 });
   });
 });

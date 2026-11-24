@@ -1345,7 +1345,7 @@ export function DocViewer() {
           className="doc-frame-wrap"
           // One ratio for every thumbnail in the deck, published at the common
           // ancestor of the rail and the overview so they cannot disagree.
-          style={{ ["--thumb-ratio" as string]: `${deck.stage.width} / ${deck.stage.height}` }}
+          style={{ ["--thumb-ratio" as string]: String(deck.shape.ratio) }}
         >
           {/* Presenting hides the rail; the overview stays reachable, so there
               is still a way to jump without leaving the presentation. */}
@@ -1358,7 +1358,7 @@ export function DocViewer() {
               editable={editingNow && reviewReady}
               drawerOpen={singleColumn ? railOpen || editingNow : undefined}
               baseHref={baseHref}
-              stage={deck.stage}
+              ratio={deck.shape.ratio}
               images={railImages}
               people={railPeople}
               onGoTo={(index) => {
@@ -1452,7 +1452,7 @@ export function DocViewer() {
               slides={deck.slides}
               current={deck.current}
               baseHref={baseHref}
-              stage={deck.stage}
+              ratio={deck.shape.ratio}
               images={railImages}
               onGoTo={deck.goTo}
               onClose={() => deck.setOverviewOpen(false)}

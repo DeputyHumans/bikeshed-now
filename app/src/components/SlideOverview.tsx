@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
 import { containModalFocus, trapModalTab } from "./modalFocus";
 import { SlideThumb } from "./SlideThumb";
 import { slideStateTokens } from "../viewer/preview";
-import type { Slide, StageSize } from "../viewer/deck";
+import type { Slide } from "../viewer/deck";
 
 /**
  * Escape is deliberately NOT bound here.
@@ -21,7 +21,7 @@ export function SlideOverview({
   slides,
   current,
   baseHref,
-  stage,
+  ratio,
   onGoTo,
   images,
   onClose,
@@ -29,7 +29,8 @@ export function SlideOverview({
   slides: Slide[];
   current: number;
   baseHref: string;
-  stage: StageSize;
+  /** Width over height of every thumbnail: the deck's content shape (`deckShape`). */
+  ratio: number;
   onGoTo: (index: number) => void;
   /** One stored image per slide, from `storedSlideImages`; absent means live previews. */
   images?: string[] | null;
@@ -98,7 +99,7 @@ export function SlideOverview({
               onClose();
             }}
           >
-            <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} image={images?.[i]} />
+            <SlideThumb slide={slide} baseHref={baseHref} ratio={ratio} state={state} image={images?.[i]} />
             <span className="slide-overview-caption">
               <span className="slide-overview-index">{i + 1}</span>
               <span className="slide-overview-title">{slide.title}</span>

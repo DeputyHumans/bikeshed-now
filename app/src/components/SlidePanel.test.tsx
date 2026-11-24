@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SlidePanel } from "./SlidePanel";
 import { scanSlides, type Slide } from "../viewer/deck";
 
-const STAGE = { width: 1280, height: 720 };
+const RATIO = 16 / 9;
 const BASE = "/content/doc1/v3/";
 
 /**
@@ -43,7 +43,7 @@ function panel(props: Partial<Parameters<typeof SlidePanel>[0]> = {}) {
       current={props.current ?? 0}
       editable={props.editable ?? false}
       baseHref={BASE}
-      stage={STAGE}
+      ratio={RATIO}
       onGoTo={props.onGoTo ?? vi.fn()}
       onChanged={props.onChanged ?? vi.fn()}
       images={props.images}
@@ -110,7 +110,7 @@ describe("SlidePanel", () => {
         current={2}
         editable={false}
         baseHref={BASE}
-        stage={STAGE}
+        ratio={RATIO}
         onGoTo={vi.fn()}
         onChanged={vi.fn()}
       />,

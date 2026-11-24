@@ -61,10 +61,10 @@
   width: 100%;
   /*
    * One shape for every thumbnail in the deck, published by DocViewer from the
-   * frame's own viewport. The fallback is not decoration: a bare `var()` that
+   * shape of the slides' content (`deckShape`), never from the frame's window. The fallback is not decoration: a bare `var()` that
    * resolves to nothing voids the whole declaration, which would mean no aspect
    * ratio at all — the exact raggedness this replaces. It is also the honest
-   * answer for an unmeasured document, and the same one `stageSize` returns.
+   * answer for an unmeasured document, and the shape `deckShape` gives a fluid deck.
    */
   aspect-ratio: var(--thumb-ratio, 16 / 9);
   overflow: hidden;

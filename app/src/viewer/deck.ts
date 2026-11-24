@@ -386,46 +386,144 @@ export function shownIndex(shown: readonly boolean[]): number {
   return index < 0 ? 0 : index;
 }
 
-/** What a preview is laid out at, before it is scaled into a thumbnail. */
+/** A size a preview is laid out at, before it is scaled into a thumbnail. */
 export interface StageSize {
   width: number;
   height: number;
 }
 
-/** Used only when nothing can be measured; a deck is near enough 16:9. */
-export const FALLBACK_STAGE: StageSize = { width: 1280, height: 720 };
+/** A box in a frame's viewport, as `getBoundingClientRect` reports one. */
+export interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** How much a wrapper must differ from its slide in size to be the slide's content rather than the slide again. */
+const SMALLER_PX = 2;
+/** The shapes a letterboxed stage comes in, from a tall page to a wide banner of a slide. */
+const STAGE_RATIO_MIN = 0.4;
+const STAGE_RATIO_MAX = 3;
+/** How far down nested wrappers are followed. */
+const WRAPPER_DEPTH = 8;
+
+/** An element's box, with anything a layout did not give a number read as nothing. */
+function boxOf(el: Element): Box {
+  const r = el.getBoundingClientRect();
+  const n = (v: number) => (Number.isFinite(v) ? v : 0);
+  return { left: n(r.left), top: n(r.top), width: n(r.width), height: n(r.height) };
+}
 
 /**
- * ONE size for every preview in a deck — the reader's own frame viewport.
- *
- * Previews used to be sized slide by slide. That made the rail a ragged column,
- * and in the overview it left a band of dead space under every short card,
- * because a grid row is as tall as its tallest item.
- *
- * The viewport is the right stage, and the reason is MEDIA QUERIES rather than
- * arithmetic. Decks change padding, hide navigation and re-flow at breakpoints;
- * laying a preview out at any other width previews the document in a different
- * breakpoint than the one the reader is reading, and every `vw`, `vh` and `%`
- * resolves against a different base. Reproducing the frame's own viewport is
- * the only choice where a preview is a faithful crop of what the reader sees —
- * and because every slide gets the same one, uniformity comes for free rather
- * than being imposed by a clamp.
- *
- * The slide rects are a fallback only, for the window between a document
- * loading and its view reporting a size.
+ * The one thing a slide holds, when it is not the slide's own size. Smaller,
+ * it is a LETTERBOXED stage — a slide the size of the window around a stage of
+ * a fixed shape, sized from the window (`font-size: min(100vw/80, 100vh/45)`)
+ * and centred, so a frame taller than it is wide leaves bands above and below
+ * it, so it is as wide or as tall as the slide, in a slide's shape; one thing
+ * that is neither — a lone title, a strip — is the slide's content, not its
+ * stage. Larger, it is a stage the deck's own script would have scaled down,
+ * in a preview, where no script runs. Single wrappers the slide's own size are
+ * followed down to the first that is not. A child with no box — a `<style>`,
+ * something `display:none` — is not counted. Unclipped: how far it reaches
+ * past its slide is what a preview grows by.
  */
-export function stageSize(
-  viewport: { width: number; height: number },
-  rects: readonly { width: number; height: number }[],
-): StageSize {
-  if (viewport.width > 0 && viewport.height > 0) {
-    return { width: viewport.width, height: viewport.height };
+export function stageBox(el: Element): Box | null {
+  const outer = boxOf(el);
+  let at: Element = el;
+  for (let depth = 0; depth < WRAPPER_DEPTH; depth += 1) {
+    const kids = Array.from(at.children).filter((child) => {
+      const r = boxOf(child);
+      return r.width >= 2 && r.height >= 2;
+    });
+    if (kids.length !== 1) return null;
+    const inner = boxOf(kids[0]);
+    const sameWidth = Math.abs(inner.width - outer.width) <= SMALLER_PX;
+    const sameHeight = Math.abs(inner.height - outer.height) <= SMALLER_PX;
+    if (sameWidth && sameHeight) {
+      at = kids[0];
+      continue;
+    }
+    // Larger: a stage no script scaled down. Smaller: a stage only if it is
+    // letterboxed — as wide or as tall as the slide, in a slide's shape — and
+    // not a title, a strip or a block a slide happens to hold alone.
+    const larger = inner.width > outer.width + SMALLER_PX || inner.height > outer.height + SMALLER_PX;
+    const shape = inner.height > 0 ? inner.width / inner.height : 0;
+    const letterboxed = (sameWidth || sameHeight) && shape >= STAGE_RATIO_MIN && shape <= STAGE_RATIO_MAX;
+    return larger || letterboxed ? inner : null;
   }
-  const usable = rects.filter((r) => r.width > 0 && r.height > 0);
-  if (usable.length === 0) return FALLBACK_STAGE;
-  // Median by height, keeping that slide's own width, so the ratio is one a
-  // real slide has. Independent medians can combine into a shape no slide is.
-  const byHeight = [...usable].sort((a, b) => a.height - b.height);
-  const pick = byHeight[(byHeight.length - 1) >> 1];
-  return { width: pick.width, height: pick.height };
+  return null;
+}
+
+/**
+ * Where a slide's content is drawn: its stage (`stageBox`) when it has one,
+ * else the slide's own box. Clipped to the slide's box: what spills past the
+ * slide is not on it.
+ */
+export function contentBox(el: Element): Box {
+  const outer = boxOf(el);
+  const inner = stageBox(el);
+  if (!inner) return outer;
+  const left = Math.max(inner.left, outer.left);
+  const top = Math.max(inner.top, outer.top);
+  const right = Math.min(inner.left + inner.width, outer.left + outer.width);
+  const bottom = Math.min(inner.top + inner.height, outer.top + outer.height);
+  if (right - left < 2 || bottom - top < 2) return outer;
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+/** What a deck's slides are shaped by (`deckShape`). */
+export type DeckShapeKind = "stage" | "page" | "fluid";
+
+export interface DeckShape {
+  kind: DeckShapeKind;
+  /** Width over height of a thumbnail: one for the whole deck, so the rail is one column. */
+  ratio: number;
+}
+
+/** A deck whose slides fill the window and reflow in it is shown as on a 1280×720 screen. */
+export const FLUID_RATIO = 16 / 9;
+export const FLUID_SHAPE: DeckShape = { kind: "fluid", ratio: FLUID_RATIO };
+
+/**
+ * The shape every thumbnail of a deck takes: the shape of the slides'
+ * CONTENT, never of the reader's window. It used to be the window, and a phone,
+ * or a desktop with the explorer, the slide list and the comments open, made
+ * every thumbnail of a landscape deck portrait.
+ *
+ *   - `stage`: the slides hold a smaller wrapper (`contentBox`), a letterboxed
+ *     stage, in that stage's shape, whatever the window does around it.
+ *   - `page`: the slides do not fill the window — a CV's A4 pages, fixed-size
+ *     sections, Marp's SVGs — in the page's own shape, portrait or not.
+ *   - `fluid`: each slide fills the window and reflows in it, so its shape is
+ *     whatever window it is read in; it is shown landscape, 16:9, laid out as
+ *     on a 1280×720 screen. Pavel's choice, over the reader's own window.
+ *
+ * By most of the slides that have a box, and the median of their shapes,
+ * which is a shape a real slide has. Fluid when nothing can be measured.
+ */
+export function deckShape(viewport: StageSize, slides: readonly Slide[]): DeckShape {
+  const votes: Record<DeckShapeKind, number[]> = { stage: [], page: [], fluid: [] };
+  for (const slide of slides) {
+    const outer = boxOf(slide.outer);
+    if (outer.width < 2 || outer.height < 2) continue;
+    const content = contentBox(slide.outer);
+    if (content.width < outer.width - SMALLER_PX || content.height < outer.height - SMALLER_PX) {
+      votes.stage.push(content.width / content.height);
+      continue;
+    }
+    const fills =
+      viewport.width > 0 &&
+      viewport.height > 0 &&
+      outer.width >= viewport.width * 0.97 &&
+      Math.abs(outer.height - viewport.height) <= viewport.height * 0.05;
+    if (fills) votes.fluid.push(FLUID_RATIO);
+    else votes.page.push(outer.width / outer.height);
+  }
+  const kinds: DeckShapeKind[] = ["stage", "page", "fluid"];
+  const kind = kinds.reduce((best, k) => (votes[k].length > votes[best].length ? k : best), "fluid" as DeckShapeKind);
+  const ratios = [...votes[kind]].sort((a, b) => a - b);
+  if (ratios.length === 0) return FLUID_SHAPE;
+  if (kind === "fluid") return FLUID_SHAPE;
+  return { kind, ratio: ratios[(ratios.length - 1) >> 1] };
 }

@@ -8,6 +8,12 @@ Notable changes, newest first. This project follows [semantic versioning](https:
 
 A Markdown renderer bump is **not** breaking, but it is a migration: the rendered bytes are part of the content hash, so every Markdown document's next save mints a new version. `docs/operations/overview.md` says how to plan one.
 
+## Unreleased
+
+### Fixed
+
+- **Slide thumbnails take the shape of the slides.** Every thumbnail in the slide list and the overview was laid out at the window the deck was read in, and shaped like it, so on a phone, or on a desktop with the explorer, the slide list and the comments open, a landscape deck's thumbnails were portrait, each a small slide between bands. A thumbnail now shows the slide's content, contained and centred: a letterboxed stage alone, a page in its own shape, so a CV's pages are portrait, and a deck whose slides fill the window and reflow is shown as on a 1280×720 screen, 16:9. Previews are laid out as on that screen, as stored images already were, and stored images are now cropped to the same content, so an editor's next visit captures them again (SPEC §6d).
+
 ## 0.42.0 — 2026-11-23
 
 ### Added

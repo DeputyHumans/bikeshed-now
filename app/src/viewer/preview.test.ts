@@ -8,6 +8,7 @@ import { hasTranslation, scanSlides, type Slide } from "./deck";
 import {
   FINAL_STATE_CSS,
   buildPagePreviewDoc,
+  fitPreview,
   previewOverrides,
   revealHidden,
   slideStateTokens,
@@ -286,5 +287,41 @@ describe("buildPagePreviewDoc", () => {
     const before = doc.documentElement.outerHTML;
     buildPagePreviewDoc(doc, BASE);
     expect(doc.documentElement.outerHTML).toBe(before);
+  });
+});
+
+describe("fitPreview", () => {
+  /** A preview document whose marked slide, and anything inside it, has the boxes stated. */
+  function previewWith(inner: string, boxes: Record<string, [number, number, number, number]>): Document {
+    const doc = new DOMParser().parseFromString(`<body><main><section ${PREVIEW_ATTR}="" id="s">${inner}</section></main></body>`, "text/html");
+    for (const el of Array.from(doc.querySelectorAll("*"))) {
+      const hit = Object.entries(boxes).find(([selector]) => el.matches(selector));
+      const [left, top, width, height] = hit ? hit[1] : [0, 0, 0, 0];
+      el.getBoundingClientRect = () => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect;
+    }
+    return doc;
+  }
+  const BASE = { width: 1280, height: 720 };
+
+  it("crops to a letterboxed stage, leaving the layout as it is when everything fits", () => {
+    const doc = previewWith(`<div id="stage"><h2>T</h2><p>W</p></div>`, { "#s": [0, 0, 1280, 720], "#stage": [100, 0, 1080, 720], "h2": [120, 20, 100, 20], "p": [120, 60, 100, 20] });
+    expect(fitPreview(doc, BASE)).toEqual({ layout: BASE, crop: { left: 100, top: 0, width: 1080, height: 720 } });
+  });
+
+  it("grows the layout for a page taller than the screen, and crops to the page", () => {
+    // A CV's A4 page, 794×1123, under the body's margin.
+    const doc = previewWith(`<h2>Name</h2><p>Experience</p>`, { "#s": [243, 8, 794, 1123], "h2": [263, 28, 300, 40], "p": [263, 90, 300, 20] });
+    const fit = fitPreview(doc, BASE)!;
+    expect(fit.layout).toEqual({ width: 1280, height: 720 + (1131 - 720) + 32 });
+    expect(fit.crop).toEqual({ left: 243, top: 8, width: 794, height: 1123 });
+  });
+
+  it("grows on both sides for a stage no script scaled down, which a centred deck pushes past either edge", () => {
+    const doc = previewWith(`<div id="stage"><h2>T</h2><p>W</p></div>`, { "#s": [0, 0, 1280, 720], "#stage": [-320, -180, 1920, 1080], "h2": [0, 0, 100, 20], "p": [0, 40, 100, 20] });
+    expect(fitPreview(doc, BASE)!.layout).toEqual({ width: 1280 + 640 + 32, height: 720 + 360 + 32 });
+  });
+
+  it("is null for a document with no previewed slide", () => {
+    expect(fitPreview(new DOMParser().parseFromString("<p>x</p>", "text/html"), BASE)).toBeNull();
   });
 });

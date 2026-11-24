@@ -249,11 +249,15 @@ describe("useDeck", () => {
 });
 
 describe("what counts as a deck", () => {
-  it("lays previews out at the frame's own viewport", () => {
-    const { doc } = mountDeck(DECK);
+  it("shapes every thumbnail by its slides, never by the frame they are read in", () => {
+    // Slides 1000×600 in a 1200×700 frame: pages of their own size.
+    const { doc, sections } = mountDeck(DECK);
+    sections.forEach((el, i) => {
+      el.getBoundingClientRect = () => ({ top: i * 600 - 600, left: 100, height: 600, width: 1000 }) as DOMRect;
+    });
     const { result } = renderHook(() => useDeck({ doc, epoch: 1, keysEnabled: true }));
 
-    expect(result.current.stage).toEqual({ width: 1200, height: 700 });
+    expect(result.current.shape).toEqual({ kind: "page", ratio: 1000 / 600 });
   });
 
   /**

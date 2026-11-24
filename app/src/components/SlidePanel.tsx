@@ -6,7 +6,7 @@ import { Icon } from "./Icon";
 import { SlideThumb } from "./SlideThumb";
 import { slideStateTokens } from "../viewer/preview";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
-import type { Slide, StageSize } from "../viewer/deck";
+import type { Slide } from "../viewer/deck";
 
 /** Someone else in the document, as the rail marks them on the slide they are on. */
 export interface RailPerson {
@@ -51,7 +51,7 @@ export function SlidePanel({
   editable,
   drawerOpen,
   baseHref,
-  stage,
+  ratio,
   onGoTo,
   images,
   onChanged,
@@ -62,7 +62,8 @@ export function SlidePanel({
   editable: boolean;
   drawerOpen?: boolean;
   baseHref: string;
-  stage: StageSize;
+  /** Width over height of every thumbnail: the deck's content shape (`deckShape`). */
+  ratio: number;
   onGoTo: (index: number) => void;
   /** One stored image per slide, from `storedSlideImages`; absent means live previews. */
   images?: string[] | null;
@@ -162,7 +163,7 @@ export function SlidePanel({
             setDropTarget(null);
           }}
         >
-          <SlideThumb slide={slide} baseHref={baseHref} stage={stage} state={state} image={images?.[i]} />
+          <SlideThumb slide={slide} baseHref={baseHref} ratio={ratio} state={state} image={images?.[i]} />
           <span className="slide-thumb-index">{i + 1}</span>
           <span className="slide-thumb-title">{slide.title}</span>
           {here.length > 0 ? (

@@ -13,7 +13,8 @@ import {
   slideOf,
   slideOfPeer,
   slideTitle,
-  stageSize,
+  contentBox,
+  deckShape,
 } from "./deck";
 
 /**
@@ -351,47 +352,110 @@ describe("isPaged", () => {
   });
 });
 
-describe("stageSize", () => {
-  it("lays every preview out at the reader's own viewport", () => {
-    // Not the median rect, and the reason is media queries rather than
-    // arithmetic: a deck that re-flows at a breakpoint has to be previewed at
-    // the width the reader is reading it at, or the preview is of a different
-    // layout. Uniformity then comes for free.
-    const rects = [
-      { width: 800, height: 500 },
-      { width: 800, height: 520 },
-      { width: 800, height: 9000 },
-    ];
-    expect(stageSize({ width: 1400, height: 800 }, rects)).toEqual({
-      width: 1400,
-      height: 800,
-    });
-  });
-
-  it("falls back to a real slide's shape before the view reports a size", () => {
-    // Median by height, keeping that slide's own width: independent medians
-    // can combine into a shape no slide in the document actually has.
-    const rects = [
-      { width: 900, height: 200 },
-      { width: 400, height: 500 },
-      { width: 800, height: 9000 },
-    ];
-    expect(stageSize({ width: 0, height: 0 }, rects)).toEqual({
-      width: 400,
-      height: 500,
-    });
-  });
-
-  it("is total: nothing measurable still yields a usable stage", () => {
-    // Negative space for a division: a zero width here makes every thumbnail's
-    // scale Infinity, and the rail renders nothing at all.
-    for (const stage of [
-      stageSize({ width: 0, height: 0 }, []),
-      stageSize({ width: 0, height: 0 }, [{ width: 0, height: 0 }]),
-    ]) {
-      expect(stage.width).toBeGreaterThan(0);
-      expect(stage.height).toBeGreaterThan(0);
+/**
+ * jsdom lays nothing out, so each layout is STATED: the boxes a browser would
+ * report, by selector, for the elements a case names; everything else has none.
+ */
+function laidOut(html: string, boxes: Record<string, [number, number, number, number]>): Document {
+  const doc = parse(html);
+  for (const [selector, [left, top, width, height]] of Object.entries(boxes)) {
+    for (const el of Array.from(doc.querySelectorAll(selector))) {
+      el.getBoundingClientRect = () => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect;
     }
+  }
+  for (const el of Array.from(doc.querySelectorAll("*"))) {
+    if (!Object.keys(boxes).some((selector) => el.matches(selector))) {
+      el.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0 }) as DOMRect;
+    }
+  }
+  return doc;
+}
+
+describe("contentBox", () => {
+  it("is the single wrapper inside a slide that is smaller than it: a letterboxed stage", () => {
+    // A slide the size of the window, holding a 16:9 stage in its middle, as
+    // a deck sized by min(vw, vh) lays out in a frame taller than it is wide.
+    const doc = laidOut(`<section id="s"><div id="stage"><h2>T</h2><p>W</p></div></section>`, {
+      "#s": [0, 0, 620, 850], "#stage": [0, 250, 620, 349], "h2": [40, 280, 300, 40], "p": [40, 340, 300, 30],
+    });
+    expect(contentBox(doc.getElementById("s")!)).toEqual({ left: 0, top: 250, width: 620, height: 349 });
+  });
+
+  it("descends through wrappers the slide's own size to the first smaller one", () => {
+    const doc = laidOut(`<section id="s"><div id="full"><div id="stage"><p>a</p><p>b</p></div></div></section>`, {
+      "#s": [0, 0, 1000, 800], "#full": [0, 0, 1000, 800], "#stage": [0, 119, 1000, 562], "p": [120, 200, 100, 20],
+    });
+    expect(contentBox(doc.getElementById("s")!)).toEqual({ left: 0, top: 119, width: 1000, height: 562 });
+  });
+
+  it("is the slide itself when its content is several things, or nothing smaller", () => {
+    const flowing = laidOut(`<section id="s"><h2>T</h2><p>W</p></section>`, {
+      "#s": [0, 0, 1000, 800], "h2": [40, 40, 300, 40], "p": [40, 100, 300, 30],
+    });
+    expect(contentBox(flowing.getElementById("s")!)).toEqual({ left: 0, top: 0, width: 1000, height: 800 });
+    const filled = laidOut(`<section id="s"><div id="all"><p>a</p><p>b</p></div></section>`, {
+      "#s": [0, 0, 1000, 800], "#all": [0, 0, 1000, 800], "p": [40, 40, 100, 20],
+    });
+    expect(contentBox(filled.getElementById("s")!)).toEqual({ left: 0, top: 0, width: 1000, height: 800 });
+  });
+
+  it("is not one small thing a slide happens to hold alone: a title, a strip, a centred block", () => {
+    // A letterboxed stage spans the slide's full width or height, in a slide's shape.
+    for (const [box, why] of [
+      [[490, 330, 300, 60], "a lone heading"],
+      [[0, 300, 1280, 60], "a full-width strip"],
+      [[340, 260, 600, 200], "a centred block that spans neither"],
+    ] as [[number, number, number, number], string][]) {
+      const doc = laidOut(`<section id="s"><h1 id="t">Title</h1></section>`, { "#s": [0, 0, 1280, 720], "#t": box });
+      expect(contentBox(doc.getElementById("s")!), why).toEqual({ left: 0, top: 0, width: 1280, height: 720 });
+    }
+  });
+
+  it("ignores a child with no box, and keeps what overflows to the slide's own edges", () => {
+    const doc = laidOut(`<section id="s"><style>p{}</style><div id="stage"><p>a</p><p>b</p></div></section>`, {
+      "#s": [0, 0, 600, 800], "#stage": [-340, 200, 1280, 720], "p": [0, 220, 100, 20],
+    });
+    expect(contentBox(doc.getElementById("s")!)).toEqual({ left: 0, top: 200, width: 600, height: 600 });
+  });
+});
+
+describe("deckShape", () => {
+  const slidesOf = (doc: Document) => {
+    const scan = scanSlides(doc);
+    if (scan.kind !== "slides") throw new Error("fixture is not a deck");
+    return scan.slides;
+  };
+  const three = (inner: string) =>
+    `<main>${[1, 2, 3].map((n) => `<section class="slide" id="s${n}"><h2>Slide ${n}</h2>${inner}</section>`).join("")}</main>`;
+
+  it("is a stage, in the stage's own shape, when every slide holds one smaller than the window", () => {
+    const doc = laidOut(`<main>${[1, 2, 3].map((n) => `<section class="slide" id="s${n}"><div class="stage"><h2>Slide ${n}</h2><p>w</p></div></section>`).join("")}</main>`, {
+      ".slide": [0, 0, 620, 850], ".stage": [0, 250, 620, 349], "h2": [10, 260, 100, 20], "p": [10, 300, 100, 20],
+    });
+    const shape = deckShape({ width: 620, height: 850 }, slidesOf(doc));
+    expect(shape.kind).toBe("stage");
+    expect(shape.ratio).toBeCloseTo(620 / 349, 5);
+  });
+
+  it("is a page, in the page's own shape, when the slides do not fill the window: a CV's A4 pages", () => {
+    const doc = laidOut(three("<p>w</p>"), { ".slide": [80, 0, 794, 1123], "h2": [100, 20, 300, 40], "p": [100, 80, 300, 20] });
+    const shape = deckShape({ width: 1100, height: 800 }, slidesOf(doc));
+    expect(shape.kind).toBe("page");
+    expect(shape.ratio).toBeCloseTo(794 / 1123, 5);
+  });
+
+  it("is fluid, and landscape 16:9, when each slide fills the window and reflows in it", () => {
+    // Pavel's choice: laid out as on a 1280×720 screen, whatever window it is read in.
+    const doc = laidOut(three("<p>w</p>"), { ".slide": [0, 0, 390, 700], "h2": [10, 20, 300, 40], "p": [10, 80, 300, 20] });
+    expect(deckShape({ width: 390, height: 700 }, slidesOf(doc))).toEqual({ kind: "fluid", ratio: 16 / 9 });
+  });
+
+  it("goes by most of the slides, and is fluid when nothing can be measured", () => {
+    const doc = laidOut(`<main>${[1, 2, 3].map((n) => `<section class="slide" id="s${n}">${n === 3 ? "<h2>T</h2><p>x</p>" : `<div class="stage"><h2>T</h2><p>x</p></div>`}</section>`).join("")}</main>`, {
+      ".slide": [0, 0, 1000, 800], ".stage": [0, 100, 1000, 600], "h2": [10, 120, 100, 20], "p": [10, 160, 100, 20],
+    });
+    expect(deckShape({ width: 1000, height: 800 }, slidesOf(doc)).kind).toBe("stage");
+    expect(deckShape({ width: 1000, height: 800 }, [])).toEqual({ kind: "fluid", ratio: 16 / 9 });
   });
 });
 

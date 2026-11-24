@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SlideOverview } from "./SlideOverview";
 import { scanSlides, type Slide } from "../viewer/deck";
 
-const STAGE = { width: 1280, height: 720 };
+const RATIO = 16 / 9;
 const BASE = "/content/doc1/v3/";
 
 function slides(count = 4): Slide[] {
@@ -30,7 +30,7 @@ function overview(props: Partial<Parameters<typeof SlideOverview>[0]> = {}) {
       slides={props.slides ?? slides()}
       current={props.current ?? 0}
       baseHref={BASE}
-      stage={STAGE}
+      ratio={RATIO}
       onGoTo={props.onGoTo ?? vi.fn()}
       onClose={props.onClose ?? vi.fn()}
       images={props.images}

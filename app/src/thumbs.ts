@@ -22,7 +22,7 @@ import type { DocMeta, DocThumb } from "./types";
  * the next time an editor opens its document. The server refuses any other.
  * See `THUMB_REVISION` in `functions/src/lib/thumbs.ts` for the history.
  */
-export const THUMB_REVISION = 3;
+export const THUMB_REVISION = 4;
 
 /** A deck larger than this keeps live previews; the server refuses more. */
 export const THUMB_MAX_SLIDES = 100;
@@ -31,10 +31,12 @@ export const THUMB_MAX_SLIDES = 100;
 export const THUMB_MAX_IMAGE_BYTES = 160 * 1024;
 
 /**
- * Every stored image is laid out at ONE size, whoever captured it. The rail's
- * live previews use the reader's own viewport; a stored image is shown to every
- * member on every device, so an editor on a phone must not decide that every
- * reader's cards are portrait.
+ * Every preview is laid out as on this screen, whoever captured it and
+ * whoever reads it: a stored image is shown to every member on every device,
+ * so an editor on a phone must not decide that every reader's cards are
+ * portrait, and the slide list's live previews use the same screen, so the two
+ * look alike. A slide that needs more grows it, and both show the slide's
+ * content alone, in its own shape (`fitPreview`, SPEC §6d).
  */
 export const THUMB_STAGE = { width: 1280, height: 720 } as const;
 

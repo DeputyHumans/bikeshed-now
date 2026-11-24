@@ -3,6 +3,7 @@
 
 import { stripDecoration } from "../annotation/highlighter";
 import { OWN_SELECTOR, PREVIEW_ATTR, REVEAL_ATTR } from "../brand/dom";
+import { contentBox, stageBox, type Box, type StageSize } from "./deck";
 import { hasTranslation, readComputed, type Slide, type SlideComputed } from "./deck";
 
 /**
@@ -359,4 +360,43 @@ export function buildPreviewDoc(slide: Slide, baseHref: string, state = ""): str
   preview.head.appendChild(style);
 
   return `<!doctype html>${preview.documentElement.outerHTML}`;
+}
+
+/** What a thumbnail needs of a loaded preview: the layout that holds its slide, and the box it shows. */
+export interface PreviewFit {
+  layout: StageSize;
+  crop: Box;
+}
+
+/** Room kept around content a preview had to grow for, in layout pixels. */
+const FIT_GUTTER = 16;
+
+/**
+ * After a preview has loaded at `layout`: whether the frame must be laid out
+ * larger for its slide's content to be inside it, and the box a thumbnail
+ * shows (`contentBox`). Used by the slide list and by the stored capture, so
+ * both show the same thing (SPEC §6d).
+ *
+ * A preview starts as a 1280×720 screen. A CV's page runs past its bottom; a
+ * stage a deck's own script would have scaled down — no script runs here —
+ * runs past both edges when it is centred. Either way the frame grows by what
+ * reaches past each edge, which is enough for content aligned to either side
+ * or centred, as `fitLayoutWidth` reasons for the editor. The crop is only
+ * right once nothing reaches past: when `layout` comes back larger, lay the
+ * frame out at it and ask again.
+ */
+export function fitPreview(doc: Document, layout: StageSize): PreviewFit | null {
+  const slide = doc.querySelector(`[${PREVIEW_ATTR}]`);
+  if (!slide) return null;
+  const own = slide.getBoundingClientRect();
+  const reach = stageBox(slide) ?? { left: own.left, top: own.top, width: own.width, height: own.height };
+  const grow = (start: number, size: number, extent: number) => {
+    const before = Math.max(0, -start);
+    const after = Math.max(0, start + size - extent);
+    return before === 0 && after === 0 ? extent : Math.ceil(extent + before + after + 2 * FIT_GUTTER);
+  };
+  return {
+    layout: { width: grow(reach.left, reach.width, layout.width), height: grow(reach.top, reach.height, layout.height) },
+    crop: contentBox(slide),
+  };
 }

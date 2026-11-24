@@ -3,7 +3,8 @@
 
 import { toCanvas } from "html-to-image";
 
-import { revealHidden } from "./preview";
+import type { Box, StageSize } from "./deck";
+import { fitPreview, revealHidden } from "./preview";
 import { THUMB_MAX_IMAGE_BYTES, THUMB_PIXEL_RATIO, THUMB_QUALITY, THUMB_STAGE } from "../thumbs";
 
 /**
@@ -25,6 +26,25 @@ const PLACEHOLDER =
 /** No preview waits longer than this to load, nor its fonts or first images. */
 const LOAD_TIMEOUT_MS = 15_000;
 const SETTLE_TIMEOUT_MS = 4_000;
+
+/**
+ * The part of a rasterised preview a slide's image is: its content box, in the
+ * canvas's own pixels, whole pixels kept inside the canvas. A slide is stored
+ * in its content's shape (SPEC §6d), as the slide list shows it, so a CV's
+ * page is a portrait image and a letterboxed stage is its stage alone.
+ */
+export function cropOnCanvas(crop: Box, pixelRatio: number, canvas: StageSize): { sx: number; sy: number; sw: number; sh: number } {
+  const sx = Math.max(0, Math.min(canvas.width - 1, Math.round(crop.left * pixelRatio)));
+  const sy = Math.max(0, Math.min(canvas.height - 1, Math.round(crop.top * pixelRatio)));
+  const sw = Math.max(1, Math.min(canvas.width - sx, Math.round(crop.width * pixelRatio)));
+  const sh = Math.max(1, Math.min(canvas.height - sy, Math.round(crop.height * pixelRatio)));
+  return { sx, sy, sw, sh };
+}
+
+/** The frame's next paint, so a frame laid out again is measured as it now is. */
+function nextFrame(view: Window | null): Promise<void> {
+  return new Promise((resolve) => (view ? view.requestAnimationFrame(() => resolve()) : resolve()));
+}
 
 export interface Captured {
   blob: Blob;
@@ -351,6 +371,9 @@ export function createCapturer(host: Document = document): Capturer {
 
   async function capture(html: string, opts: { page?: boolean } = {}): Promise<Captured | null> {
     const el = ensureFrame();
+    // Every capture starts as a 1280×720 screen; a slide that needed more grew it last time.
+    el.style.width = `${THUMB_STAGE.width}px`;
+    el.style.height = `${THUMB_STAGE.height}px`;
     const loaded = new Promise<boolean>((resolve) => {
       el.onload = () => resolve(true);
     });
@@ -367,13 +390,30 @@ export function createCapturer(host: Document = document): Capturer {
     // Last, once the reveal pass has settled what everything computes to.
     inlineSvgStyles(doc, opts.page ? THUMB_STAGE.height : undefined);
 
+    // A slide is laid out as large as its content needs and stored as that
+    // content alone (`fitPreview`), as the slide list shows it. A page's cover
+    // is its first screen, as before.
+    let layout: StageSize = THUMB_STAGE;
+    let crop: Box | null = null;
+    if (!opts.page) {
+      let fit = fitPreview(doc, layout);
+      if (fit && (fit.layout.width !== layout.width || fit.layout.height !== layout.height)) {
+        layout = fit.layout;
+        el.style.width = `${layout.width}px`;
+        el.style.height = `${layout.height}px`;
+        await nextFrame(doc.defaultView);
+        fit = fitPreview(doc, layout);
+      }
+      crop = fit?.crop ?? null;
+    }
+
     // Every preview of one document carries the same stylesheets, so the
     // fonts are read and fetched once per capture run, not once per slide.
     fonts ??= embedFontCss(doc);
 
-    const canvas = await toCanvas(doc.body, {
-      width: THUMB_STAGE.width,
-      height: THUMB_STAGE.height,
+    const drawn = await toCanvas(doc.body, {
+      width: layout.width,
+      height: layout.height,
       pixelRatio: THUMB_PIXEL_RATIO,
       backgroundColor: backgroundOf(doc),
       imagePlaceholder: PLACEHOLDER,
@@ -389,6 +429,15 @@ export function createCapturer(host: Document = document): Capturer {
         : undefined,
     });
 
+    let canvas = drawn;
+    if (crop) {
+      const { sx, sy, sw, sh } = cropOnCanvas(crop, THUMB_PIXEL_RATIO, { width: drawn.width, height: drawn.height });
+      const cut = host.createElement("canvas");
+      cut.width = sw;
+      cut.height = sh;
+      cut.getContext("2d")?.drawImage(drawn, sx, sy, sw, sh, 0, 0, sw, sh);
+      canvas = cut;
+    }
     const context = canvas.getContext("2d");
     const uniform = context
       ? isUniform(context.getImageData(0, 0, canvas.width, canvas.height).data)

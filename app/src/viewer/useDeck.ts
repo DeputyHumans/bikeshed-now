@@ -7,17 +7,17 @@ import { watchResize, watchScroll } from "./frameWatch";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 import {
   activeIndex,
-  FALLBACK_STAGE,
   isPaged,
   isShown,
   isStacked,
   readComputed,
   scanSlides,
   shownIndex,
-  stageSize,
+  deckShape,
+  FLUID_SHAPE,
   type Slide,
   type SlideScan,
-  type StageSize,
+  type DeckShape,
 } from "./deck";
 
 /**
@@ -118,8 +118,8 @@ export interface DeckControls {
   locate: () => number;
   /** True when slides are about one viewport tall, so paging makes sense. */
   paged: boolean;
-  /** What a preview is laid out at: one size for every slide in the deck. */
-  stage: StageSize;
+  /** What every thumbnail of the deck is shaped by: its slides' content (`deckShape`). */
+  shape: DeckShape;
   overviewOpen: boolean;
   setOverviewOpen: (open: boolean) => void;
   /**
@@ -167,7 +167,7 @@ export function useDeck({
   const [current, setCurrent] = useState(0);
   const [paged, setPaged] = useState(false);
   const [stacked, setStacked] = useState(false);
-  const [stage, setStage] = useState<StageSize>(FALLBACK_STAGE);
+  const [shape, setShape] = useState<DeckShape>(FLUID_SHAPE);
   const [overviewOpen, setOverviewOpen] = useState(false);
   // Read by the key handler, so opening the overview does not re-bind it.
   const overviewOpenRef = useRef(overviewOpen);
@@ -265,7 +265,7 @@ export function useDeck({
   }, [doc, epoch, slides, stacked, locate]);
 
   /**
-   * `paged`, `stacked` and `stage` are LATCHED: decided once per document,
+   * `paged`, `stacked` and `shape` are LATCHED: decided once per document,
    * never recomputed for a resize.
    *
    * That is not an optimisation. The rail renders only when `paged` is true,
@@ -286,16 +286,14 @@ export function useDeck({
     if (!view || slides.length === 0) {
       setPaged(false);
       setStacked(false);
-      setStage(FALLBACK_STAGE);
+      setShape(FLUID_SHAPE);
       setMeasuredEpoch(epoch);
       return;
     }
     const rects = slides.map((slide) => slide.outer.getBoundingClientRect());
     setPaged(isPaged(rects.map((r) => r.height), view.innerHeight));
     setStacked(isStacked(rects));
-    setStage(
-      stageSize({ width: view.innerWidth, height: view.innerHeight }, rects),
-    );
+    setShape(deckShape({ width: view.innerWidth, height: view.innerHeight }, slides));
     setMeasuredEpoch(epoch);
   }, [doc, epoch, slides, scannedEpoch]);
 
@@ -420,7 +418,7 @@ export function useDeck({
       current,
       locate,
       paged,
-      stage,
+      shape,
       overviewOpen,
       setOverviewOpen,
       goTo,
@@ -429,6 +427,6 @@ export function useDeck({
       rescan,
       measuredEpoch,
     }),
-    [scan, slides, current, locate, paged, stage, overviewOpen, goTo, next, prev, rescan, measuredEpoch],
+    [scan, slides, current, locate, paged, shape, overviewOpen, goTo, next, prev, rescan, measuredEpoch],
   );
 }

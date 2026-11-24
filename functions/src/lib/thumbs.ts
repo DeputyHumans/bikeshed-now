@@ -42,10 +42,12 @@ export const THUMB_CACHE_SECONDS = 86_400;
  *   2  shapes inside an svg keep the paint their stylesheet gives them
  *   3  the document as a light-preferring reader sees it, whatever the
  *      capturing browser prefers
+ *   4  a slide cropped to its content, in its own shape: a letterboxed stage
+ *      alone, a CV's page portrait (SPEC §6d)
  *
  * The app holds the same number (`app/src/thumbs.ts`), pinned by a test.
  */
-export const THUMB_REVISION = 3;
+export const THUMB_REVISION = 4;
 
 export type ThumbKind = "cover" | "slides";
 
