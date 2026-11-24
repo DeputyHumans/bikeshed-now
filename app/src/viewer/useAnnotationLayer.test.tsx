@@ -282,6 +282,6 @@ describe("hiding comments, and presenting (SPEC §6)", () => {
     expect(allPainted(registry)).toEqual([]);
     rerender({ selectedId: "a2", shown: true, blinkSelected: false });
     // Both threads, and the open one painted heavier above them.
-    expect(paintedTexts(registry)).toEqual({ "bshd-hl-c0": ["first passage", "second passage"], "bshd-hl-selected": ["second passage"] });
+    expect(paintedTexts(registry)).toEqual({ "bshd-hl-c-a1": ["first passage"], "bshd-hl-c-a2": ["second passage"], "bshd-hl-selected": ["second passage"] });
   });
 });

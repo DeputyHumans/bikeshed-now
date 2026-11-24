@@ -39,16 +39,18 @@ function framed(body = `<p id="a">alpha</p><p id="b">beta</p><p id="c">gamma</p>
 const item = (annId: string, ranges: Range[], color: string, suggestion = false): PaintItem => ({ annId, ranges, color, suggestion });
 
 describe("painting", () => {
-  it("registers one highlight per author colour, and one per colour for suggestions", () => {
+  it("registers one highlight per thread, named for it, in its author's colour", () => {
     const { doc, registry, over } = framed();
-    paint(doc, [item("t1", [over("a")], "#111111"), item("t2", [over("b")], "#111111"), item("t3", [over("c")], "#222222", true)]);
+    paint(doc, [item("t1", [over("a")], "#111111"), item("t2", [over("b")], "#111111"), item("t.3", [over("c")], "#222222", true)]);
     expect(paintedTexts(registry)).toEqual({
-      "bshd-hl-c0": ["alpha", "beta"],
-      "bshd-hl-sug1": ["gamma"],
+      "bshd-hl-c-t1": ["alpha"],
+      "bshd-hl-c-t2": ["beta"],
+      // A name is always a valid ::highlight() argument.
+      "bshd-hl-s-t_3": ["gamma"],
     });
     const css = doc.getElementById("bshd-hl-style")!.textContent!;
-    expect(css).toMatch(/::highlight\(bshd-hl-c0\) \{[^}]*#111111[^}]*underline/);
-    expect(css).toMatch(/::highlight\(bshd-hl-sug1\) \{[^}]*#222222[^}]*line-through/);
+    expect(css).toMatch(/::highlight\(bshd-hl-c-t1\) \{[^}]*#111111[^}]*underline/);
+    expect(css).toMatch(/::highlight\(bshd-hl-s-t_3\) \{[^}]*#222222[^}]*line-through/);
     // Screen only: a printout shows the document.
     expect(css.startsWith("@media screen")).toBe(true);
   });
@@ -70,7 +72,7 @@ describe("painting", () => {
     paint(doc, [item("t1", [over("a")], "#111111"), item("t2", [over("b")], "#222222")]);
     paintSelected(doc, "t2");
     expect(paintedTexts(registry)["bshd-hl-selected"]).toEqual(["beta"]);
-    expect(registry.get("bshd-hl-selected")!.priority).toBeGreaterThan(registry.get("bshd-hl-c0")!.priority);
+    expect(registry.get("bshd-hl-selected")!.priority).toBeGreaterThan(registry.get("bshd-hl-c-t1")!.priority);
     paintSelected(doc, null);
     expect(registry.has("bshd-hl-selected")).toBe(false);
   });
@@ -83,7 +85,7 @@ describe("painting", () => {
     expect(registry.size).toBe(0);
     expect(hasPaint(doc)).toBe(false);
     setPaintShown(doc, true);
-    expect(paintedTexts(registry)).toEqual({ "bshd-hl-c0": ["alpha"], "bshd-hl-selected": ["alpha"] });
+    expect(paintedTexts(registry)).toEqual({ "bshd-hl-c-t1": ["alpha"], "bshd-hl-selected": ["alpha"] });
   });
 
   it("lights one thread on its own while the rest are hidden", () => {
@@ -116,7 +118,7 @@ describe("painting", () => {
     paint(doc, [item("t1", [over("a")], "#111111")]);
     expect(doc.getElementById("bshd-hl-style")).toBeNull();
     expect(adopted).toHaveLength(1);
-    expect(adopted[0].css).toContain("::highlight(bshd-hl-c0)");
+    expect(adopted[0].css).toContain("::highlight(bshd-hl-c-t1)");
     // The hand over a painted passage is the stylesheet's alone.
     setPaintHover(doc, true);
     expect(adopted[0].css).toContain("cursor: pointer");

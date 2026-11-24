@@ -14,8 +14,9 @@ import { isVisible } from "./visible";
  * border widened tight lines until they wrapped, and the document's own rules —
  * `:first-child`, `mark { … }` — could match it.
  *
- * So HTML text is PAINTED instead, with the CSS Custom Highlight API: the
- * passage's ranges are registered in the frame's `CSS.highlights`, and the
+ * So HTML text is PAINTED instead, with the CSS Custom Highlight API: each
+ * thread's ranges are registered in the frame's `CSS.highlights` under a name
+ * of its own (`paintName`), and the
  * browser paints them, like a selection, without a node, an attribute or a box
  * anywhere in the document (ADR 0043). The ranges are live, so they follow the
  * text as the document lays out again, and text that is not shown is not
@@ -137,19 +138,19 @@ function sheetFor(doc: Document): Sheet {
   };
 }
 
-/** The colour group names, one per author colour, in a stable order. */
+/**
+ * A highlight per thread, named for it, so devtools and a test can tell which
+ * thread a painted range is — the registry being the only place a painted
+ * passage exists. `c` for a comment, `s` for a suggestion, whose text is
+ * struck. An id is an identifier already; anything else in one is replaced, so
+ * the name is always a valid `::highlight()` argument.
+ */
+export function paintName(annId: string, suggestion: boolean): string {
+  return `${PAINT_PREFIX}-${suggestion ? "s" : "c"}-${annId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+
 function groupsOf(items: readonly PaintItem[]): { name: string; color: string; suggestion: boolean; ranges: Range[] }[] {
-  const groups = new Map<string, { name: string; color: string; suggestion: boolean; ranges: Range[] }>();
-  const colors: string[] = [];
-  for (const item of items) {
-    if (!colors.includes(item.color)) colors.push(item.color);
-    const n = colors.indexOf(item.color);
-    const name = `${PAINT_PREFIX}-${item.suggestion ? "sug" : "c"}${n}`;
-    const group = groups.get(name) ?? { name, color: item.color, suggestion: item.suggestion, ranges: [] };
-    group.ranges.push(...item.ranges);
-    groups.set(name, group);
-  }
-  return [...groups.values()];
+  return items.map((item) => ({ name: paintName(item.annId, item.suggestion), color: item.color, suggestion: item.suggestion, ranges: item.ranges }));
 }
 
 function rulesFor(state: PaintState): string {
