@@ -267,7 +267,12 @@ export function paintedRange(doc: Document, annId: string): Range | null {
   return states.get(doc)?.items.find((item) => item.annId === annId)?.ranges[0] ?? null;
 }
 
-/** Whether anything of ours is registered in this document's highlights. */
+/**
+ * Whether anything of ours is painted in this document: registered in its
+ * highlights, or, where the browser has no registry to paint with (jsdom, an
+ * engine without the API), recorded as shown — what the dev-only assertion
+ * and the decoration harness mean by a highlight left behind.
+ */
 export function hasPaint(doc: Document): boolean {
   const reg = registry(doc);
   if (reg && [...reg.highlights.keys()].some((name) => name.startsWith(PAINT_PREFIX))) return true;
