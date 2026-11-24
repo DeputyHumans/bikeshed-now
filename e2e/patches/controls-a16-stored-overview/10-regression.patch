@@ -1,9 +1,13 @@
+diff --git a/app/src/pages/DocViewer.tsx b/app/src/pages/DocViewer.tsx
+index e8589ceb..30b7d7f2 100644
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -1120,5 +1120,5 @@
+@@ -1453,7 +1453,7 @@ export function DocViewer() {
+               current={deck.current}
                baseHref={baseHref}
-               stage={deck.stage}
+               ratio={deck.shape.ratio}
 -              images={railImages}
 +              images={null}
                onGoTo={deck.goTo}
                onClose={() => deck.setOverviewOpen(false)}
+             />
