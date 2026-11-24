@@ -46,6 +46,7 @@ describe("a suggestion's label", () => {
     await flush();
     const [label] = labels();
     expect(label.getAttribute("data-text")).toBe("two weekends");
+    expect(label.getAttribute("data-ann")).toBe("s1x");
     // The end of the last line box, in page coordinates; raised by the stylesheet.
     expect([label.style.left, label.style.top]).toEqual(["130px", "40px"]);
     expect(label.style.getPropertyValue("--bshd-author")).toBe("#7c3aed");

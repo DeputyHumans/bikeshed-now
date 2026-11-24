@@ -108,6 +108,8 @@ export function createSuggestionLabels(doc: Document): SuggestionLabels {
       node.style.left = `${last.right + dx}px`;
       node.style.top = `${last.top + dy}px`;
       node.setAttribute("data-text", label.text);
+      // Which thread it is, for devtools and a test: on our own node, which the strip removes whole.
+      node.setAttribute("data-ann", label.annId);
       layer.appendChild(node);
       // Kept inside the page on its right, where a passage ends near the edge.
       const width = view?.innerWidth ?? 0;

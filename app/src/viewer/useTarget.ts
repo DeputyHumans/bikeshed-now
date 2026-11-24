@@ -130,8 +130,9 @@ export function useTarget(options: {
       goTo(slide);
       return;
     }
-    if (inView(node, paintedRange(doc, selectedId))) return;
-    node.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+    const painted = paintedRange(doc, selectedId);
+    if (inView(node, painted)) return;
+    revealPassage(node, painted, !reduceMotion);
   }, [enabled, doc, frameShown, epoch, measuredEpoch, selectedId, annotations, reduceMotion, paged, slides, locate, goTo]);
 
   // This reader's slide, for whoever follows them. Sent as it changes, because
@@ -334,6 +335,36 @@ function passageOf(doc: Document, annotations: readonly Annotation[], annId: str
   if (!range) return null;
   const start = range.startContainer;
   return start.nodeType === 1 ? (start as Element) : start.parentElement;
+}
+
+/**
+ * Bring a passage into view, centred (SPEC §6). A painted passage is no
+ * element (ADR 0043), and centring the element that holds it centres a whole
+ * paragraph, which in a long one leaves the passage far from the middle. So
+ * where the page itself is what scrolls, the window moves by the passage's own
+ * box; inside a scrolling box of the document's, `scrollIntoView` on its holder
+ * is what reaches it, as it did for a wrapper.
+ */
+function revealPassage(node: Element, painted: Range | null, smooth: boolean): void {
+  const view = node.ownerDocument.defaultView;
+  const behavior: ScrollBehavior = smooth ? "smooth" : "auto";
+  if (view && painted && typeof painted.getBoundingClientRect === "function" && !inScroller(node)) {
+    const box = painted.getBoundingClientRect();
+    view.scrollBy({ top: box.top + box.height / 2 - view.innerHeight / 2, behavior });
+    return;
+  }
+  node.scrollIntoView({ block: "center", behavior });
+}
+
+/** Whether something of the document's own, below the page, scrolls to show an element. */
+function inScroller(el: Element): boolean {
+  const view = el.ownerDocument.defaultView;
+  const { body, documentElement } = el.ownerDocument;
+  for (let at = el.parentElement; at && at !== body && at !== documentElement; at = at.parentElement) {
+    const overflow = view?.getComputedStyle(at).overflowY;
+    if ((overflow === "auto" || overflow === "scroll") && at.scrollHeight > at.clientHeight) return true;
+  }
+  return false;
 }
 
 /**

@@ -154,6 +154,23 @@ describe("selecting a thread in a document without pages", () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
   });
 
+  it("centres the passage itself, not the paragraph holding it, where the page is what scrolls", () => {
+    // A painted highlight is no element: centring its paragraph put a passage
+    // in a long one far from the middle.
+    const doc = prose();
+    const view = doc.defaultView!;
+    const proto = view.Range.prototype as unknown as { getBoundingClientRect?: () => DOMRect };
+    proto.getBoundingClientRect = () => rectAt(view.innerHeight * 3);
+    const scrollBy = vi.fn();
+    view.scrollBy = scrollBy as unknown as typeof view.scrollBy;
+    const annotations = threads();
+    const { rerender } = mount(doc, { selectedId: null, annotations });
+    rerender({ selectedId: "a2", annotations });
+    expect(scrollBy).toHaveBeenCalledWith({ top: view.innerHeight * 3 + 10 - view.innerHeight / 2, behavior: "smooth" });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    delete proto.getBoundingClientRect;
+  });
+
   it("does not scroll again when the highlights are redrawn for the same selection", () => {
     // A peer's comment landing redraws every highlight. The reader may have
     // scrolled on since selecting; pulling them back would be a bug.
