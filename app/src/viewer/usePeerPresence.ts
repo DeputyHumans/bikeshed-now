@@ -187,10 +187,18 @@ export function usePeerPresence(options: {
     handle.current?.setComposing(threadId);
   }, []);
 
-  /** Which slide this reader is on, for whoever follows them; null when not paged. */
+  /**
+   * Which slide this reader is on, for whoever follows them; null when not
+   * paged. Where they are in the text is sent again with it: a deck that
+   * stacks its slides changes slide without a scroll, which is what otherwise
+   * sends it, and a place left from the slide before names the wrong one.
+   */
   const setSlide = useCallback((slide: number | null) => {
+    if (slideRef.current === slide) return;
     slideRef.current = slide;
     handle.current?.setSlide(slide);
+    const at = docRef.current;
+    if (at) handle.current?.setView(() => ({ viewport: scrollFraction(at), place: readingPlace(at) }));
   }, []);
 
   return {

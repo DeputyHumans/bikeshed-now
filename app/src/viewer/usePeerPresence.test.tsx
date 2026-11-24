@@ -81,6 +81,16 @@ describe("where a reader is, for whoever follows them", () => {
     expect(lastView(handles[0]).viewport).toBe(0);
   });
 
+  it("is shared again whenever the slide changes, since a deck that stacks its slides never scrolls", () => {
+    const doc = frameDoc();
+    const { result } = mount(doc, "a");
+    const sent = handles[0].setView.mock.calls.length;
+    act(() => result.current.setSlide(2));
+    expect(handles[0].setSlide).toHaveBeenLastCalledWith(2);
+    expect(handles[0].setView.mock.calls.length).toBe(sent + 1);
+    expect(lastView(handles[0]).viewport).toBe(0);
+  });
+
   it("is shared again, with the slide, when the record is made again for a new live session", () => {
     const doc = frameDoc();
     const { result, rerender } = mount(doc, "a");
