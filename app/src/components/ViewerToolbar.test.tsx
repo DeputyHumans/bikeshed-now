@@ -12,6 +12,9 @@ vi.mock("../auth", () => ({ useAuth: () => auth }));
 /** The explorer beside the viewer, as its shell would hand it down; off unless a test turns it on. */
 const explorer = vi.hoisted(() => ({ available: false, open: false, drawer: false, toggle: () => {}, setSuppressed: () => {} }));
 vi.mock("../viewer/explorer", () => ({ EXPLORER_ID: "doc-explorer", useExplorer: () => explorer }));
+/** Where the wordmark goes, as the open page says it; Recent unless a test files the document. */
+const home = vi.hoisted(() => ({ to: "/" }));
+vi.mock("../viewer/homeLink", () => ({ useHomeTo: () => home.to }));
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -226,6 +229,17 @@ describe("on a phone", () => {
     versionLabel: "v3 · 4 min",
   };
   const openMore = () => fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+
+  test("the way home leads where the header's wordmark does: from a filed document, its folder", () => {
+    phone(402);
+    home.to = "/folder/plans";
+    try {
+      renderToolbar(owner);
+      expect(screen.getByRole("link", { name: "Bikeshed home" }).getAttribute("href")).toBe("/folder/plans");
+    } finally {
+      home.to = "/";
+    }
+  });
 
   test("the first row is the way home, the title and one menu, with no version chip", () => {
     phone(402);

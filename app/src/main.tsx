@@ -7,6 +7,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import { AuthProvider } from "./auth";
 import { ToastProvider } from "./components/Toast";
+import { HomeLinkProvider } from "./viewer/homeLink";
 import { App } from "./App";
 import { FONT_FACE_CSS } from "./brand/fonts";
 import { readProfile } from "./firestore";
@@ -34,7 +35,10 @@ createRoot(rootEl).render(
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
-          <App />
+          {/* Above the header and the pages both: a document says where the wordmark goes (SPEC §13). */}
+          <HomeLinkProvider>
+            <App />
+          </HomeLinkProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

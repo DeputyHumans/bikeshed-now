@@ -6,18 +6,21 @@ import { Link } from "react-router-dom";
 import { Wordmark } from "../brand/Wordmark";
 import { useAuth } from "../auth";
 import { useIsPhone } from "../hooks/useMediaQuery";
+import { useHomeTo } from "../viewer/homeLink";
 import { AccountMenu } from "./AccountMenu";
 import { Person } from "./Person";
 
 export function Header() {
   const { user, emailLower, gate, signOut } = useAuth();
   const phone = useIsPhone();
+  // Recent, or from a document the folder it is filed in (SPEC §13).
+  const home = useHomeTo();
   // Signing out ends the server session first, a round trip that can be slow.
   const [signingOut, setSigningOut] = useState(false);
 
   return (
     <header className="app-header">
-      <Link to="/" className="header-home" aria-label="Bikeshed home">
+      <Link to={home} className="header-home" aria-label="Bikeshed home">
         <Wordmark />
       </Link>
       <div className="header-spacer" />

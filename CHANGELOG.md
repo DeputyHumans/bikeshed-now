@@ -10,6 +10,10 @@ A Markdown renderer bump is **not** breaking, but it is a migration: the rendere
 
 ## Unreleased
 
+### Changed
+
+- **The wordmark takes you from a document to the folder it is filed in.** The mark at the top left always went to Recent, so leaving a document by it lost track of where the document lives, and finding its folder again meant walking the folder list. From a document it now opens that folder in the workspace, with the folder list opened down to it, or Everything for a document in no folder. A document read only through its link, one in the Trash and one shared with you without its folder still lead to Recent, as the mark does on every other page (SPEC §13).
+
 ### Fixed
 
 - **Slide thumbnails take the shape of the slides.** Every thumbnail in the slide list and the overview was laid out at the window the deck was read in, and shaped like it, so on a phone, or on a desktop with the explorer, the slide list and the comments open, a landscape deck's thumbnails were portrait, each a small slide between bands. A thumbnail now shows the slide's content, contained and centred: a letterboxed stage alone, a page in its own shape, so a CV's pages are portrait, and a deck whose slides fill the window and reflow is shown as on a 1280×720 screen, 16:9. Previews are laid out as on that screen, as stored images already were, and stored images are now cropped to the same content, so an editor's next visit captures them again (SPEC §6d).

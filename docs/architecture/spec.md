@@ -893,6 +893,8 @@ Three quick filters combine: Opened by me (documents you have a read row for), S
 
 Everything, the top of the folder tree, is at `/everything`. Signed out, `/` is the landing page, and a document's trail leads there rather than to sign-up.
 
+The wordmark, in the header or in a phone's document toolbar, leads to `/` from every page but a document. From a document it leads to where the workspace lists that document: its folder, `/folder/{id}`, when the reader can open the folder, and Everything when it is filed in no folder. A document that no folder page lists for this reader still leads to Recent: one read only through its link, one in the Trash, and one shared without the folder it is in. The viewer says where while it is open, and once the reader leaves it the wordmark leads to `/` again (`homeFrom` in `workspace/tree.ts`, `viewer/homeLink.tsx`).
+
 ### Shared with me
 
 `/shared` lists every document somebody else owns that its reader can read, from every folder, with the usual sorts. Folders shared with you are already in the rail, so it lists none. It is where a document shared with you inside a folder you were not given can be found without its link or a search: Everything and the folder tree show only folders you can open.

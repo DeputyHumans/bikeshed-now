@@ -46,6 +46,8 @@ import { useFork, useLineage } from "../viewer/useFork";
 import { usePrinting } from "../viewer/usePrinting";
 import { useVersionDrop } from "../viewer/useVersionDrop";
 import { useExplorer } from "../viewer/explorer";
+import { useClaimHome } from "../viewer/homeLink";
+import { homeFrom } from "../workspace/tree";
 import { useRailPeople } from "../viewer/railPeople";
 import { othersMenuEntry, useOthersShown } from "../viewer/othersShown";
 import { nameFromEmail, personName, shortName, usePeople } from "../people";
@@ -169,10 +171,13 @@ export function DocViewer() {
   // Which version's threads have answered, so a link to a thread waits for them.
   const [threadsLanded, setThreadsLanded] = useState<string | null>(null);
   const [teams, setTeams] = useState<TeamMeta[]>([]);
-  // Only for the breadcrumb. An anonymous reader of a public document has no
-  // folders and gets a trail of one, which is correct: "Everything" is still
-  // where the workspace is if they sign in.
+  // For the breadcrumb and the wordmark. An anonymous reader of a public
+  // document has no folders and gets a trail of one, which is correct:
+  // "Everything" is still where the workspace is if they sign in.
   const [folders, setFolders] = useState<FolderMeta[]>([]);
+  // The wordmark, in the header or the phone's toolbar, leads to where this
+  // document is filed while it is open, and to Recent again once it is left.
+  useClaimHome(homeFrom(doc.meta, folders, signedIn ? emailLower : null));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   // A file dropped onto the document, waiting in the upload dialog.

@@ -2,6 +2,7 @@
 // Folder-tree construction, filtering and sorting (SPEC §13).
 
 import type { Timestamp } from "firebase/firestore";
+import { isTrashed } from "../trash";
 import type { DocLatest, DocMeta, FolderMeta } from "../types";
 
 /**
@@ -121,6 +122,26 @@ export function locationOf(
   if (!folderId) return "Everything";
   const trail = breadcrumbFor(folderId, folders);
   return trail.length ? trail.map((f) => f.name).join(" / ") : null;
+}
+
+/**
+ * Where the wordmark goes from a document: to where the workspace lists it.
+ * Its folder, when this account can open that folder; Everything, when it is
+ * filed in none; and Recent for the rest, which no folder page lists: a
+ * document read through its link alone, one in the Trash, and one shared
+ * without the folder it is in. "In the workspace" is what `listMyDocs` returns
+ * (`members`, and not in the Trash), and a folder can be opened when
+ * `listMyFolders` returned it, which is also when the breadcrumb links it.
+ */
+export function homeFrom(
+  meta: Pick<DocMeta, "members" | "folderId" | "trashed"> | null | undefined,
+  folders: readonly FolderMeta[],
+  me: string | null | undefined,
+): string {
+  if (!meta || !me || !meta.members?.includes(me) || isTrashed(meta)) return "/";
+  const folderId = meta.folderId ?? null;
+  if (!folderId) return "/everything";
+  return folders.some((f) => f.folderId === folderId) ? `/folder/${folderId}` : "/";
 }
 
 /** Folders a given folder may legally move into: not itself, not its subtree. */

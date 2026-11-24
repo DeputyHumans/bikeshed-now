@@ -8,6 +8,7 @@ import {
   docsInFolder,
   filterDocs,
   flattenTree,
+  homeFrom,
   isSortKey,
   locationOf,
   pathToFolder,
@@ -174,6 +175,48 @@ describe("locationOf", () => {
 
   it("starts the path where this account's folders start, when it was granted a folder without its parent", () => {
     expect(locationOf("grandchild", FOLDERS.slice(1))).toBe("Child / Grandchild");
+  });
+});
+
+describe("homeFrom", () => {
+  const me = "reader@example.com";
+  const theirs = (folderId: string | null, extra: Partial<DocMeta> = {}) =>
+    document_("d", folderId, { members: ["owner@example.com", me], ...extra });
+  const trashed = { trashed: { at: null, by: "u", batch: "b" } };
+
+  it("opens the folder the document is filed in, however deep, and not the top of its tree", () => {
+    expect(homeFrom(theirs("grandchild"), FOLDERS, me)).toBe("/folder/grandchild");
+    expect(homeFrom(theirs("root-b"), FOLDERS, me)).toBe("/folder/root-b");
+  });
+
+  it("opens a folder granted without its parent, which the rail shows as a root", () => {
+    expect(homeFrom(theirs("child"), FOLDERS.slice(1), me)).toBe("/folder/child");
+  });
+
+  it("opens Everything for a document filed in no folder", () => {
+    expect(homeFrom(theirs(null), FOLDERS, me)).toBe("/everything");
+    expect(homeFrom(theirs(undefined as never), [], me)).toBe("/everything");
+  });
+
+  it("leads to Recent for a document in a folder the reader was not given, which no folder page lists", () => {
+    expect(homeFrom(theirs("someone-elses"), FOLDERS, me)).toBe("/");
+    // Nor a folder page for one whose folders have not arrived yet.
+    expect(homeFrom(theirs("child"), [], me)).toBe("/");
+  });
+
+  it("leads to Recent for a document outside the reader's workspace: read through its link, or in the Trash", () => {
+    expect(homeFrom(document_("d", "child"), FOLDERS, me)).toBe("/");
+    expect(homeFrom(document_("d", null), FOLDERS, me)).toBe("/");
+    // A reader of a public document gets the projection, never the record.
+    expect(homeFrom(null, FOLDERS, me)).toBe("/");
+    expect(homeFrom(undefined, FOLDERS, me)).toBe("/");
+    expect(homeFrom(theirs("child", trashed as Partial<DocMeta>), FOLDERS, me)).toBe("/");
+    expect(homeFrom(theirs(null, trashed as Partial<DocMeta>), FOLDERS, me)).toBe("/");
+  });
+
+  it("leads to the front door signed out", () => {
+    expect(homeFrom(theirs("child"), FOLDERS, null)).toBe("/");
+    expect(homeFrom(theirs(null), FOLDERS, "")).toBe("/");
   });
 });
 

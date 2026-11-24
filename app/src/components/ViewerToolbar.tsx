@@ -19,6 +19,7 @@ import type { Lineage } from "../forks";
 import type { Peer } from "../presence";
 import type { DocMeta, FolderMeta, Visibility } from "../types";
 import { EXPLORER_ID, useExplorer } from "../viewer/explorer";
+import { useHomeTo } from "../viewer/homeLink";
 
 export type PhoneAction = "edit" | "share" | "fork" | "slides" | "present";
 
@@ -231,6 +232,8 @@ export function ViewerToolbar({
     hasSlides,
   });
   const rootTo = signedIn ? "/everything" : "/";
+  // The mark stands in for the header's wordmark on a phone, and leads where it does (SPEC §13).
+  const home = useHomeTo();
 
   const editAction = (
     <Action
@@ -333,7 +336,7 @@ export function ViewerToolbar({
     return (
       <div className="viewer-toolbar">
         <ExplorerToggle />
-        <Link to="/" className="viewer-home" aria-label="Bikeshed home">
+        <Link to={home} className="viewer-home" aria-label="Bikeshed home">
           <Wordmark variant="mark" />
         </Link>
         <div className="viewer-title">

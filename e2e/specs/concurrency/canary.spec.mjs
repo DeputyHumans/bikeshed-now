@@ -353,7 +353,9 @@ async function leaveInApp(u) {
       dispatchEvent(new PopStateEvent("popstate", { state: {} }));
     });
   }
-  await u.page.waitForURL((url) => url.pathname === "/", { timeout: 15_000 });
+  // Out of the document is what counts: from one the wordmark leads to where it is filed,
+  // Everything for this case's document in no folder, rather than to Recent (SPEC §13).
+  await u.page.waitForURL((url) => !url.pathname.startsWith("/d/"), { timeout: 15_000 });
 }
 
 scenario("canary I12: when both editors leave the document in the app, status/{d}/peers is empty within 5 s", {

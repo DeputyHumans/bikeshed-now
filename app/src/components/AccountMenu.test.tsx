@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountMenu } from "./AccountMenu";
 import { Header } from "./Header";
 import { ToastProvider } from "./Toast";
+import { HomeLinkProvider, useClaimHome } from "../viewer/homeLink";
 
 const auth = vi.hoisted(() => ({
   user: null as { uid: string; displayName?: string | null } | null,
@@ -170,4 +171,35 @@ describe("Header", () => {
     open("/", <Header />);
     expect(document.querySelector(".app-header .person-chip")?.textContent).toBe("Dana K");
   });
+
+  it("leads home to Recent, and from a document to where the document says it is filed", () => {
+    widthIs(false);
+    auth.user = { uid: "u" };
+    auth.emailLower = "someone@example.com";
+    auth.gate = "ready";
+    const home = () => screen.getByRole("link", { name: "Bikeshed home" }).getAttribute("href");
+    const { rerender } = render(
+      <MemoryRouter>
+        <HomeLinkProvider>
+          <Header />
+        </HomeLinkProvider>
+      </MemoryRouter>,
+    );
+    expect(home()).toBe("/");
+    rerender(
+      <MemoryRouter>
+        <HomeLinkProvider>
+          <Header />
+          <Filed to="/folder/plans" />
+        </HomeLinkProvider>
+      </MemoryRouter>,
+    );
+    expect(home()).toBe("/folder/plans");
+  });
 });
+
+/** A document's page, as far as the wordmark is concerned. */
+function Filed({ to }: { to: string }) {
+  useClaimHome(to);
+  return null;
+}
