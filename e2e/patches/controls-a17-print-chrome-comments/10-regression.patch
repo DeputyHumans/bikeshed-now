@@ -1,10 +1,12 @@
+diff --git a/app/src/styles/viewer.css b/app/src/styles/viewer.css
+index f118b571..4057ca95 100644
 --- a/app/src/styles/viewer.css
 +++ b/app/src/styles/viewer.css
-@@ -556,7 +556,6 @@
+@@ -665,7 +665,6 @@
    .app-header,
    .viewer-toolbar,
    .viewer-banners,
 -  .comments-panel,
    .explorer,
    .explorer-scrim,
-   .consent,
+   .explorer-card,

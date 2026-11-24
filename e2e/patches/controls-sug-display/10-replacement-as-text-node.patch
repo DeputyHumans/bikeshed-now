@@ -1,11 +1,13 @@
+diff --git a/app/src/annotation/highlighter.ts b/app/src/annotation/highlighter.ts
+index 41477f20..05f006b6 100644
 --- a/app/src/annotation/highlighter.ts
 +++ b/app/src/annotation/highlighter.ts
-@@ -209,6 +209,8 @@
-   // read from an attribute (see INS_ATTR). Nothing for a deletion.
-   if (options.suggestion?.replacement && lastHtmlMark) {
-     lastHtmlMark.setAttribute(INS_ATTR, options.suggestion.replacement);
-+    // e2e control: the replacement also drawn as a TEXT NODE after the last wrapper.
-+    lastHtmlMark.after(doc.createTextNode(options.suggestion.replacement));
+@@ -183,6 +183,8 @@ function collect(
+     }
    }
- }
- 
+   const replacement = options.suggestion?.replacement;
++  // e2e control: the replacement also put in the text, as a node after the passage.
++  if (replacement && last) (last.endContainer as ChildNode).after(doc.createTextNode(replacement));
+   return {
+     item: { annId, ranges, color, suggestion: Boolean(options.suggestion) },
+     // …and what it would become is shown beside its last segment. Nothing for a deletion.

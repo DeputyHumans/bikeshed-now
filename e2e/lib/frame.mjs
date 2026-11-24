@@ -688,3 +688,98 @@ export async function inFrameDoc(page, fn, arg = null, { frame = DOC_FRAME } = {
   if (!r || r.error) throw new Error(`inFrameDoc: ${r?.error ?? "the page returned nothing"}`);
   return r.value;
 }
+
+/**
+ * Every comment highlight the viewer paints in a frame (ADR 0043): the
+ * CSS Custom Highlight API's registry, read in the frame's own realm, as one
+ * row per painted range — its highlight's name, its text, and its first line
+ * box in the frame's viewport. A painted highlight is no element, so this,
+ * not a selector, is what says a passage is highlighted. SVG text is still
+ * wrapped (`tspan.bshd-hl`) and is found by selector as before.
+ */
+export async function paintedHighlights(frame) {
+  return frame.evaluate(() => {
+    const rows = [];
+    const registry = globalThis.CSS && globalThis.CSS.highlights;
+    if (!registry) return rows;
+    for (const [name, highlight] of registry) {
+      if (!name.startsWith("bshd-hl")) continue;
+      for (const range of highlight) {
+        const box = range.getClientRects()[0];
+        rows.push({ name, text: range.toString(), rect: box ? { x: box.left, y: box.top, width: box.width, height: box.height } : null });
+      }
+    }
+    return rows;
+  });
+}
+
+/** The text painted for comments in a frame, every range joined in order, whitespace collapsed. */
+export async function paintedText(frame) {
+  const rows = await paintedHighlights(frame);
+  return rows.filter((r) => !r.name.endsWith("-selected") && !r.name.endsWith("-flash")).map((r) => r.text).join("").replace(/\s+/g, " ");
+}
+
+/**
+ * The middle of the first line box of a painted passage that contains `text`,
+ * in the frame's viewport, for `clickInFrame`. Scrolls it into view first.
+ */
+export async function paintedPoint(frame, text) {
+  await frame.evaluate((want) => {
+    const registry = globalThis.CSS && globalThis.CSS.highlights;
+    for (const [name, highlight] of registry ?? []) {
+      if (!name.startsWith("bshd-hl")) continue;
+      for (const range of highlight) {
+        if (!range.toString().includes(want)) continue;
+        const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+        start?.scrollIntoView({ block: "center" });
+        return;
+      }
+    }
+  }, text);
+  const rows = await paintedHighlights(frame);
+  const row = rows.find((r) => r.text.includes(text) && r.rect && r.rect.width > 0);
+  if (!row) throw new Error(`no painted passage holds ${JSON.stringify(text)}: ${JSON.stringify(rows.map((r) => [r.name, r.text]))}`);
+  return { x: row.rect.x + Math.min(row.rect.width / 2, 20), y: row.rect.y + row.rect.height / 2 };
+}
+
+/** One thread's painted ranges, by the highlight named for it (`paintName` in app/src/annotation/paint.ts). */
+export async function paintedFor(frame, annId) {
+  const ident = String(annId).replace(/[^A-Za-z0-9_-]/g, "_");
+  const rows = await paintedHighlights(frame);
+  return rows.filter((r) => r.name === `bshd-hl-c-${ident}` || r.name === `bshd-hl-s-${ident}`);
+}
+
+/**
+ * The threads' painted passages in document order (the selected thread's and a
+ * blink's overlays left out, which repeat a thread's own), each with the
+ * middle of its first line box in the frame's viewport, after scrolling the
+ * `n`th into view when asked. `root` keeps only passages that start inside it.
+ */
+export async function paintedInOrder(frame, { root = null, scrollTo = null } = {}) {
+  return frame.evaluate(({ root, scrollTo }) => {
+    const registry = globalThis.CSS && globalThis.CSS.highlights;
+    const scope = root ? document.querySelector(root) : null;
+    const ranges = [];
+    for (const [name, highlight] of registry ?? []) {
+      if (!/^bshd-hl-[cs]-/.test(name)) continue;
+      for (const range of highlight) {
+        if (root && !(scope && scope.contains(range.startContainer))) continue;
+        ranges.push({ name, range });
+      }
+    }
+    ranges.sort((a, b) => a.range.compareBoundaryPoints(Range.START_TO_START, b.range));
+    if (scrollTo !== null && ranges[scrollTo]) {
+      const start = ranges[scrollTo].range.startContainer;
+      (start.nodeType === 1 ? start : start.parentElement)?.scrollIntoView({ block: "center" });
+    }
+    return ranges.map(({ name, range }) => {
+      const box = range.getClientRects()[0];
+      return { name, text: range.toString(), point: box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null };
+    });
+  }, { root, scrollTo });
+}
+
+/** How many passages are painted in a frame, or inside `root`. */
+export async function paintedCount(frame, root = null) {
+  return (await paintedInOrder(frame, { root })).length;
+}

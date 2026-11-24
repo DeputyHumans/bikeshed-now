@@ -95,6 +95,7 @@ import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { FIRESTORE_LISTEN_PATH, RULES_SERVICE_ERROR_RE } from "../../lib/browser.mjs";
 import { escapeName, nameOfAddress } from "../../lib/names.mjs";
+import { paintedFor } from "../../lib/frame.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -256,10 +257,33 @@ async function commentsOf(docId, annId, n, { v = "v1", timeout = UI_MS } = {}) {
   }, { timeout, message: `exactly ${n} comment(s) on ${annId}` });
 }
 
-const hlSel = (annId) => `mark.bshd-hl[data-bshd-ann="${annId}"], tspan.bshd-hl[data-bshd-ann="${annId}"]`;
+/** A thread's SVG wrappers. HTML text is painted, with no element (ADR 0043): see `paintedFor`. */
+const hlSel = (annId) => `tspan.bshd-hl[data-bshd-ann="${annId}"]`;
 
 async function hlCount(u, annId) {
-  return (await u.frame()).locator(hlSel(annId)).count();
+  const frame = await u.frame();
+  return (await paintedFor(frame, annId)).length + (await frame.locator(hlSel(annId)).count());
+}
+
+/**
+ * Where a thread's passage starts, painted or wrapped, as a rect in the
+ * frame's viewport, or null when it is not drawn. Runs in the frame, so it is
+ * self-contained: a function handed to `evaluate` sees nothing of this module.
+ */
+function passageRectInFrame(id) {
+  // A plain object: a DOMRect does not survive the trip out of the page.
+  const plain = (r) => ({ top: r.top, bottom: r.bottom, height: r.height, left: r.left, width: r.width });
+  const wanted = id.replace(/[^A-Za-z0-9_-]/g, "_");
+  for (const [name, highlight] of globalThis.CSS?.highlights ?? []) {
+    if (name !== `bshd-hl-c-${wanted}` && name !== `bshd-hl-s-${wanted}`) continue;
+    for (const range of highlight) return plain(range.getBoundingClientRect());
+  }
+  const el = document.querySelector(`tspan.bshd-hl[data-bshd-ann="${id}"]`);
+  return el ? plain(el.getBoundingClientRect()) : null;
+}
+
+async function passageRect(frame, annId) {
+  return annId ? frame.evaluate(passageRectInFrame, annId) : null;
 }
 
 /** Wait for a thread's highlight to be drawn (present) or gone (absent) in u's frame. */
@@ -274,16 +298,16 @@ const panelState = (u) => u.page.locator(".viewer-body").getAttribute("data-comm
 
 /** The frame's scroll position, viewport height, and where a thread's highlight sits in it. */
 async function frameView(u, annId = null) {
-  return (await u.frame()).evaluate((sel) => {
-    const el = sel ? document.querySelector(sel) : null;
-    const r = el?.getBoundingClientRect();
+  const frame = await u.frame();
+  const r = await passageRect(frame, annId);
+  return frame.evaluate((r) => {
     return {
       scrollY: Math.round(scrollY),
       maxScroll: Math.round(document.scrollingElement.scrollHeight - innerHeight),
       innerHeight,
       mark: r ? { top: r.top, bottom: r.bottom, height: r.height, inView: r.top >= 0 && r.bottom <= innerHeight } : null,
     };
-  }, annId ? hlSel(annId) : null);
+  }, r ? { top: r.top, bottom: r.bottom, height: r.height } : null);
 }
 
 /** Sample `fn` every `interval` ms for `ms` ms (an absence can only be watched for). */
@@ -830,12 +854,11 @@ scenario("A6.6 selecting a thread scrolls its passage into view only when it is 
   assert.equal(await r.thread(Q30).first().getAttribute("aria-selected"), "true", "the selection survived the redraw");
 
   ctx.step("the reader scrolls so the #e2e-20 passage is in view near the top, then selects its thread: nothing moves");
-  const placed = await (await r.frame()).evaluate((sel) => {
-    const el = document.querySelector(sel);
-    scrollTo(0, el.getBoundingClientRect().top + scrollY - 40);
-    const rr = el.getBoundingClientRect();
-    return { scrollY: Math.round(scrollY), top: rr.top, bottom: rr.bottom, innerHeight };
-  }, hlSel(T20));
+  const rFrame = await r.frame();
+  const startAt = await passageRect(rFrame, T20);
+  await rFrame.evaluate((top) => scrollTo(0, top + scrollY - 40), startAt.top);
+  const rr = await passageRect(rFrame, T20);
+  const placed = { scrollY: Math.round(await rFrame.evaluate(() => scrollY)), top: rr.top, bottom: rr.bottom, innerHeight: await rFrame.evaluate(() => innerHeight) };
   precondition(placed.top >= 0 && placed.bottom <= placed.innerHeight && placed.top < placed.innerHeight / 4, `the #e2e-20 passage is in view, near the top: ${JSON.stringify(placed)}`);
   await r.thread(Q20).first().locator(".thread-quote").click({ timeout: LOCAL_MS });
   await eventually(async () => (await r.thread(Q20).first().getAttribute("aria-selected")) === "true", { timeout: LOCAL_MS, message: "the #e2e-20 thread is selected" });
@@ -992,7 +1015,7 @@ scenario("A6.9 an agent's comment is labelled with the token it came through, se
   ctx.step("the viewer opens the document: the passage is drawn exactly, and the agent's comment carries a badge naming its token");
   const v = await reader(ctx, "viewer", viewerAcct, docId);
   await waitHl(v, T, true);
-  assert.equal(((await (await v.frame()).locator(hlSel(T)).allTextContents()).join("")), QUOTE, "the strict anchor highlights exactly the quote");
+  assert.equal((await paintedFor(await v.frame(), T)).map((row) => row.text).join(""), QUOTE, "the strict anchor highlights exactly the quote");
   await v.openComments({ timeout: UI_MS });
   const thread = v.thread(QUOTE).first();
   const agentComment0 = thread.locator(".comment").first();

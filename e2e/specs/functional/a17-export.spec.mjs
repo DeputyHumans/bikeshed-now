@@ -173,6 +173,7 @@ import { holdListen } from "../../lib/sync.mjs";
 import { postThumb, tinyPng } from "../../lib/thumbs.mjs";
 import { delayHostingResponse } from "../../lib/response-delay.mjs";
 import { patchCapability } from "../../lib/options.mjs";
+import { paintedCount } from "../../lib/frame.mjs";
 
 const target = currentTarget();
 after(() => (target ? closeAdmin(target) : undefined));
@@ -476,8 +477,13 @@ async function commentOn(u, selector, quote, text) {
 }
 
 /** Wait for the reading frame to show `count`+ highlight wrappers matching `selector`. */
-async function waitHighlights(u, selector, count = 1) {
-  await eventually(async () => (await (await u.frame()).locator(selector).count()) >= count, { timeout: 60_000, message: `the frame highlights ${selector}` });
+/** Wait for a passage painted in `root` (ADR 0043), or an SVG wrapper matching `svg`. */
+async function waitHighlights(u, { root = null, svg = null } = {}, count = 1) {
+  const what = svg ?? `a painted passage${root ? ` in ${root}` : ""}`;
+  await eventually(async () => {
+    const frame = await u.frame();
+    return (svg ? await frame.locator(svg).count() : await paintedCount(frame, root)) >= count;
+  }, { timeout: 60_000, message: `the frame highlights ${what}` });
 }
 
 // --- the print capture ------------------------------------------------------------
@@ -658,7 +664,7 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   const u = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, u, docId);
   await commentOn(u, "#p-1", P1_QUOTE, `Print probe comment ${t}`);
-  await waitHighlights(u, "mark.bshd-hl");
+  await waitHighlights(u);
 
   ctx.step("the toolbar's Print; the print frame's document is captured when print() is called");
   const { frame, snap } = await printOnce(ctx, u, toolbarPrint(u), "the toolbar's print");
@@ -676,7 +682,7 @@ scenario("A17.1 Print or save as PDF hands print() a frame sandboxed allow-same-
   const fp1 = await fingerprint(parser, html);
   const fpP = await fingerprint(parser, snap.html);
   ctx.ev.json("fingerprints", { v1: summarize(fp1), print: summarize(fpP) });
-  precondition((await (await u.frame()).locator("mark.bshd-hl").count()) >= 1, "the frame still holds the highlight");
+  precondition((await paintedCount(await u.frame())) >= 1, "the frame still holds the highlight");
   assert.deepEqual(printDecor(fpP, fp1, { stamps: true }), [], "DECOR: decoration in the print snapshot");
   assert.deepEqual(foreignMarkers(fpP), { whatever: 1 }, "the author's own data-bshd survives the print");
 
@@ -1156,11 +1162,11 @@ async function captureHighlightedExport(ctx) {
   const u = await signedIn(ctx, accounts[0], "owner");
   await openDoc(ctx, u, up.docId);
   await commentOn(u, "#p-box", BOX_QUOTE, `Box comment ${t}`);
-  await waitHighlights(u, "#s-box mark.bshd-hl");
+  await waitHighlights(u, { root: "#s-box" });
   // The first thread is still selected: User.comment puts the text into the thread its own press makes.
   await commentOn(u, "#fig-label", FIG_QUOTE, `Figure comment ${t}`);
-  await waitHighlights(u, "#fig tspan.bshd-hl");
-  await waitHighlights(u, "#s-box mark.bshd-hl");
+  await waitHighlights(u, { svg: "#fig tspan.bshd-hl" });
+  await waitHighlights(u, { root: "#s-box" });
 
   const parser = await ctx.users.parser();
   const fp1 = await fingerprint(parser, html);

@@ -1,16 +1,9 @@
---- a/app/src/styles/viewer.css
-+++ b/app/src/styles/viewer.css
-@@ -559,7 +559,6 @@
-   .comments-panel,
-   .explorer,
-   .explorer-scrim,
--  .consent,
-   .slide-rail,
-   .slide-overview,
-   .selection-fab,
+diff --git a/app/src/styles/consent.css b/app/src/styles/consent.css
+index 2cc9179c..96e99768 100644
 --- a/app/src/styles/consent.css
 +++ b/app/src/styles/consent.css
-@@ -181,7 +181,3 @@
+@@ -179,8 +179,4 @@
+ 
  /* Nobody's printed copy of somebody else's document should carry our cookie
     notice. */
 -@media print {
@@ -19,3 +12,15 @@
 -  }
 -}
 +/* regression: the consent notice remains on paper. */
+diff --git a/app/src/styles/viewer.css b/app/src/styles/viewer.css
+index f118b571..78da109c 100644
+--- a/app/src/styles/viewer.css
++++ b/app/src/styles/viewer.css
+@@ -669,7 +669,6 @@
+   .explorer,
+   .explorer-scrim,
+   .explorer-card,
+-  .consent,
+   .slide-rail,
+   .slide-overview,
+   .selection-fab,

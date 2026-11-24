@@ -76,7 +76,7 @@ import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { quietDoc } from "../../lib/guard.mjs";
 import { eventually } from "../../lib/assert.mjs";
 import { authorizeParams, pkce, register, startReceiver } from "../../lib/oauth.mjs";
-import { frameGeometry, framePointToPage, rangeRects, selectionText, setSelection } from "../../lib/frame.mjs";
+import { frameGeometry, framePointToPage, paintedCount, paintedInOrder, rangeRects, selectionText, setSelection } from "../../lib/frame.mjs";
 import { escapeName, nameOfAddress } from "../../lib/names.mjs";
 
 // Shared option objects are opaque to the static budget scanner; cover all 25 case budgets.
@@ -1175,15 +1175,9 @@ function listScrollState() {
   return { top: null, atEnd: false };
 }
 
-/** The centre of the nth highlight in the frame's own viewport, scrolled into view first. */
+/** The centre of the nth painted passage, in document order, in the frame's own viewport, scrolled into view first. */
 async function markPoint(u, n) {
-  const p = await (await u.frame()).evaluate((i) => {
-    const m = document.querySelectorAll("mark.bshd-hl")[i];
-    if (!m) return null;
-    m.scrollIntoView({ block: "center" });
-    const r = m.getClientRects()[0];
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }, n);
+  const p = (await paintedInOrder(await u.frame(), { scrollTo: n }))[n]?.point ?? null;
   precondition(p, `highlight ${n} is drawn`);
   return p;
 }
@@ -1208,7 +1202,7 @@ const passageMotion = sharedMeasurement("A24.3a with reduced motion, selecting a
   await u.openComments();
   const cards = u.page.locator(".comments-panel .thread");
   await eventually(async () => (await cards.count()) === quoted.length || false, { timeout: LISTEN_MS, message: `${quoted.length} threads in the panel` });
-  await eventually(async () => (await (await u.frame()).locator("mark.bshd-hl").count()) >= quoted.length || false, { timeout: LISTEN_MS, message: "every highlight drawn" });
+  await eventually(async () => (await paintedCount(await u.frame())) >= quoted.length || false, { timeout: LISTEN_MS, message: "every highlight drawn" });
   const prefers = (pref) => u.page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches).then((m) => m === (pref === "reduce"));
 
   ctx.step("no preference: the last thread's card is selected; the frame scrolls to its passage, and the sampler sees it animate");
@@ -1345,7 +1339,7 @@ async function touchCase(ctx, device, name) {
   const mcp = await mcpFor(ctx, owner, "owner-mcp");
   await addComment(mcp, docId, "lazy dog", `A24.4 thread ${tag()}`);
   await openDoc(ctx, u, docId);
-  await eventually(async () => (await (await u.frame()).locator("mark.bshd-hl").count()) >= 1 || false, { timeout: LISTEN_MS, message: "the thread's highlight is drawn" });
+  await eventually(async () => (await paintedCount(await u.frame())) >= 1 || false, { timeout: LISTEN_MS, message: "the thread's highlight is drawn" });
   return { u, docId };
 }
 

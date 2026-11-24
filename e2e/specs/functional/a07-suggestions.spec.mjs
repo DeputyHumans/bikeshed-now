@@ -7,9 +7,9 @@
  *   A7.1  Suggest edit is offered to a suggester (and to the owner, who may
  *         suggest too — SPEC §22's table), never to a viewer; the form opens
  *         prefilled with the quote, caret at the end; Enter submits; the
- *         reading frame strikes the quote with `mark[data-bshd-sug]` and puts
- *         the replacement in `data-bshd-ins` on the LAST wrapper only, with
- *         the frame's textContent unchanged
+ *         reading frame paints the quote struck through, run by run, with no
+ *         wrapper (ADR 0043), and shows the replacement in a label of ours as
+ *         generated content, with the frame's textContent unchanged
  *   A7.2  a selection across two paragraphs, holding a line break, list or
  *         table, or inside a figure (SVG text) is refused on press with its
  *         reason and no form; one inside a single list item or table cell is
@@ -402,11 +402,21 @@ async function texts(frame, rootSel) {
   return { root: await frameText(frame, { selector: rootSel }), body: await frameText(frame, { withoutOwn: true }) };
 }
 
-/** The suggestion's highlight wrappers in the frame, in document order. */
+/**
+ * The suggestion as the frame draws it (ADR 0043): its painted runs, each
+ * struck (`bshd-hl-s-<id>`), whether any wrapper is in its HTML text, and the
+ * replacement labels drawn in our own layer.
+ */
 function sugMarks(frame, annId) {
-  return frame.evaluate((id) => Array.from(document.querySelectorAll("mark.bshd-hl, tspan.bshd-hl"))
-    .filter((m) => m.getAttribute("data-bshd-sug") === id)
-    .map((m) => ({ text: m.textContent, ins: m.getAttribute("data-bshd-ins"), ann: m.getAttribute("data-bshd-ann") })), annId);
+  return frame.evaluate((id) => {
+    const runs = [];
+    for (const range of globalThis.CSS?.highlights?.get("bshd-hl-s-" + id.replace(/[^A-Za-z0-9_-]/g, "_")) ?? []) runs.push(range.toString());
+    return {
+      runs,
+      wrappers: document.querySelectorAll("mark.bshd-hl").length,
+      labels: Array.from(document.querySelectorAll("#bshd-sug-labels .bshd-sug-label")).map((l) => ({ text: l.getAttribute("data-text"), words: l.textContent })),
+    };
+  }, annId);
 }
 
 function noPageErrors(users) {
@@ -420,7 +430,7 @@ async function toastText(u, since, pred, timeout = 10_000) {
 
 // --- A7.1 -------------------------------------------------------------------
 
-scenario("A7.1 Suggest edit is offered to the suggester and the owner, not the viewer; the form is prefilled with the caret at the end and Enter submits; the frame strikes the quote, data-bshd-ins only on the last wrapper, textContent unchanged", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
+scenario("A7.1 Suggest edit is offered to the suggester and the owner, not the viewer; the form is prefilled with the caret at the end and Enter submits; the frame strikes the quote, the replacement in a label of ours, textContent unchanged", { tiers: BOTH, timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
   const { docId, accounts } = await setup(ctx, {
     roles: [{ as: "suggester", role: "suggester" }, { as: "viewer", role: "viewer" }],
     name: "a71-offer",
@@ -482,18 +492,18 @@ scenario("A7.1 Suggest edit is offered to the suggester and the owner, not the v
   assert.equal((await thread.locator(".suggestion-change ins").textContent()).trim(), REPLACEMENT);
   assert.equal((await thread.locator(".suggestion-status").textContent()).trim(), STATUS.waiting);
 
-  ctx.step("in every reader's frame: the quote is wrapped segment by segment in mark[data-bshd-sug], only the LAST carries data-bshd-ins, and textContent is what it was");
+  ctx.step("in every reader's frame: the quote is painted struck run by run with no wrapper, the replacement is one label of ours, and textContent is what it was");
   for (const u of [s, v, o]) {
     const frame = await u.frame();
     const marks = await eventually(async () => {
       const m = await sugMarks(frame, annId);
-      return m.length > 0 ? m : false;
+      return m.runs.length > 0 && m.labels.length > 0 ? m : false;
     }, { timeout: SLOW, message: `${u.name}: the suggestion is drawn` });
     ctx.ev.json(`marks-${u.name}`, marks);
-    assert.equal(marks.map((m) => m.text).join(""), QUOTE, `${u.name}: the wrappers hold exactly the quote`);
-    assert.equal(marks.length, 3, `${u.name}: one wrapper per text node the quote crosses`);
-    assert.deepEqual(marks.map((m) => m.ins), [null, null, REPLACEMENT], `${u.name}: data-bshd-ins on the last wrapper only`);
-    assert.ok(marks.every((m) => m.ann === annId), `${u.name}: every wrapper names the annotation`);
+    assert.equal(marks.runs.join(""), QUOTE, `${u.name}: the struck runs hold exactly the quote`);
+    assert.equal(marks.runs.length, 3, `${u.name}: one run per text node the quote crosses`);
+    assert.equal(marks.wrappers, 0, `${u.name}: no wrapper in the HTML text`);
+    assert.deepEqual(marks.labels, [{ text: REPLACEMENT, words: "" }], `${u.name}: one label, its words generated content only`);
     assert.deepEqual(await texts(frame, "#sg-1"), before, `${u.name}: the frame's textContent is unchanged by the suggestion`);
   }
   noPageErrors([o, s, v]);

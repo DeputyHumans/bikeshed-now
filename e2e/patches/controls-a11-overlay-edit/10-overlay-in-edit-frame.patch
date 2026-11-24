@@ -1,11 +1,13 @@
+diff --git a/app/src/viewer/usePeerPresence.ts b/app/src/viewer/usePeerPresence.ts
+index ff79f974..16f4f55c 100644
 --- a/app/src/viewer/usePeerPresence.ts
 +++ b/app/src/viewer/usePeerPresence.ts
-@@ -75,7 +75,7 @@
-    * every peer cursor, which is the whole point of observe mode.
-    */
+@@ -103,7 +103,7 @@ export function usePeerPresence(options: {
+   const peersRef = useRef(peers);
+   peersRef.current = peers;
    useEffect(() => {
--    if (!enabled || !doc || mode === "edit") return;
-+    if (!enabled || !doc) return;
+-    if (!enabled || !doc || mode === "edit" || !overlayShown) return;
++    if (!enabled || !doc || !overlayShown) return;
      overlay.current = createPeerOverlay(doc);
-     return () => {
-       overlay.current?.destroy();
+     // Drawn at once with whoever is here: an overlay made again when the
+     // reader shows others' activity must not wait for somebody to move.

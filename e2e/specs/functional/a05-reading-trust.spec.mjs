@@ -102,7 +102,7 @@ import { publish, publishOperator, publishZip, readSample, updateUpload } from "
 import { share } from "../../lib/grant.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
-import { selectionText } from "../../lib/frame.mjs";
+import { paintedCount, paintedInOrder, selectionText } from "../../lib/frame.mjs";
 import { createGuard } from "../../lib/guard.mjs";
 
 const target = currentTarget();
@@ -906,10 +906,11 @@ scenario("A5.6 a drag that selects text on a click-to-advance deck does not adva
   // A press the emulator refused with "Service call error" is made again after
   // another real drag over the passage: one more click the deck must not take.
   const posted = await o.comment(`Deck comment ${tag()}`, { timeout: 45_000, retryServiceError: SERVICE_RETRIES, reselect: () => o.selectText("#one-text", DECK_QUOTE) });
-  await eventually(async () => (await (await o.frame()).locator("mark.bshd-hl").count()) >= 1, { timeout: 30_000, message: "the passage is highlighted" });
+  await eventually(async () => (await paintedCount(await o.frame())) >= 1, { timeout: 30_000, message: "the passage is highlighted" });
   const drags = 1 + posted.serviceErrors;
   assert.deepEqual(await deckState(o), { current: 0, active: ["slide-one"], windowClicks: drags }, `each of the ${drags} drag(s) reached the window without advancing the deck, and commenting, in the viewer's own panel, sent no click into the frame`);
-  await o.clickInFrame("mark.bshd-hl");
+  // A painted highlight is no element (ADR 0043): it is clicked where it is drawn.
+  await o.clickInFrame((await paintedInOrder(await o.frame(), { scrollTo: 0 }))[0].point);
   const afterMark = await eventually(async () => {
     const s = await deckState(o);
     if (s.windowClicks < drags + 1) throw new Error(`the highlight's click has not arrived: ${JSON.stringify(s)}`);
@@ -940,10 +941,15 @@ async function detailsState(u) {
   return f.evaluate((nestedSel) => {
     const nested = document.querySelector(nestedSel);
     const all = Array.from(document.querySelectorAll("details"));
-    const marks = Array.from(document.querySelectorAll("mark.bshd-hl"));
+    // The painted passages (ADR 0043), one row per text run as the marks were.
+    const marks = [];
+    for (const [name, highlight] of globalThis.CSS?.highlights ?? []) {
+      if (!/^bshd-hl-[cs]-/.test(name)) continue;
+      for (const range of highlight) marks.push({ text: range.toString(), inNested: Boolean(nested && nested.contains(range.startContainer)) });
+    }
     return {
       details: all.map((d) => ({ s5: Boolean(d.closest("#s5-sections")), open: d.open })),
-      marks: marks.map((m) => ({ text: m.textContent, inNested: Boolean(nested && nested.contains(m)) })),
+      marks,
     };
   }, NESTED);
 }

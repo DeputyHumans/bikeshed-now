@@ -1,9 +1,11 @@
+diff --git a/app/src/viewer/useTarget.ts b/app/src/viewer/useTarget.ts
+index 5543dd0a..b8dece5c 100644
 --- a/app/src/viewer/useTarget.ts
 +++ b/app/src/viewer/useTarget.ts
-@@ -124,7 +124,7 @@
+@@ -131,7 +131,7 @@ export function useTarget(options: {
        return;
      }
-     if (inView(node)) return;
+     if (inView(node, paintedRange(doc, selectedId))) return;
 -    node.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
 +    node.scrollIntoView({ block: "center", behavior: "smooth" });
    }, [enabled, doc, frameShown, epoch, measuredEpoch, selectedId, annotations, reduceMotion, paged, slides, locate, goTo]);

@@ -33,7 +33,7 @@ import { share } from "../../lib/grant.mjs";
 import { runCli } from "../../lib/cli.mjs";
 import { closeAdmin, readCollection, readDoc } from "../../lib/admin.mjs";
 import { eventually } from "../../lib/assert.mjs";
-import { bodyHash, frameText } from "../../lib/frame.mjs";
+import { bodyHash, frameText, paintedCount } from "../../lib/frame.mjs";
 import { bodyAttrDiff, diffFingerprint, entryHtml, fingerprint, rehashZip, summarize } from "../../lib/bytes.mjs";
 import { zipFiles } from "../../lib/zipread.mjs";
 import { mailbox } from "../../lib/mail/reader.mjs";
@@ -98,7 +98,7 @@ scenario("smoke: owner and viewer sign in through the UI, the viewer comments on
   const body = `Smoke comment ${runTag(target.runId)}-${rand4()}`;
   const made = await v.comment(body);
   assert.ok(made.quote?.includes(QUOTE), `the thread quotes the passage (got ${JSON.stringify(made.quote)})`);
-  await eventually(async () => (await (await v.frame()).locator("mark.bshd-hl").count()) >= 1, { timeout: 10_000, message: "the viewer's frame highlights the passage" });
+  await eventually(async () => (await paintedCount(await v.frame())) >= 1, { timeout: 10_000, message: "the viewer's frame highlights the passage" });
 
   ctx.step("the stored annotation and comment are the viewer's, on v1, from the web channel");
   const anns = await eventually(async () => {
@@ -122,7 +122,7 @@ scenario("smoke: owner and viewer sign in through the UI, the viewer comments on
   ctx.step("the owner, who had the document open already, opens the comments panel and sees the thread and its highlight");
   await o.openComments();
   await o.thread(QUOTE).first().locator(".comment-body", { hasText: body }).waitFor({ state: "visible", timeout: 15_000 });
-  await eventually(async () => (await (await o.frame()).locator("mark.bshd-hl").count()) >= 1, { timeout: 10_000, message: "the owner's frame highlights the passage" });
+  await eventually(async () => (await paintedCount(await o.frame())) >= 1, { timeout: 10_000, message: "the owner's frame highlights the passage" });
   noPageErrors([o, v]);
 });
 

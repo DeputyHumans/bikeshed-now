@@ -1,11 +1,13 @@
+diff --git a/app/src/pages/DocViewer.tsx b/app/src/pages/DocViewer.tsx
+index 4f468fa9..ce4b1ba9 100644
 --- a/app/src/pages/DocViewer.tsx
 +++ b/app/src/pages/DocViewer.tsx
-@@ -1209,7 +1209,7 @@
+@@ -1359,7 +1359,7 @@ export function DocViewer() {
                drawerOpen={singleColumn ? railOpen || editingNow : undefined}
                baseHref={baseHref}
                stage={deck.stage}
 -              images={railImages}
 +              images={null}
+               people={railPeople}
                onGoTo={(index) => {
                  deck.goTo(index);
-                 // A drawer over the slide just chosen is in the way of looking at it.
