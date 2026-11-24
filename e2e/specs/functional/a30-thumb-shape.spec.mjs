@@ -121,18 +121,17 @@ async function drawnInThumb(u, selector) {
   }, selector);
 }
 
-/** The frame's own shape, which the thumbnails must not take. */
-const frameRatio = (u) => u.page.evaluate(() => {
-  const f = document.querySelector(".doc-frame");
-  return f ? f.clientWidth / f.clientHeight : null;
-});
+/** The shape of the window the document is laid out in, inside the frame: what the thumbnails must not take. */
+const frameRatio = async (u) => (await u.frame()).evaluate(() => (innerHeight > 0 ? innerWidth / innerHeight : null));
 
 function near(actual, expected, what) {
   assert.ok(Math.abs(actual - expected) / expected <= TOLERANCE, `${what}: ${actual.toFixed(3)}, expected ${expected.toFixed(3)} (±${TOLERANCE * 100} %)`);
 }
 
 scenario("A30.1 a letterboxed deck in a desktop frame the panels narrowed shows 16:9 thumbnails, its stage filling each", { tiers: ["local"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
-  const { u } = await deckOn(ctx, { deck: LETTERBOX, name: "letterbox" });
+  // A squarer desktop window: a frame far from 16:9 from the moment the deck
+  // loads, when a thumbnail's shape is decided, and narrower once the comments open.
+  const { u } = await deckOn(ctx, { deck: LETTERBOX, name: "letterbox", device: { width: 1100, height: 1000 } });
   await u.openComments();
   const frame = await frameRatio(u);
   ctx.step(`the frame is ${frame?.toFixed(3)} wide for each unit of height`);
@@ -159,8 +158,9 @@ scenario("A30.3 a CV's A4 pages show portrait thumbnails, in the page's own shap
 });
 
 scenario("A30.4 a fluid deck, whose slides fill the window and reflow, shows 16:9 thumbnails, whatever the frame", { tiers: ["local"], timeoutMs: CASE_MS, ...ON_STACK }, async (ctx) => {
-  const { u } = await deckOn(ctx, { deck: FLUID, name: "fluid" });
+  const { u } = await deckOn(ctx, { deck: FLUID, name: "fluid", device: { width: 1100, height: 1000 } });
   const frame = await frameRatio(u);
+  ctx.step(`the frame lays the document out ${frame?.toFixed(3)} wide for each unit of height`);
   precondition(frame !== null && Math.abs(frame - 16 / 9) > 0.15, `the frame is not 16:9 (${frame})`);
   near(await firstThumbRatio(u), 16 / 9, "the thumbnail's shape");
 });
